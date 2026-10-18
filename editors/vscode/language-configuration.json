@@ -1,0 +1,10 @@
+{
+  "comments": { "lineComment": "--" },
+  "brackets": [["(", ")"]],
+  "autoClosingPairs": [{ "open": "(", "close": ")" }],
+  "surroundingPairs": [["(", ")"], ["|", "|"]],
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(Fix|assume|by_contra|induction|cases|Case)\\b.*$",
+    "decreaseIndentPattern": "^(?!)"
+  }
+}

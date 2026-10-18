@@ -1,0 +1,131 @@
+-- どれも通ってはいけない証明。1本でも通ったら検査器のバグ。
+
+thm u.refl :
+  ⊢ ∀x. ∀y. x = y
+Fix x, y
+  refl
+
+thm u.linarith :
+  h : x < 3
+  ⊢ x < 2
+linarith
+
+thm u.ring :
+  ⊢ ∀a. ∀b. (a + b)² = a² + b²
+Fix a, b
+  ring
+
+thm u.decide :
+  ⊢ 2 + 2 = 5
+decide
+
+thm u.fix.escape :
+  h : ∀x. P(x) → Q
+  ⊢ Q
+h(hx)
+
+thm u.obtain.goal :
+  e : ∃x. P(x)
+  ⊢ ∀y. P(y)
+Fix y
+  Obtain x, hx : e
+  hx
+
+thm u.forall.swap :
+  h : ∃x. ∀y. R(x, y)
+  ⊢ ∀y. ∃x. R(x, y)
+Fix y
+  Obtain x, hx : h
+  choose y
+  hx(y)
+
+thm u.exists.swap :
+  h : ∀y. ∃x. R(x, y)
+  ⊢ ∃x. ∀y. R(x, y)
+Fix y
+  Obtain x, hx : h(y)
+  choose x
+  hx
+
+thm u.or :
+  h : P ∨ Q
+  ⊢ P
+cases h
+  Case left a
+    a
+  Case right b
+    b
+
+thm u.assume :
+  ⊢ P → Q
+assume h
+  h
+
+thm u.contra :
+  h : P, k : ¬Q
+  ⊢ R
+contradiction h k
+
+thm u.chain :
+  h : a < b
+  ⊢ b < a
+a
+  < b    by h
+
+thm u.chain.dir :
+  h1 : a < b, h2 : c < b
+  ⊢ a < c
+a
+  < b    by h1
+  > c    by h2
+
+thm u.let :
+  ⊢ ∀n:ℕ. n = 0
+Fix n
+  let m := 0
+  have h : m = 0 := refl
+  h
+
+thm u.induction :
+  ⊢ ∀n:ℕ. n = 0
+induction n
+  Case zero
+    refl
+  Case succ k, IH
+    IH
+
+thm u.byContra.unused :
+  ⊢ P
+by_contra h
+  h
+
+thm u.and :
+  h : P
+  ⊢ P ∧ Q
+h, h
+
+thm u.eq2 :
+  h : x = y
+  ⊢ x = z
+EQ2(h, refl)
+
+thm u.scope :
+  h : ∀x. P(x)
+  ⊢ ∀y. P(y)
+Fix y
+  h(z)
+
+thm u.unfinished :
+  h : P, k : P → Q
+  ⊢ Q ∧ P
+have q : Q := k(h)
+
+thm u.extra :
+  h : P
+  ⊢ P
+h
+h
+
+thm u.uses.failed :
+  ⊢ P
+u.byContra.unused

@@ -1,0 +1,553 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "narfi",
+  "word": "identifier",
+  "rules": {
+    "source_file": {
+      "type": "REPEAT",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_item"
+      }
+    },
+    "_item": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "declaration_head"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "unknown_intro"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "intro"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "case_head"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "keyword"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "builtin"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "sorry"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "type"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "quantifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "logical"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "turnstile"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "relation"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "assign"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "operator"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "number"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "punctuation"
+        }
+      ]
+    },
+    "comment": {
+      "type": "TOKEN",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "--"
+          },
+          {
+            "type": "PATTERN",
+            "value": ".*"
+          }
+        ]
+      }
+    },
+    "declaration_head": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "kind",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "thm"
+              },
+              {
+                "type": "STRING",
+                "value": "axiom"
+              }
+            ]
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        }
+      ]
+    },
+    "unknown_intro": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "keyword",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "Fix"
+              },
+              {
+                "type": "STRING",
+                "value": "Obtain"
+              }
+            ]
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        }
+      ]
+    },
+    "case_head": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "keyword",
+          "content": {
+            "type": "STRING",
+            "value": "Case"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "kind",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "left"
+              },
+              {
+                "type": "STRING",
+                "value": "right"
+              },
+              {
+                "type": "STRING",
+                "value": "zero"
+              },
+              {
+                "type": "STRING",
+                "value": "succ"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "intro": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "keyword",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "assume"
+              },
+              {
+                "type": "STRING",
+                "value": "have"
+              },
+              {
+                "type": "STRING",
+                "value": "let"
+              },
+              {
+                "type": "STRING",
+                "value": "by_contra"
+              }
+            ]
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        }
+      ]
+    },
+    "keyword": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "choose"
+        },
+        {
+          "type": "STRING",
+          "value": "suffices"
+        },
+        {
+          "type": "STRING",
+          "value": "contradiction"
+        },
+        {
+          "type": "STRING",
+          "value": "induction"
+        },
+        {
+          "type": "STRING",
+          "value": "cases"
+        },
+        {
+          "type": "STRING",
+          "value": "by"
+        },
+        {
+          "type": "STRING",
+          "value": "left"
+        },
+        {
+          "type": "STRING",
+          "value": "right"
+        }
+      ]
+    },
+    "builtin": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "ring"
+        },
+        {
+          "type": "STRING",
+          "value": "linarith"
+        },
+        {
+          "type": "STRING",
+          "value": "decide"
+        },
+        {
+          "type": "STRING",
+          "value": "refl"
+        },
+        {
+          "type": "STRING",
+          "value": "EQ1"
+        },
+        {
+          "type": "STRING",
+          "value": "EQ2"
+        },
+        {
+          "type": "STRING",
+          "value": "or.left"
+        },
+        {
+          "type": "STRING",
+          "value": "or.right"
+        }
+      ]
+    },
+    "sorry": {
+      "type": "STRING",
+      "value": "sorry"
+    },
+    "type": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "TOKEN",
+          "content": {
+            "type": "PREC",
+            "value": 2,
+            "content": {
+              "type": "PATTERN",
+              "value": "[ℕℤℚℝℂ]"
+            }
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "Prop"
+        }
+      ]
+    },
+    "quantifier": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": 2,
+        "content": {
+          "type": "PATTERN",
+          "value": "[∀∃λ]"
+        }
+      }
+    },
+    "logical": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "→"
+        },
+        {
+          "type": "STRING",
+          "value": "∧"
+        },
+        {
+          "type": "STRING",
+          "value": "∨"
+        },
+        {
+          "type": "STRING",
+          "value": "¬"
+        },
+        {
+          "type": "STRING",
+          "value": "⊥"
+        },
+        {
+          "type": "STRING",
+          "value": "↔"
+        },
+        {
+          "type": "STRING",
+          "value": "->"
+        },
+        {
+          "type": "STRING",
+          "value": "/\\"
+        },
+        {
+          "type": "STRING",
+          "value": "\\/"
+        }
+      ]
+    },
+    "turnstile": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "⊢"
+        },
+        {
+          "type": "STRING",
+          "value": "∴"
+        },
+        {
+          "type": "STRING",
+          "value": "⇐"
+        },
+        {
+          "type": "STRING",
+          "value": "|-"
+        }
+      ]
+    },
+    "relation": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "type": "STRING",
+          "value": "≠"
+        },
+        {
+          "type": "STRING",
+          "value": "<"
+        },
+        {
+          "type": "STRING",
+          "value": "≤"
+        },
+        {
+          "type": "STRING",
+          "value": ">"
+        },
+        {
+          "type": "STRING",
+          "value": "≥"
+        },
+        {
+          "type": "STRING",
+          "value": "∈"
+        },
+        {
+          "type": "STRING",
+          "value": "<="
+        },
+        {
+          "type": "STRING",
+          "value": ">="
+        },
+        {
+          "type": "STRING",
+          "value": "!="
+        }
+      ]
+    },
+    "assign": {
+      "type": "STRING",
+      "value": ":="
+    },
+    "operator": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "+"
+        },
+        {
+          "type": "STRING",
+          "value": "-"
+        },
+        {
+          "type": "STRING",
+          "value": "−"
+        },
+        {
+          "type": "STRING",
+          "value": "·"
+        },
+        {
+          "type": "STRING",
+          "value": "*"
+        },
+        {
+          "type": "STRING",
+          "value": "/"
+        },
+        {
+          "type": "STRING",
+          "value": "^"
+        },
+        {
+          "type": "STRING",
+          "value": "²"
+        },
+        {
+          "type": "STRING",
+          "value": "³"
+        },
+        {
+          "type": "STRING",
+          "value": "|"
+        }
+      ]
+    },
+    "number": {
+      "type": "PATTERN",
+      "value": "\\d+"
+    },
+    "punctuation": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        },
+        {
+          "type": "STRING",
+          "value": ","
+        },
+        {
+          "type": "STRING",
+          "value": ":"
+        },
+        {
+          "type": "STRING",
+          "value": "."
+        }
+      ]
+    },
+    "identifier": {
+      "type": "PATTERN",
+      "value": "[\\p{L}_][\\p{L}\\p{Nd}_'₀-₉]*(\\.[\\p{L}_][\\p{L}\\p{Nd}_'₀-₉]*)*"
+    }
+  },
+  "extras": [
+    {
+      "type": "PATTERN",
+      "value": "\\s"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "comment"
+    }
+  ],
+  "conflicts": [],
+  "precedences": [],
+  "externals": [],
+  "inline": [],
+  "supertypes": [],
+  "reserved": {}
+}

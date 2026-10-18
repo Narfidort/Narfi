@@ -1,0 +1,122 @@
+-- 練習.narfi の解答例
+
+thm ex1.and_comm :
+  h : P ∧ Q
+  ⊢ Q ∧ P
+
+h.right, h.left
+
+
+thm ex1.imp_trans :
+  h : P → Q, k : Q → R
+  ⊢ P → R
+
+assume hp
+  k(h(hp))
+
+
+thm ex1.or_comm :
+  h : P ∨ Q
+  ⊢ Q ∨ P
+
+cases h
+  Case left hp
+    choose right
+    hp
+  Case right hq
+    choose left
+    hq
+
+
+thm ex1.contrapositive :
+  h : P → Q
+  ⊢ ¬Q → ¬P
+
+assume hnq
+  assume hp
+    hnq(h(hp))
+
+
+thm ex2.forall_and :
+  h : ∀x. P(x) ∧ Q(x)
+  ⊢ ∀x. P(x)
+
+Fix x
+  have hx : P(x) ∧ Q(x) := h(x)
+  hx.left
+
+
+thm ex2.exists_imp :
+  h : ∀x. P(x) → Q(x), e : ∃x. P(x)
+  ⊢ ∃x. Q(x)
+
+Obtain a, ha : e
+choose a
+h(a, ha)
+
+
+thm ex2.exists_forall :
+  h : ∃x. ∀y. R(x, y)
+  ⊢ ∀y. ∃x. R(x, y)
+
+Obtain a, ha : h
+Fix y
+  choose a
+  ha(y)
+
+
+thm ex3.one_plus_one :
+  ⊢ S(0) + S(0) = S(S(0))
+
+S(0) + S(0)
+  = S(S(0) + 0)   by add.succ(S(0), 0)
+  = S(S(0))       by congr.S(add.zero(S(0)))
+
+
+thm ex3.zero_add :
+  ⊢ ∀n : ℕ. 0 + n = n
+
+induction n
+  Case zero
+    add.zero(0)
+  Case succ k, IH
+    0 + S(k)
+      = S(0 + k)   by add.succ(0, k)
+      = S(k)       by congr.S(IH)
+
+
+axiom succ_add : ∀m : ℕ. ∀n : ℕ. S(m) + n = S(m + n)
+
+thm ex3.add_comm :
+  ⊢ ∀m : ℕ. ∀n : ℕ. m + n = n + m
+
+Fix m
+  induction n
+    Case zero
+      m + 0
+        = m        by add.zero(m)
+        = 0 + m    by eq.symm(ex3.zero_add(m))
+    Case succ k, IH : m + k = k + m
+      m + S(k)
+        = S(m + k)   by add.succ(m, k)
+        = S(k + m)   by congr.S(IH)
+        = S(k) + m   by eq.symm(succ_add(k, m))
+
+
+axiom pos_half : h : x > 0 ⊢ x/2 > 0
+
+thm ex4.chain :
+  h1 : x < y, h2 : y ≤ z
+  ⊢ x < z
+
+x
+  < y   by h1
+  ≤ z   by h2
+
+
+thm ex4.smaller :
+  ⊢ ∀ε>0. ∃δ>0. δ < ε
+
+Fix ε | hε
+  choose ε/2, pos_half(hε)
+  linarith

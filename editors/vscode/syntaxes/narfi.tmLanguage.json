@@ -1,0 +1,56 @@
+{
+  "name": "Narfi",
+  "scopeName": "source.narfi",
+  "patterns": [
+    { "name": "comment.line.double-dash.narfi", "match": "--.*$" },
+    {
+      "match": "^(thm|axiom)\\s+([^\\s:]+)",
+      "captures": {
+        "1": { "name": "storage.type.narfi" },
+        "2": { "name": "entity.name.function.narfi" }
+      }
+    },
+    {
+      "comment": "未定の対象を導入する大文字の命令（仕様書 §9.2）",
+      "match": "(?<![\\w.])(Fix|Obtain)\\s+([^\\s|:,(]+)",
+      "captures": {
+        "1": { "name": "keyword.control.uppercase.narfi markup.bold.narfi" },
+        "2": { "name": "variable.parameter.narfi" }
+      }
+    },
+    {
+      "match": "(?<![\\w.])(Case)\\s+(left|right|zero|succ)(?![\\w.])",
+      "captures": {
+        "1": { "name": "keyword.control.uppercase.narfi markup.bold.narfi" },
+        "2": { "name": "keyword.other.narfi" }
+      }
+    },
+    {
+      "match": "(?<![\\w.])(Fix|Obtain|Case)(?![\\w.])",
+      "name": "keyword.control.uppercase.narfi markup.bold.narfi"
+    },
+    {
+      "match": "(?<![\\w.])(assume|have|let|by_contra)\\s+([^\\s:|]+)",
+      "captures": {
+        "1": { "name": "keyword.control.narfi" },
+        "2": { "name": "variable.parameter.narfi" }
+      }
+    },
+    {
+      "match": "(?<![\\w.])(assume|have|let|choose|suffices|by_contra|contradiction|induction|cases|by)(?![\\w.])",
+      "name": "keyword.control.narfi"
+    },
+    { "match": "(?<![\\w.])(left|right)(?![\\w.])", "name": "keyword.other.narfi" },
+    { "match": "(?<![\\w.])sorry(?![\\w.])", "name": "invalid.illegal.sorry.narfi" },
+    { "match": "(?<![\\w.])(ring|linarith|decide|refl)(?![\\w.])", "name": "support.function.builtin.narfi" },
+    { "match": "(?<![\\w.])(EQ1|EQ2|PA1|PA2|or\\.left|or\\.right)(?![\\w.])", "name": "support.function.narfi" },
+    { "match": "[ℕℤℚℝℂ]|(?<![\\w.])Prop(?![\\w.])", "name": "entity.name.type.narfi" },
+    { "match": "[∀∃λ]", "name": "keyword.operator.quantifier.narfi" },
+    { "match": "[⊢∴⇐]|\\|-", "name": "keyword.other.turnstile.narfi" },
+    { "match": "[→∧∨¬⊥↔]|->|/\\\\|\\\\/", "name": "keyword.operator.logical.narfi" },
+    { "match": ":=", "name": "keyword.operator.assignment.narfi" },
+    { "match": "[=≠<≤>≥∈]|<=|>=|!=", "name": "keyword.operator.comparison.narfi" },
+    { "match": "[+\\-·*/^²³]", "name": "keyword.operator.arithmetic.narfi" },
+    { "match": "(?<![\\w.])\\d+(?![\\w.])", "name": "constant.numeric.narfi" }
+  ]
+}

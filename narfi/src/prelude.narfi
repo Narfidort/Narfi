@@ -1,0 +1,35 @@
+-- Narfi の組み込み公理（仕様書 §2）。検査器の起動時に最初に読み込まれる。
+
+axiom EQ1 : ∀x. x = x
+
+axiom PA1 : ∀n:ℕ. S(n) ≠ 0
+axiom PA2 : ∀m:ℕ. ∀n:ℕ. S(m) = S(n) → m = n
+
+axiom add.zero : ∀n:ℕ. n + 0 = n
+axiom add.succ : ∀n:ℕ. ∀m:ℕ. n + S(m) = S(n + m)
+
+axiom mul.zero : ∀n:ℕ. n · 0 = 0
+axiom mul.succ : ∀n:ℕ. ∀m:ℕ. n · S(m) = n · m + n
+
+
+-- 等号の基本補題（EQ1・EQ2 から導出。起動時に検査される）
+
+thm eq.symm :
+  h : x = y
+  ⊢ y = x
+
+EQ2(h, refl)
+
+
+thm eq.trans :
+  hxy : x = y, hyz : y = z
+  ⊢ x = z
+
+EQ2(hyz, hxy)
+
+
+thm congr.S :
+  h : x = y
+  ⊢ S(x) = S(y)
+
+EQ2(h, refl)

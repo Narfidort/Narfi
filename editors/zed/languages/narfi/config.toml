@@ -1,0 +1,11 @@
+name = "Narfi"
+grammar = "narfi"
+path_suffixes = ["narfi"]
+line_comments = ["-- "]
+tab_size = 2
+hard_tabs = false
+brackets = [
+  { start = "(", end = ")", close = true, newline = false },
+]
+word_characters = ["\\", "."]
+increase_indent_pattern = "^\\s*(Fix|assume|by_contra|induction|cases|Case)\\b.*$"

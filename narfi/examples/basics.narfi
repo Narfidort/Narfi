@@ -1,0 +1,77 @@
+-- 等号・自然数・論理の基本（仕様書 §7 の例を検査できる形に直したもの）
+
+-- eq.symm・eq.trans・congr.S は組み込み（src/prelude.narfi）で、EQ2 から証明してある。
+
+thm add.zero_left :
+  ⊢ ∀n : ℕ. 0 + n = n
+
+Fix n
+  induction n
+    Case zero
+      add.zero(0)
+    Case succ k, IH : 0 + k = k
+      have h1 : 0 + S(k) = S(0 + k) := add.succ(0, k)
+      have h2 : S(0 + k) = S(k)     := congr.S(IH)
+      eq.trans(h1, h2)
+
+
+-- 等式の連鎖（自動証明を使わずに通る）
+thm add.succ_left :
+  ⊢ ∀m : ℕ. ∀n : ℕ. S(m) + n = S(m + n)
+
+Fix m, n
+  induction n
+    Case zero
+      S(m) + 0
+        = S(m)          by add.zero(S(m))
+        = S(m + 0)      by eq.symm(congr.S(add.zero(m)))
+    Case succ k, IH
+      S(m) + S(k)
+        = S(S(m) + k)   by add.succ(S(m), k)
+        = S(S(m + k))   by congr.S(IH)
+        = S(m + S(k))   by eq.symm(congr.S(add.succ(m, k)))
+
+
+thm exists_double :
+  ⊢ ∀n : ℕ. ∃m : ℕ. m = n + n
+
+Fix n
+  choose n + n
+  refl
+
+
+thm or_intro :
+  h : P
+  ⊢ P ∨ Q
+
+choose left
+h
+
+
+thm or_elim :
+  h : P ∨ Q, hpr : P → R, hqr : Q → R
+  ⊢ R
+
+cases h
+  Case left h₁
+    hpr(h₁)
+  Case right h₂
+    hqr(h₂)
+
+
+-- 古典論理の背理法
+thm dne :
+  h : ¬¬P
+  ⊢ P
+
+by_contra hn
+  h(hn)
+
+
+-- 否定の直接証明は assume（→導入）
+thm not_not_intro :
+  h : P
+  ⊢ ¬¬P
+
+assume hn
+  hn(h)

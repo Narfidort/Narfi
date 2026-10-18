@@ -1,0 +1,118 @@
+-- Narfi 練習問題
+--
+-- 各問の `sorry` を証明に書き換える。検査するには narfi/ で：
+--   cargo run -q -- check ../練習.narfi
+-- sorry のままの問題は △ と表示され、そこで残っている goal が出る。
+-- 証明の途中に sorry を置けば、そこで何を示せばよいかを確かめながら進められる。
+-- 解答例は narfi/tests/exercises_answers.narfi（詰まったときだけ見る）。
+--
+-- 使える組み込み（src/prelude.narfi）：
+--   add.zero : ∀n. n + 0 = n          add.succ : ∀n. ∀m. n + S(m) = S(n + m)
+--   eq.symm(h) : y = x（h : x = y）    eq.trans(h1, h2)    congr.S(h) : S(x) = S(y)
+--   refl・ring・linarith・decide
+
+
+-- ================================================================ 1. 命題論理
+
+-- 1.1  ∧ の取り出し：h.left、h.right。∧ を作るときは「根拠1, 根拠2」
+thm ex1.and_comm :
+  h : P ∧ Q
+  ⊢ Q ∧ P
+
+sorry
+
+
+-- 1.2  → を示すには assume
+thm ex1.imp_trans :
+  h : P → Q, k : Q → R
+  ⊢ P → R
+
+sorry
+
+
+-- 1.3  ∨ を使うには cases、∨ を示すには choose left / choose right
+thm ex1.or_comm :
+  h : P ∨ Q
+  ⊢ Q ∨ P
+
+sorry
+
+
+-- 1.4  対偶。¬Q は Q → ⊥ のこと
+thm ex1.contrapositive :
+  h : P → Q
+  ⊢ ¬Q → ¬P
+
+sorry
+
+
+-- ================================================================ 2. 量化子
+
+-- 2.1  ∀ を示すには Fix、∀ を使うには h(x)
+thm ex2.forall_and :
+  h : ∀x. P(x) ∧ Q(x)
+  ⊢ ∀x. P(x)
+
+sorry
+
+
+-- 2.2  ∃ を使うには Obtain、∃ を示すには choose
+thm ex2.exists_imp :
+  h : ∀x. P(x) → Q(x), e : ∃x. P(x)
+  ⊢ ∃x. Q(x)
+
+sorry
+
+
+-- 2.3  ∃∀ から ∀∃（逆は成り立たない。試すと検査器に止められる）
+thm ex2.exists_forall :
+  h : ∃x. ∀y. R(x, y)
+  ⊢ ∀y. ∃x. R(x, y)
+
+sorry
+
+
+-- ================================================================ 3. 自然数
+
+-- 3.1  1 + 1 = 2（S(0) + S(0) = S(S(0))）。等式の連鎖で：
+--        S(0) + S(0)
+--          = …   by …
+thm ex3.one_plus_one :
+  ⊢ S(0) + S(0) = S(S(0))
+
+sorry
+
+
+-- 3.2  帰納法：induction n の下に Case zero と Case succ k, IH
+thm ex3.zero_add :
+  ⊢ ∀n : ℕ. 0 + n = n
+
+sorry
+
+
+-- 3.3  （発展）交換法則。3.2 と、次の補題を使ってよい
+axiom succ_add : ∀m : ℕ. ∀n : ℕ. S(m) + n = S(m + n)
+
+thm ex3.add_comm :
+  ⊢ ∀m : ℕ. ∀n : ℕ. m + n = n + m
+
+sorry
+
+
+-- ================================================================ 4. 不等式と ε
+
+axiom pos_half : h : x > 0 ⊢ x/2 > 0
+
+-- 4.1  不等式の連鎖
+thm ex4.chain :
+  h1 : x < y, h2 : y ≤ z
+  ⊢ x < z
+
+sorry
+
+
+-- 4.2  範囲付きの量化子。choose t, 根拠 で「t > 0」も一緒に示せる
+thm ex4.smaller :
+  ⊢ ∀ε>0. ∃δ>0. δ < ε
+
+sorry

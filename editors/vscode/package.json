@@ -1,0 +1,47 @@
+{
+  "name": "narfi",
+  "displayName": "Narfi",
+  "description": "Narfi 証明言語：シンタックスハイライト・保存時の検査・記号の入力補助",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:narfi"],
+  "contributes": {
+    "languages": [{
+      "id": "narfi",
+      "aliases": ["Narfi", "narfi"],
+      "extensions": [".narfi"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "narfi",
+      "scopeName": "source.narfi",
+      "path": "./syntaxes/narfi.tmLanguage.json"
+    }],
+    "commands": [{ "command": "narfi.check", "title": "Narfi: このファイルを検査" }],
+    "configuration": {
+      "title": "Narfi",
+      "properties": {
+        "narfi.path": {
+          "type": "string",
+          "default": "",
+          "description": "narfi 実行ファイルのパス。空なら ~/.cargo/bin/narfi、次に PATH 上の narfi を使う。"
+        },
+        "narfi.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "保存時に検査して、エラーと sorry の goal を表示する。"
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[narfi]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+      }
+    }
+  }
+}

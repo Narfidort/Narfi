@@ -1,0 +1,9 @@
+{
+  "name": "tree-sitter-narfi",
+  "version": "0.1.0",
+  "description": "Narfi grammar for tree-sitter",
+  "main": "bindings/node",
+  "private": true,
+  "devDependencies": { "tree-sitter-cli": "^0.25.0" },
+  "tree-sitter": [{ "scope": "source.narfi", "file-types": ["narfi"] }]
+}

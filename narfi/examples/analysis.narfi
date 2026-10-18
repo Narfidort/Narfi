@@ -1,0 +1,45 @@
+-- 解析：範囲付き量化子・依存関係の注釈・∴・不等式の連鎖
+
+axiom triangle    : ∀x:ℝ. ∀y:ℝ. |x + y| ≤ |x| + |y|
+axiom pos_half    : h : x > 0 ⊢ x/2 > 0
+axiom ge.max.left  : h : n ≥ max(a, b) ⊢ n ≥ a
+axiom ge.max.right : h : n ≥ max(a, b) ⊢ n ≥ b
+
+
+-- 極限の加法性
+thm conv.add :
+  conv_a : ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε,
+  conv_b : ∀ε>0. ∃N:ℕ. ∀n≥N. |b(n) - β| < ε
+  ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |(a(n) + b(n)) - (α + β)| < ε
+
+Fix ε | hε
+  Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
+  Obtain N₂(ε), hN₂ : conv_b(ε/2, pos_half(hε))
+  let N := max(N₁, N₂)
+  choose N
+  Fix n | hn
+    |(a(n) + b(n)) - (α + β)|
+      ≤ |a(n) - α| + |b(n) - β|   by triangle(a(n) - α, b(n) - β)
+      < ε/2 + ε/2                  by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
+      = ε                          by ring
+  ∴ ∀n≥N. |(a(n) + b(n)) - (α + β)| < ε
+
+
+-- 各点収束：N は x と ε の両方に依存する。注釈 N(x, ε) が検査される。
+thm pointwise :
+  conv : ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
+  ⊢ ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
+
+Fix x
+  Fix ε | hε
+    Obtain N(x, ε), hN : conv(x, ε, hε)
+    choose N
+    hN
+
+
+-- 範囲付き ∃ の条件を choose で同時に示す
+thm exists_pos :
+  ⊢ ∃δ>0. δ < 1
+
+choose 1/2, decide
+decide

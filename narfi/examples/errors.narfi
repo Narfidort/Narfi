@@ -1,0 +1,42 @@
+-- わざと間違えた証明。検査器がどこで何を指摘するかを見るためのファイル。
+
+-- (1) N が x に依存しているのに、N(ε) と宣言している
+thm wrong.dependency :
+  conv : ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
+  ⊢ ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
+
+Fix x
+  Fix ε | hε
+    Obtain N(ε), hN : conv(x, ε, hε)
+    choose N
+    hN
+
+
+-- (2) 各点収束から一様収束を出そうとする：N を選ぶ時点で x はまだない
+thm pointwise.to.uniform :
+  conv : ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
+  ⊢ ∀ε>0. ∃N:ℕ. ∀x:ℝ. P(x, ε, N)
+
+Fix ε | hε
+  Obtain N, hN : conv(x, ε, hε)
+  choose N
+  Fix x
+    hN
+
+
+-- (3) ∴ に書いた命題が、実際に示したものと違う
+thm wrong.therefore :
+  ⊢ ∀n : ℕ. ∃m : ℕ. m = n + n
+
+Fix n
+  choose n + n
+  refl
+∴ ∀n : ℕ. ∃m : ℕ. m = n · 2
+
+
+-- (4) 似た補題と取り違える（add.zero は n + 0 = n であって 0 + n = n ではない）
+thm wrong.lemma :
+  ⊢ ∀n : ℕ. 0 + n = n
+
+Fix n
+  add.zero(n)

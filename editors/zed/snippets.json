@@ -1,0 +1,192 @@
+{
+  "\\all → ∀": {
+    "prefix": "\\all",
+    "body": "∀",
+    "description": "∀"
+  },
+  "\\ex → ∃": {
+    "prefix": "\\ex",
+    "body": "∃",
+    "description": "∃"
+  },
+  "\\to → →": {
+    "prefix": "\\to",
+    "body": "→",
+    "description": "→"
+  },
+  "\\and → ∧": {
+    "prefix": "\\and",
+    "body": "∧",
+    "description": "∧"
+  },
+  "\\or → ∨": {
+    "prefix": "\\or",
+    "body": "∨",
+    "description": "∨"
+  },
+  "\\not → ¬": {
+    "prefix": "\\not",
+    "body": "¬",
+    "description": "¬"
+  },
+  "\\bot → ⊥": {
+    "prefix": "\\bot",
+    "body": "⊥",
+    "description": "⊥"
+  },
+  "\\vdash → ⊢": {
+    "prefix": "\\vdash",
+    "body": "⊢",
+    "description": "⊢"
+  },
+  "\\tf → ∴": {
+    "prefix": "\\tf",
+    "body": "∴",
+    "description": "∴"
+  },
+  "\\impby → ⇐": {
+    "prefix": "\\impby",
+    "body": "⇐",
+    "description": "⇐"
+  },
+  "\\le → ≤": {
+    "prefix": "\\le",
+    "body": "≤",
+    "description": "≤"
+  },
+  "\\ge → ≥": {
+    "prefix": "\\ge",
+    "body": "≥",
+    "description": "≥"
+  },
+  "\\ne → ≠": {
+    "prefix": "\\ne",
+    "body": "≠",
+    "description": "≠"
+  },
+  "\\in → ∈": {
+    "prefix": "\\in",
+    "body": "∈",
+    "description": "∈"
+  },
+  "\\cdot → ·": {
+    "prefix": "\\cdot",
+    "body": "·",
+    "description": "·"
+  },
+  "\\sq → ²": {
+    "prefix": "\\sq",
+    "body": "²",
+    "description": "²"
+  },
+  "\\N → ℕ": {
+    "prefix": "\\N",
+    "body": "ℕ",
+    "description": "ℕ"
+  },
+  "\\Z → ℤ": {
+    "prefix": "\\Z",
+    "body": "ℤ",
+    "description": "ℤ"
+  },
+  "\\Q → ℚ": {
+    "prefix": "\\Q",
+    "body": "ℚ",
+    "description": "ℚ"
+  },
+  "\\R → ℝ": {
+    "prefix": "\\R",
+    "body": "ℝ",
+    "description": "ℝ"
+  },
+  "\\C → ℂ": {
+    "prefix": "\\C",
+    "body": "ℂ",
+    "description": "ℂ"
+  },
+  "\\e → ε": {
+    "prefix": "\\e",
+    "body": "ε",
+    "description": "ε"
+  },
+  "\\eps → ε": {
+    "prefix": "\\eps",
+    "body": "ε",
+    "description": "ε"
+  },
+  "\\d → δ": {
+    "prefix": "\\d",
+    "body": "δ",
+    "description": "δ"
+  },
+  "\\delta → δ": {
+    "prefix": "\\delta",
+    "body": "δ",
+    "description": "δ"
+  },
+  "\\a → α": {
+    "prefix": "\\a",
+    "body": "α",
+    "description": "α"
+  },
+  "\\alpha → α": {
+    "prefix": "\\alpha",
+    "body": "α",
+    "description": "α"
+  },
+  "\\b → β": {
+    "prefix": "\\b",
+    "body": "β",
+    "description": "β"
+  },
+  "\\beta → β": {
+    "prefix": "\\beta",
+    "body": "β",
+    "description": "β"
+  },
+  "\\g → γ": {
+    "prefix": "\\g",
+    "body": "γ",
+    "description": "γ"
+  },
+  "\\lambda → λ": {
+    "prefix": "\\lambda",
+    "body": "λ",
+    "description": "λ"
+  },
+  "\\phi → φ": {
+    "prefix": "\\phi",
+    "body": "φ",
+    "description": "φ"
+  },
+  "\\psi → ψ": {
+    "prefix": "\\psi",
+    "body": "ψ",
+    "description": "ψ"
+  },
+  "\\tau → τ": {
+    "prefix": "\\tau",
+    "body": "τ",
+    "description": "τ"
+  },
+  "\\0 → ₀": {
+    "prefix": "\\0",
+    "body": "₀",
+    "description": "₀"
+  },
+  "\\1 → ₁": {
+    "prefix": "\\1",
+    "body": "₁",
+    "description": "₁"
+  },
+  "\\2 → ₂": {
+    "prefix": "\\2",
+    "body": "₂",
+    "description": "₂"
+  },
+  "\\3 → ₃": {
+    "prefix": "\\3",
+    "body": "₃",
+    "description": "₃"
+  }
+}
