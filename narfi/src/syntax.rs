@@ -122,6 +122,20 @@ fn is_builtin_rel(p: &str) -> bool {
     RELS.contains(&p)
 }
 
+// 同時代入の仮の変数名（%1, %2, …）。呼び出しのたびに新しい名前を使う。
+// 使い回すと、代入の途中で束縛変数の付け替えのために内側でもう一度同時代入をしたとき、
+// 外側の仮の変数と内側の仮の変数が混ざってしまう（v2.1 で実際にあった健全性のバグ）。
+thread_local! {
+    static PLACEHOLDER: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn placeholder() -> String {
+    PLACEHOLDER.with(|c| {
+        c.set(c.get() + 1);
+        format!("%{}", c.get())
+    })
+}
+
 // β 簡約が止まらない（型の合わない項を代入した）ときに、無限ループではなく止めるための深さ
 thread_local! {
     static BETA_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
@@ -278,12 +292,13 @@ impl Term {
 
     /// 同時代入
     pub fn subst_many(&self, subs: &[(String, Term)]) -> Term {
+        let tmp: Vec<String> = subs.iter().map(|_| placeholder()).collect();
         let mut t = self.clone();
-        for (i, (x, _)) in subs.iter().enumerate() {
-            t = t.subst(x, &Term::Var(format!("%{i}")));
+        for ((x, _), p) in subs.iter().zip(&tmp) {
+            t = t.subst(x, &Term::Var(p.clone()));
         }
-        for (i, (_, u)) in subs.iter().enumerate() {
-            t = t.subst(&format!("%{i}"), u);
+        for ((_, u), p) in subs.iter().zip(&tmp) {
+            t = t.subst(p, u);
         }
         t
     }
@@ -431,12 +446,13 @@ impl Formula {
 
     /// 同時代入 φ[x₁ := t₁, …]（tᵢ の中の変数が xⱼ と同じ名前でも混ざらない）
     pub fn subst_many(&self, subs: &[(String, Term)]) -> Formula {
+        let tmp: Vec<String> = subs.iter().map(|_| placeholder()).collect();
         let mut f = self.clone();
-        for (i, (x, _)) in subs.iter().enumerate() {
-            f = f.subst(x, &Term::Var(format!("%{i}")));
+        for ((x, _), p) in subs.iter().zip(&tmp) {
+            f = f.subst(x, &Term::Var(p.clone()));
         }
-        for (i, (_, t)) in subs.iter().enumerate() {
-            f = f.subst(&format!("%{i}"), t);
+        for ((_, t), p) in subs.iter().zip(&tmp) {
+            f = f.subst(p, t);
         }
         f
     }

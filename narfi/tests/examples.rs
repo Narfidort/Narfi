@@ -58,3 +58,12 @@ fn bad_definitions_are_rejected() {
         assert!(out.contains("構文エラー") && out.contains(msg), "{src}\n{out}");
     }
 }
+
+/// v2.1 の健全性のバグの回帰テスト：⊥ の証明が通ってはいけない
+#[test]
+fn regression_subst_placeholder() {
+    let out = run(&["tests/regress/subst_placeholder.narfi"]);
+    assert!(out.contains("✗ k.bug"), "{out}");
+    assert!(out.contains("✗ boom"), "{out}");
+    assert!(!out.lines().any(|l| l.trim_start().starts_with("✓ boom")), "{out}");
+}

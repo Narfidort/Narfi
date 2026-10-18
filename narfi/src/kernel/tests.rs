@@ -289,3 +289,30 @@ fn choice_needs_existence() {
     let r = env2.add_statement(&st("P(some(P))"), Some(&inst())).map(|_| ()).map_err(|e| e.msg);
     rejected(r, "定理の結論");
 }
+
+/// 同時代入の仮の変数名が混ざるバグ（v2.1）の回帰テスト。
+/// k(a) := some({b | b > a}) に a := b を入れた結果が some({b' | b' > b'}) になっていたため、
+/// 「k(b) = some({y | y > y})」が反射律で通り、選択公理と合わせて ⊥ が証明できた。
+#[test]
+fn simultaneous_substitution_does_not_mix_placeholders() {
+    let mut env = KEnv::default();
+    let body = DefBody::Term("ℕ".into(), t("some({b : ℕ | b > a})"));
+    env.add_def("k", &[("a".into(), "ℕ".into())], &body).unwrap();
+    let st = |concl: &str| Statement {
+        name: "t".into(),
+        type_params: vec![],
+        vars: vec![("b".into(), "ℕ".into())],
+        hyps: vec![],
+        concl: f(concl),
+        is_axiom: false,
+        core: false,
+    };
+    let refl = Proof::Refl(t("k(b)"));
+    // 正しい展開：k(b) ≡ some({x | x > b})
+    assert!(env.add_statement(&st("k(b) = some({x : ℕ | x > b})"), Some(&refl)).is_ok());
+    // 間違った展開は通らない
+    let mut env2 = KEnv::default();
+    env2.add_def("k", &[("a".into(), "ℕ".into())], &body).unwrap();
+    let r = env2.add_statement(&st("k(b) = some({y : ℕ | y > y})"), Some(&refl)).map(|_| ()).map_err(|e| e.msg);
+    rejected(r, "定理の結論");
+}
