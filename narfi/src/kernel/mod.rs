@@ -1,12 +1,12 @@
 //! 核（kernel）。Narfi v2 で「正しい」と判断するのはこのモジュールだけ。
 //!
-//! - `env`   ：ソート・シグネチャ・型付け・定義的等しさ（仕様 §1〜§4, §6）
+//! - `env`   ：型・型付け・定義的等しさ（仕様 §1〜§4, §6）
 //! - `check` ：推論規則（仕様 §5）
 //! - `arith` ：算術の検算（仕様 §7）
 //! - `proof` ：証明項
 //!
-//! elab（src/elab.rs）にバグがあっても、ここが通さなければ定理は環境に入らない。
-//! 逆に言えば、このモジュール（と syntax.rs の代入・自由変数）だけを読めば、
+//! elab（src/elab/）にバグがあっても、ここが通さなければ定理は環境に入らない。
+//! 逆に言えば、このモジュールと src/syntax.rs の代入・自由変数・src/types.rs の型だけを読めば、
 //! 検査結果を信じてよいかを判断できる。
 
 pub mod arith;
@@ -16,17 +16,15 @@ pub mod proof;
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{Formula, is_fn_sort};
-use env::{Deps, FnSig, KCtx, KDef, KEnv, KResult, LocalSig, Schema, is_builtin_fn, kerr, num_rank};
+use crate::syntax::Formula;
+use env::{DefBody, Deps, KCtx, KDef, KEnv, KResult, Schema, kerr, num_rank};
 use proof::Proof;
-use std::collections::BTreeSet;
 
 /// 定理・公理の文
 pub struct Statement {
     pub name: String,
-    pub sig: LocalSig,
-    pub sort_params: Vec<String>,
-    /// 文の自由変数と型
+    pub type_params: Vec<String>,
+    /// 文の自由変数と型（関数型・述語型の変数も含む）
     pub vars: Vec<(String, String)>,
     pub hyps: Vec<(String, Formula)>,
     pub concl: Formula,
@@ -34,54 +32,10 @@ pub struct Statement {
     pub core: bool,
 }
 
-fn atoms_of(f: &Formula, preds: &mut BTreeSet<String>, fns: &mut BTreeSet<String>) {
-    fn t_go(t: &crate::syntax::Term, fns: &mut BTreeSet<String>) {
-        match t {
-            crate::syntax::Term::App(f, a) => {
-                fns.insert(f.clone());
-                a.iter().for_each(|x| t_go(x, fns));
-            }
-            crate::syntax::Term::Var(x) => {
-                fns.insert(x.clone());
-            }
-            _ => {}
-        }
-    }
-    match f {
-        Formula::Atom(p, ts) => {
-            preds.insert(p.clone());
-            ts.iter().for_each(|t| t_go(t, fns));
-        }
-        Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => {
-            atoms_of(a, preds, fns);
-            atoms_of(b, preds, fns);
-        }
-        Formula::Forall(_, _, b) | Formula::Exists(_, _, b) => atoms_of(b, preds, fns),
-        Formula::Bot => {}
-    }
-}
-
 impl KEnv {
-    fn sort_ok(s: &str, sort_params: &[String]) -> bool {
-        num_rank(s).is_some() || sort_params.iter().any(|p| p == s)
-    }
-
-    fn check_sig(&self, sig: &LocalSig, sort_params: &[String]) -> KResult<()> {
-        for (f, fs) in &sig.fns {
-            if is_builtin_fn(f) || self.defs.contains_key(f) {
-                return kerr(format!("`{f}` は組み込みか定義済みの名前なので、局所記号にできない"));
-            }
-            if !fs.args.iter().chain(std::iter::once(&fs.res)).all(|s| Self::sort_ok(s, sort_params)) {
-                return kerr(format!("関数記号 `{f}` の型 {} が正しくない", fs.show()));
-            }
-        }
-        for (p, ss) in &sig.preds {
-            if self.defs.contains_key(p) || p == "=" {
-                return kerr(format!("`{p}` は定義済みの名前なので、局所記号にできない"));
-            }
-            if !ss.iter().all(|s| Self::sort_ok(s, sort_params)) {
-                return kerr(format!("述語 `{p}` の型が正しくない"));
-            }
+    fn name_free(&self, name: &str) -> KResult<()> {
+        if self.thms.contains_key(name) || self.is_global(name) || name == "=" || num_rank(name).is_some() {
+            return kerr(format!("名前 `{name}` はすでに使われている"));
         }
         Ok(())
     }
@@ -91,9 +45,8 @@ impl KEnv {
         if self.thms.contains_key(&st.name) {
             return kerr(format!("名前 `{}` はすでに使われている", st.name));
         }
-        self.check_sig(&st.sig, &st.sort_params)?;
         let deps = {
-            let mut ctx = KCtx::new(self, &st.sig, &st.sort_params);
+            let mut ctx = KCtx::new(self, &st.type_params);
             for (x, s) in &st.vars {
                 ctx.fresh_var(x)?;
                 if !ctx.valid_sort(s) {
@@ -112,32 +65,16 @@ impl KEnv {
                 None => return kerr("定理に証明がない"),
             }
         };
-        // 図式：仮定を → でつなぎ、文に現れる局所記号をパラメータにする
+        // 図式：仮定を → でつなぎ、文の自由変数をパラメータにする
         let mut formula = st.concl.clone();
         for (_, h) in st.hyps.iter().rev() {
             formula = Formula::Imp(Box::new(h.clone()), Box::new(formula));
         }
-        let (mut preds, mut syms) = (BTreeSet::new(), BTreeSet::new());
-        atoms_of(&formula, &mut preds, &mut syms);
-        let mut params = st.vars.clone();
-        for (f, fs) in &st.sig.fns {
-            if syms.contains(f) {
-                params.push((f.clone(), fs.show()));
-            }
-        }
-        let preds = st
-            .sig
-            .preds
-            .iter()
-            .filter(|(p, _)| preds.contains(*p))
-            .map(|(p, ss)| (p.clone(), ss.clone()))
-            .collect();
         self.thms.insert(
             st.name.clone(),
             Schema {
-                sort_params: st.sort_params.clone(),
-                params,
-                preds,
+                type_params: st.type_params.clone(),
+                params: st.vars.clone(),
                 formula,
                 is_axiom: st.is_axiom,
                 core: st.core,
@@ -147,36 +84,29 @@ impl KEnv {
         Ok(deps)
     }
 
-    /// 定義 `def name(params) := body`（仕様 §8）
-    pub fn add_def(&mut self, name: &str, params: &[(String, String)], body: &Formula) -> KResult<()> {
-        if self.defs.contains_key(name) || self.thms.contains_key(name) || is_builtin_fn(name) || name == "=" {
-            return kerr(format!("名前 `{name}` はすでに使われている"));
-        }
-        let mut sig = LocalSig::default();
-        let mut vars = Vec::new();
-        for (x, s) in params {
-            if is_fn_sort(s) {
-                let Some(fs) = FnSig::parse(s) else {
-                    return kerr(format!("引数 `{x}` の型 `{s}` が読めない"));
-                };
-                sig.fns.insert(x.clone(), fs);
-            } else {
-                vars.push((x.clone(), s.clone()));
-            }
-        }
-        self.check_sig(&sig, &[])?;
+    /// 定義 `def P(params) := φ` / `def f(params) : τ := t`（仕様 §8）
+    pub fn add_def(&mut self, name: &str, params: &[(String, String)], body: &DefBody) -> KResult<()> {
+        self.name_free(name)?;
         {
-            let mut ctx = KCtx::new(self, &sig, &[]);
-            for (x, s) in &vars {
+            let mut ctx = KCtx::new(self, &[]);
+            for (x, s) in params {
                 ctx.fresh_var(x)?;
                 if !ctx.valid_sort(s) {
-                    return kerr(format!("引数 `{x}` の型 `{s}` が正しくない（数のソートか関数型）"));
+                    return kerr(format!("引数 `{x}` の型 `{s}` が正しくない"));
                 }
                 ctx.vars.push((x.clone(), s.clone()));
             }
-            // 本体の型付け。未宣言の述語や、引数にない変数があればここで止まる。
+            // 本体の型付け。未宣言の記号や、引数にない変数があればここで止まる。
             // 自分自身はまだ環境にないので、再帰的な定義もここで止まる。
-            ctx.check_f(body)?;
+            match body {
+                DefBody::Pred(f) => ctx.check_f(f)?,
+                DefBody::Term(s, t) => {
+                    if !ctx.valid_sort(s) || s.contains('→') || s == "Prop" {
+                        return kerr(format!("項の定義の値の型 `{s}` は使えない（関数・命題を値にする定義はまだ書けない）"));
+                    }
+                    ctx.check_sort(t, s)?;
+                }
+            }
         }
         self.defs.insert(name.to_string(), KDef { params: params.to_vec(), body: body.clone() });
         Ok(())

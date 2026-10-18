@@ -3,7 +3,7 @@
 
 use super::Statement;
 use super::arith::Q;
-use super::env::{KEnv, LocalSig};
+use super::env::{DefBody, KEnv};
 use super::proof::Proof;
 use crate::parser::{P, lex};
 use crate::syntax::{Formula, Term};
@@ -32,17 +32,15 @@ fn hyp(h: &str) -> Proof {
     Proof::Hyp(h.into())
 }
 
-/// 局所述語 P : ℕ、R : ℕ × ℕ を持つ定理を kernel に検査させる
+/// 述語の変数 P : ℕ → Prop、R : ℕ × ℕ → Prop を持つ定理を kernel に検査させる
 fn thm(vars: &[(&str, &str)], hyps: &[(&str, &str)], concl: &str, proof: Proof) -> Result<(), String> {
     let mut env = KEnv::default();
-    let mut sig = LocalSig::default();
-    sig.preds.insert("P".into(), vec!["ℕ".into()]);
-    sig.preds.insert("R".into(), vec!["ℕ".into(), "ℕ".into()]);
+    let mut vs: Vec<(String, String)> = vec![("P".into(), "ℕ → Prop".into()), ("R".into(), "ℕ × ℕ → Prop".into())];
+    vs.extend(vars.iter().map(|(x, s)| (x.to_string(), s.to_string())));
     let st = Statement {
         name: "t".into(),
-        sig,
-        sort_params: vec![],
-        vars: vars.iter().map(|(x, s)| (x.to_string(), s.to_string())).collect(),
+        type_params: vec![],
+        vars: vs,
         hyps: hyps.iter().map(|(h, s)| (h.to_string(), f(s))).collect(),
         concl: f(concl),
         is_axiom: false,
@@ -205,16 +203,14 @@ fn induction_step_must_match() {
 #[test]
 fn definitions() {
     let mut env = KEnv::default();
-    assert!(env.add_def("loop", &[("x".into(), "ℕ".into())], &f("loop(x)")).is_err());
-    assert!(env.add_def("q", &[("x".into(), "ℕ".into())], &f("undeclared(x)")).is_err());
-    assert!(env.add_def("pos", &[("x".into(), "ℝ".into())], &f("x > 0")).is_ok());
+    let pred = |s: &str| DefBody::Pred(f(s));
+    assert!(env.add_def("loop", &[("x".into(), "ℕ".into())], &pred("loop(x)")).is_err());
+    assert!(env.add_def("q", &[("x".into(), "ℕ".into())], &pred("undeclared(x)")).is_err());
+    assert!(env.add_def("pos", &[("x".into(), "ℝ".into())], &pred("x > 0")).is_ok());
     // 定義の展開（δ）で同一視される
-    let mut sig = LocalSig::default();
-    sig.preds.insert("P".into(), vec![]);
     let st = Statement {
         name: "t".into(),
-        sig,
-        sort_params: vec![],
+        type_params: vec![],
         vars: vec![("y".into(), "ℝ".into())],
         hyps: vec![("h".into(), f("y > 0"))],
         concl: f("pos(y)"),
@@ -222,4 +218,74 @@ fn definitions() {
         core: false,
     };
     assert!(env.add_statement(&st, Some(&hyp("h"))).is_ok());
+}
+
+// ---------------------------------------------------------------- v2.1：λ・集合・選択
+
+fn lam(x: &str, ty: &str, body: &str) -> Term {
+    Term::Lam(vec![(x.into(), ty.into())], Box::new(t(body)))
+}
+
+/// λ を代入しても、λ の中の自由変数 y が ∀y に捕まってはいけない
+#[test]
+fn lambda_substitution_avoids_capture() {
+    let h = ("h", "∀f:ℕ → ℕ. ∀y:ℕ. f(y) = y");
+    // f := (x ↦ y)（y は文脈の変数）なら、結論は ∀y'. y = y'
+    let p = || Proof::AllE(b(hyp("h")), lam("x", "ℕ", "y"));
+    assert_eq!(thm(&[("y", "ℕ")], &[h], "∀z:ℕ. y = z", p()), Ok(()));
+    // 捕まえてしまうと ∀y. y = y になるが、それは示されていない
+    rejected(thm(&[("y", "ℕ")], &[h], "∀z:ℕ. z = z", p()), "定理の結論");
+}
+
+#[test]
+fn lambda_must_have_the_right_type() {
+    let h = ("h", "∀f:ℕ → ℕ. f(0) = f(0)");
+    let p = Proof::AllE(b(hyp("h")), lam("x", "ℝ", "x"));
+    rejected(thm(&[], &[h], "0 = 0", p), "引数の型");
+}
+
+/// 述語の変数に集合を代入すると、適用の位置で β 簡約される
+#[test]
+fn set_instantiation() {
+    let h = ("h", "∀Q:ℕ → Prop. Q(0) → Q(0)");
+    let set = Term::Set(vec![("n".into(), "ℕ".into())], Box::new(f("n > 5")));
+    let p = Proof::AllE(b(hyp("h")), set.clone());
+    assert_eq!(thm(&[], &[h], "0 > 5 → 0 > 5", p), Ok(()));
+    let p = Proof::AllE(b(hyp("h")), set);
+    rejected(thm(&[], &[h], "1 > 5 → 1 > 5", p), "定理の結論");
+}
+
+/// 選択公理は「存在するなら」という仮定つき。仮定なしに P(some(P)) は出ない
+#[test]
+fn choice_needs_existence() {
+    let mut env = KEnv::default();
+    let ax = Statement {
+        name: "choice".into(),
+        type_params: vec!["'a".into()],
+        vars: vec![("P".into(), "'a → Prop".into())],
+        hyps: vec![],
+        // パーサは 'a を読めないので、仮の型名 AA で書いてから置き換える
+        concl: f("(∃x:AA. P(x)) → P(some(P))").map_sorts(&|s| if s == "AA" { "'a".into() } else { s.into() }),
+        is_axiom: true,
+        core: true,
+    };
+    env.add_statement(&ax, None).unwrap();
+    let st = |concl: &str| Statement {
+        name: "t".into(),
+        type_params: vec![],
+        vars: vec![("P".into(), "ℕ → Prop".into())],
+        hyps: vec![("e".into(), f("∃x:ℕ. P(x)"))],
+        concl: f(concl),
+        is_axiom: false,
+        core: false,
+    };
+    let inst = || Proof::Thm { name: "choice".into(), sorts: vec!["ℕ".into()], args: vec![t("P")] };
+    // 存在の証明を渡せば通る
+    let ok = Proof::ImpE(b(inst()), b(hyp("e")));
+    assert!(env.add_statement(&st("P(some(P))"), Some(&ok)).is_ok());
+    // 渡さなければ、示されるのは「(∃x. P(x)) → P(some(P))」まで
+    let mut env2 = KEnv::default();
+    env2.add_statement(&ax, None).unwrap();
+    let r = env2.add_statement(&st("P(some(P))"), Some(&inst())).map(|_| ()).map_err(|e| e.msg);
+    rejected(r, "定理の結論");
 }

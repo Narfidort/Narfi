@@ -166,6 +166,8 @@ impl Normalizer {
             Term::Meta(_) => return None,
             Term::Num(n) => Poly::constant(Q::int(*n as i128)),
             Term::Var(x) => self.atom(format!("v:{x}")),
+            // λ・集合は原子（束縛変数の名前の違いは無視する）
+            Term::Lam(..) | Term::Set(..) => self.atom(format!("λ:{}", t.canonical())),
             Term::App(f, a) => match (f.as_str(), a.as_slice()) {
                 ("+", [x, y]) => self.poly(x)?.add(&self.poly(y)?),
                 ("-", [x, y]) => self.poly(x)?.sub(&self.poly(y)?),

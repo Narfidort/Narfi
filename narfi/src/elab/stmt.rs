@@ -65,8 +65,8 @@ impl<'a> Checker<'a> {
         if ctx.has_name(x) {
             return self.err(format!("名前 `{x}` はすでに使われている"));
         }
-        if self.sig.fns.contains_key(x) || self.sig.preds.contains_key(x) || self.env.kernel.defs.contains_key(x) {
-            return self.err(format!("`{x}` は記号の名前なので、変数・仮定の名前には使えない"));
+        if self.env.kernel.is_global(x) {
+            return self.err(format!("`{x}` は定義・定数の名前なので、変数・仮定の名前には使えない"));
         }
         Ok(())
     }
@@ -88,19 +88,6 @@ impl<'a> Checker<'a> {
         }
         let p = self.block(ctx, &d.body, st.concl.clone(), d.line)?;
         self.solve_pending();
-        // 証明の中で使った局所記号の型も穴を埋めておく
-        let fns: Vec<_> = self.sig.fns.keys().cloned().collect();
-        for f in fns {
-            let mut sig = self.sig.fns[&f].clone();
-            sig.args = sig.args.iter().map(|s| self.zonk_sort(s)).collect();
-            sig.res = self.zonk_sort(&sig.res);
-            self.sig.fns.insert(f, sig);
-        }
-        let preds: Vec<_> = self.sig.preds.keys().cloned().collect();
-        for p in preds {
-            let ss = self.sig.preds[&p].iter().map(|s| self.zonk_sort(s)).collect();
-            self.sig.preds.insert(p, ss);
-        }
         self.zonk_proof(&p)
     }
 
@@ -114,7 +101,7 @@ impl<'a> Checker<'a> {
                     continue;
                 }
                 let t = self.zonk_t(a);
-                if let Some(ts) = crate::sorts::term_sort(&self.env.kernel, &self.sig, vs, &t) {
+                if let Some(ts) = crate::sorts::term_sort(&self.env.kernel, vs, &t) {
                     changed |= self.unify_sort(s, &ts);
                 }
             }
@@ -444,9 +431,12 @@ impl<'a> Checker<'a> {
                 Ok(at(Proof::ImpE(p.b(), r.b())))
             }
             StmtKind::Choose { choice, just } => {
+                let mut witness: Option<Term> = None;
                 let (next, other) = match (choice, self.whnf(&g)) {
                     (Choice::Term(t), Formula::Exists(y, s, b)) => {
                         self.check_term_scope(&ctx, t)?;
+                        let t = &self.annotate_term(&ctx, t, Some(&s))?;
+                        witness = Some(t.clone());
                         if let Some(ts) = self.term_sort(&ctx, t) {
                             if !self.unify_sort(&s, &ts) {
                                 return self.err(format!("型が違う：`{t}` は {ts} だが、{s} の項を選ぶ必要がある"));
@@ -482,7 +472,7 @@ impl<'a> Checker<'a> {
                     None => r,
                 };
                 Ok(at(match (choice, other) {
-                    (Choice::Term(t), _) => Proof::ExI { target: g, witness: t.clone(), p: inner.b() },
+                    (Choice::Term(_), _) => Proof::ExI { target: g, witness: witness.unwrap(), p: inner.b() },
                     (Choice::Left, Some(o)) => Proof::OrI { right: false, other: o, p: inner.b() },
                     (_, Some(o)) => Proof::OrI { right: true, other: o, p: inner.b() },
                     _ => unreachable!(),
@@ -490,6 +480,7 @@ impl<'a> Checker<'a> {
             }
             StmtKind::Let { name, term } => {
                 self.check_term_scope(&ctx, term)?;
+                let term = &self.annotate_term(&ctx, term, None)?;
                 self.fresh_name(&ctx, name)?;
                 let sort = self.term_sort(&ctx, term).unwrap_or_else(|| literal_sort(term).to_string());
                 self.push(&mut ctx, Entry::Def(name.clone(), sort.clone(), term.clone()));

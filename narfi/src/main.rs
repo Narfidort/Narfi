@@ -6,6 +6,7 @@ mod parser;
 mod prose;
 mod sorts;
 mod syntax;
+mod types;
 mod web;
 
 use elab::{Report, check_module};

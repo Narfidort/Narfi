@@ -2,6 +2,7 @@
 
 use crate::kernel::arith;
 use crate::kernel::env::{Deps, KCtx, KError, KResult, ORDER_RELS, Schema, kerr, num_rank};
+use crate::types::Ty;
 use crate::kernel::proof::Proof;
 use crate::syntax::{Formula, Term, not};
 
@@ -140,7 +141,7 @@ impl<'a, 'c> Checker<'a, 'c> {
             }
             Proof::AllE(p, t) => match self.infer_whnf(p)? {
                 Formula::Forall(x, s, body) => {
-                    self.ctx.check_t(t, &s)?;
+                    self.ctx.check_sort(t, &s)?;
                     Ok(body.subst(&x, t))
                 }
                 f => kerr(format!("∀除去：「{f}」は ∀ の形ではない")),
@@ -149,7 +150,7 @@ impl<'a, 'c> Checker<'a, 'c> {
                 self.ctx.check_f(target)?;
                 match self.ctx.whnf(target) {
                     Formula::Exists(x, s, body) => {
-                        self.ctx.check_t(witness, &s)?;
+                        self.ctx.check_sort(witness, &s)?;
                         let have = self.infer(p)?;
                         self.want_conv(&have, &body.subst(&x, witness), "∃導入")?;
                         Ok(target.clone())
@@ -189,7 +190,10 @@ impl<'a, 'c> Checker<'a, 'c> {
             }
             Proof::Let { x, sort, t, body } => {
                 self.ctx.fresh_var(x)?;
-                self.ctx.check_t(t, sort)?;
+                if !self.ctx.valid_sort(sort) {
+                    return kerr(format!("let の型 `{sort}` が正しくない"));
+                }
+                self.ctx.check_sort(t, sort)?;
                 self.ctx.lets.push((x.clone(), sort.clone(), t.clone()));
                 let r = self.infer(body);
                 self.ctx.lets.pop();
@@ -257,18 +261,18 @@ impl<'a, 'c> Checker<'a, 'c> {
                 }
             }
             Proof::NatNonneg(t) => {
-                self.ctx.check_t(t, "ℕ")?;
+                self.ctx.check_sort(t, "ℕ")?;
                 Ok(Formula::Atom("≥".into(), vec![t.clone(), Term::Num(0)]))
             }
             Proof::Ring { lhs, rhs } => {
                 let f = Formula::Atom("=".into(), vec![lhs.clone(), rhs.clone()]);
                 let s = self.ctx.rel_sort("=", lhs, rhs)?;
                 if let Some(s) = &s {
-                    if num_rank(s).is_none() {
-                        return kerr(format!("ring は数のソートにしか使えない（{s}）"));
+                    if num_rank(&s.show()).is_none() {
+                        return kerr(format!("ring は数の型にしか使えない（{}）", s.show()));
                     }
                 }
-                let (l, r) = (self.ctx.expand_lets_t(lhs), self.ctx.expand_lets_t(rhs));
+                let (l, r) = (self.ctx.arith_form(lhs), self.ctx.arith_form(rhs));
                 if !arith::ring_eq(&l, &r) {
                     return kerr(format!("ring：「{f}」は環の等式ではない"));
                 }
@@ -278,7 +282,7 @@ impl<'a, 'c> Checker<'a, 'c> {
             Proof::LinArith { goal, facts, coeffs } => self.linarith(goal, facts, coeffs),
             Proof::Decide(phi) => {
                 self.ctx.check_f(phi)?;
-                let f = self.ctx.expand_lets_f(phi);
+                let f = self.ctx.arith_form_f(phi);
                 if !f.free_vars().is_empty() {
                     return kerr(format!("decide：「{phi}」には変数がある"));
                 }
@@ -299,9 +303,9 @@ impl<'a, 'c> Checker<'a, 'c> {
         }
     }
 
-    fn term_sort(&self, t: &Term) -> KResult<String> {
-        match self.ctx.rel_sort("=", t, t)? {
-            Some(s) => Ok(s),
+    fn term_sort(&mut self, t: &Term) -> KResult<String> {
+        match self.ctx.sort_of(t)? {
+            Some(s) => Ok(s.show()),
             // 数字だけの項：§3.2 の規則で ℚ として扱えば十分（埋め込みで真偽は変わらない）
             None => Ok("ℚ".into()),
         }
@@ -323,19 +327,19 @@ impl<'a, 'c> Checker<'a, 'c> {
             };
             match (self.ctx.rel_sort(r, l, rr)?, &sort) {
                 (Some(s), Some(t)) if s != *t => {
-                    return kerr(format!("linarith：型が混ざっている（{s} と {t}）"));
+                    return kerr(format!("linarith：型が混ざっている（{} と {}）", s.show(), t.show()));
                 }
                 (Some(s), None) => sort = Some(s),
                 _ => {}
             }
-            fs.push((r.to_string(), self.ctx.expand_lets_t(l), self.ctx.expand_lets_t(rr)));
+            fs.push((r.to_string(), self.ctx.arith_form(l), self.ctx.arith_form(rr)));
         }
         if let Some(s) = &sort {
-            if num_rank(s).is_none() {
-                return kerr(format!("linarith は数のソートにしか使えない（{s}）"));
+            if !matches!(s, Ty::Base(b) if num_rank(b).is_some()) {
+                return kerr(format!("linarith は数の型にしか使えない（{}）", s.show()));
             }
         }
-        let (gl, grr) = (self.ctx.expand_lets_t(gl), self.ctx.expand_lets_t(grr));
+        let (gl, grr) = (self.ctx.arith_form(gl), self.ctx.arith_form(grr));
         let mut forms = Vec::new();
         for (r, l, rr) in &fs {
             forms.push(arith::fact_form(r, l, rr).expect("関係は確認済み"));
@@ -352,33 +356,22 @@ impl<'a, 'c> Checker<'a, 'c> {
     }
 
     /// 図式の具体化（仕様 §8）
-    fn thm(&mut self, name: &str, sorts: &[String], args: &[Term]) -> KResult<Formula> {
+    fn thm(&mut self, name: &str, tys: &[String], args: &[Term]) -> KResult<Formula> {
         let Some(sc) = self.ctx.env.thms.get(name) else {
             return kerr(format!("定理・公理 `{name}` がない"));
         };
         let sc: Schema = sc.clone();
-        if sorts.len() != sc.sort_params.len() || args.len() != sc.params.len() {
+        if tys.len() != sc.type_params.len() || args.len() != sc.params.len() {
             return kerr(format!("`{name}` の具体化の引数の数が合わない"));
         }
-        for s in sorts {
+        for s in tys {
             if !self.ctx.valid_sort(s) {
                 return kerr(format!("`{name}` の型の引数 `{s}` が正しくない"));
             }
         }
-        let (params, preds, formula) = sc.instance(sorts);
+        let (params, formula) = sc.instance(tys);
         for ((_, s), t) in params.iter().zip(args) {
-            self.ctx.check_arg(t, s)?;
-        }
-        for (p, ss) in &preds {
-            match self.ctx.sig.preds.get(p) {
-                Some(have) if have == ss => {}
-                _ => {
-                    return kerr(format!(
-                        "`{name}` の述語 `{p}`（{}）が、この定理では同じ型で宣言されていない",
-                        ss.join(" × ")
-                    ));
-                }
-            }
+            self.ctx.check_sort(t, s)?;
         }
         if sc.is_axiom && !sc.core {
             self.deps.axioms.insert(name.to_string());

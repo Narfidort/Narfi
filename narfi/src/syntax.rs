@@ -5,6 +5,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 
 /// 項。演算子も関数適用として表す（"+", "-", "·", "/", "^", "neg", "abs"）。
+/// 関数適用の頭は名前（組み込みの演算・定義・関数型の変数）。λ を直接適用した形は持たない
+/// （代入のときに β 簡約してしまう。`Term::subst` を参照）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Term {
     Var(String),
@@ -12,6 +14,10 @@ pub enum Term {
     App(String, Vec<Term>),
     /// 単一化用のメタ変数（ソースには現れない）
     Meta(u32),
+    /// λ(x₁:σ₁, …). t（関数そのもの。型は正規形の文字列）
+    Lam(Vec<(String, String)>, Box<Term>),
+    /// {(x₁:σ₁, …) | φ}（述語・集合）
+    Set(Vec<(String, String)>, Box<Formula>),
 }
 
 /// 論理式。¬φ は Imp(φ, Bot) で表す。範囲付き量化子は展開して持つ。
@@ -70,6 +76,9 @@ pub struct SyntaxTable {
     pub defs: HashMap<String, usize>,
     /// 定義の本体に現れた述語（あとから同じ名前を def して循環させないため）
     pub def_preds: BTreeSet<String>,
+    /// typedef で作った型・定数
+    pub types: BTreeSet<String>,
+    pub consts: BTreeSet<String>,
 }
 
 thread_local! {
@@ -95,82 +104,235 @@ pub fn notation_for_pred(pred: &str) -> Option<Notation> {
 
 // ---------------------------------------------------------------- 定義・図式の具体化
 
-/// 関数型のソート（`ℕ → ℝ`）か
-pub fn is_fn_sort(s: &str) -> bool {
-    s.contains('→')
+/// 定義・図式のパラメータ params に args を同時に代入する（関数型・述語型のパラメータに
+/// λ や集合を入れたときは、その場で β 簡約する）。
+pub fn instantiate(params: &[(String, String)], body: &Formula, args: &[Term]) -> Formula {
+    let subs: Vec<(String, Term)> = params.iter().map(|(p, _)| p.clone()).zip(args.iter().cloned()).collect();
+    body.subst_many(&subs)
 }
 
-/// 定義・図式のパラメータ params に args を同時に代入する。
-/// 関数型のパラメータには関数記号の名前（`Term::Var(g)`）だけを渡せ、記号の付け替えになる。
-pub fn instantiate(params: &[(String, String)], body: &Formula, args: &[Term]) -> Formula {
-    let mut f = body.clone();
-    let mut subs = Vec::new();
-    let mut renames = Vec::new();
-    for (i, ((p, sort), a)) in params.iter().zip(args).enumerate() {
-        if is_fn_sort(sort) {
-            if let Term::Var(g) = a {
-                // 同時に付け替えるため、まずソースに現れない名前を経由する（a→b, b→c が混ざらないように）
-                let tmp = format!("%f{i}");
-                f = f.rename_fn(p, &tmp);
-                renames.push((tmp, g.clone()));
-            }
-        } else {
-            subs.push((p.clone(), a.clone()));
+/// 組み込みの関数記号（自由変数として数えない）
+pub const BUILTIN_FNS: [&str; 14] = ["+", "-", "·", "/", "neg", "abs", "^", "S", "max", "min", "some", "∪", "∩", "\\"];
+
+fn is_builtin_head(f: &str) -> bool {
+    BUILTIN_FNS.contains(&f)
+}
+
+fn is_builtin_rel(p: &str) -> bool {
+    RELS.contains(&p)
+}
+
+// β 簡約が止まらない（型の合わない項を代入した）ときに、無限ループではなく止めるための深さ
+thread_local! {
+    static BETA_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+fn with_beta<R>(f: impl FnOnce() -> R) -> R {
+    BETA_DEPTH.with(|d| {
+        d.set(d.get() + 1);
+        assert!(d.get() < 4000, "β 簡約が止まらない（型の合わない項を代入している）");
+    });
+    let r = f();
+    BETA_DEPTH.with(|d| d.set(d.get() - 1));
+    r
+}
+
+/// t(args)：t が名前なら適用、λ なら β 簡約
+pub fn apply_term(t: &Term, args: &[Term]) -> Term {
+    match t {
+        Term::Var(g) => Term::App(g.clone(), args.to_vec()),
+        Term::Lam(ps, body) if ps.len() == args.len() => with_beta(|| {
+            let subs: Vec<(String, Term)> = ps.iter().map(|(p, _)| p.clone()).zip(args.iter().cloned()).collect();
+            body.subst_many(&subs)
+        }),
+        // 型の合わない適用（kernel の型検査で止まる）
+        _ => {
+            let mut v = vec![t.clone()];
+            v.extend(args.iter().cloned());
+            Term::App("@".into(), v)
         }
     }
-    for (tmp, g) in &renames {
-        f = f.rename_fn(tmp, g);
-    }
-    f.subst_many(&subs)
 }
-// ---------------------------------------------------------------- 自由変数
+
+/// P(args)：P が名前なら述語の適用、集合 {x | φ} なら φ[x := args]
+pub fn holds(t: &Term, args: &[Term]) -> Formula {
+    match t {
+        Term::Var(q) => Formula::Atom(q.clone(), args.to_vec()),
+        Term::Set(ps, phi) if ps.len() == args.len() => with_beta(|| {
+            let subs: Vec<(String, Term)> = ps.iter().map(|(p, _)| p.clone()).zip(args.iter().cloned()).collect();
+            phi.subst_many(&subs)
+        }),
+        _ => {
+            let mut v = vec![t.clone()];
+            v.extend(args.iter().cloned());
+            Formula::Atom("@".into(), v)
+        }
+    }
+}
+
+/// 束縛変数 ps のもとで x := t を代入するとき、t の自由変数を捕まえないよう ps の名前を付け替える。
+/// 付け替えた名前の組と、本体に施す付け替え（旧名 → 新名）を返す。
+fn avoid_capture(ps: &[(String, String)], t: &Term, body_fv: &BTreeSet<String>) -> (Vec<(String, String)>, Vec<(String, Term)>) {
+    let mut tv = BTreeSet::new();
+    t.vars(&mut tv);
+    let mut new_ps = Vec::new();
+    let mut ren = Vec::new();
+    for (p, ty) in ps {
+        if tv.contains(p) {
+            let mut fresh = format!("{p}'");
+            while tv.contains(&fresh) || body_fv.contains(&fresh) || ps.iter().any(|(q, _)| *q == fresh) {
+                fresh.push('\'');
+            }
+            ren.push((p.clone(), Term::Var(fresh.clone())));
+            new_ps.push((fresh, ty.clone()));
+        } else {
+            new_ps.push((p.clone(), ty.clone()));
+        }
+    }
+    (new_ps, ren)
+}
+
+// ---------------------------------------------------------------- 自由変数・代入
 
 impl Term {
+    /// 自由変数（関数型の変数として使われた適用の頭も含む。組み込みの演算は含まない）
     pub fn vars(&self, out: &mut BTreeSet<String>) {
+        self.vars_in(out, &mut Vec::new());
+    }
+
+    fn vars_in(&self, out: &mut BTreeSet<String>, bound: &mut Vec<String>) {
         match self {
             Term::Var(x) => {
-                out.insert(x.clone());
+                if !bound.contains(x) {
+                    out.insert(x.clone());
+                }
             }
-            Term::App(_, args) => args.iter().for_each(|a| a.vars(out)),
+            Term::App(f, args) => {
+                if !is_builtin_head(f) && !bound.contains(f) && f != "@" {
+                    out.insert(f.clone());
+                }
+                args.iter().for_each(|a| a.vars_in(out, bound));
+            }
+            Term::Lam(ps, body) => {
+                let n = bound.len();
+                bound.extend(ps.iter().map(|(p, _)| p.clone()));
+                body.vars_in(out, bound);
+                bound.truncate(n);
+            }
+            Term::Set(ps, phi) => {
+                let n = bound.len();
+                bound.extend(ps.iter().map(|(p, _)| p.clone()));
+                phi.fv_into(out, bound);
+                bound.truncate(n);
+            }
             Term::Num(_) | Term::Meta(_) => {}
         }
     }
+
     pub fn has_meta(&self) -> bool {
         match self {
             Term::Meta(_) => true,
             Term::App(_, args) => args.iter().any(|a| a.has_meta()),
+            Term::Lam(_, b) => b.has_meta(),
+            Term::Set(_, phi) => phi.has_meta(),
             _ => false,
         }
     }
+
     pub fn mentions(&self, x: &str) -> bool {
-        match self {
-            Term::Var(y) => y == x,
-            Term::App(_, args) => args.iter().any(|a| a.mentions(x)),
-            _ => false,
-        }
+        let mut vs = BTreeSet::new();
+        self.vars(&mut vs);
+        vs.contains(x)
     }
-    pub fn subst(&self, x: &str, t: &Term) -> Term {
+
+    /// 捕獲を避ける代入 t[x := u]。x が関数として適用されていて u が λ なら β 簡約する（遺伝的代入）。
+    pub fn subst(&self, x: &str, u: &Term) -> Term {
         match self {
-            Term::Var(y) if y == x => t.clone(),
+            Term::Var(y) if y == x => u.clone(),
             Term::App(f, args) => {
-                Term::App(f.clone(), args.iter().map(|a| a.subst(x, t)).collect())
+                let args: Vec<Term> = args.iter().map(|a| a.subst(x, u)).collect();
+                if f == x { apply_term(u, &args) } else { Term::App(f.clone(), args) }
+            }
+            Term::Lam(ps, body) => {
+                if ps.iter().any(|(p, _)| p == x) {
+                    return self.clone();
+                }
+                let mut fv = BTreeSet::new();
+                body.vars(&mut fv);
+                let (ps2, ren) = avoid_capture(ps, u, &fv);
+                let body = if ren.is_empty() { (**body).clone() } else { body.subst_many(&ren) };
+                Term::Lam(ps2, Box::new(body.subst(x, u)))
+            }
+            Term::Set(ps, phi) => {
+                if ps.iter().any(|(p, _)| p == x) {
+                    return self.clone();
+                }
+                let fv = phi.free_vars();
+                let (ps2, ren) = avoid_capture(ps, u, &fv);
+                let phi = if ren.is_empty() { (**phi).clone() } else { phi.subst_many(&ren) };
+                Term::Set(ps2, Box::new(phi.subst(x, u)))
             }
             _ => self.clone(),
         }
     }
+
+    /// 同時代入
+    pub fn subst_many(&self, subs: &[(String, Term)]) -> Term {
+        let mut t = self.clone();
+        for (i, (x, _)) in subs.iter().enumerate() {
+            t = t.subst(x, &Term::Var(format!("%{i}")));
+        }
+        for (i, (_, u)) in subs.iter().enumerate() {
+            t = t.subst(&format!("%{i}"), u);
+        }
+        t
+    }
+
+    pub fn map_sorts(&self, g: &impl Fn(&str) -> String) -> Term {
+        match self {
+            Term::App(f, args) => Term::App(f.clone(), args.iter().map(|a| a.map_sorts(g)).collect()),
+            Term::Lam(ps, b) => Term::Lam(ps.iter().map(|(p, t)| (p.clone(), g(t))).collect(), Box::new(b.map_sorts(g))),
+            Term::Set(ps, phi) => Term::Set(ps.iter().map(|(p, t)| (p.clone(), g(t))).collect(), Box::new(phi.map_sorts(g))),
+            _ => self.clone(),
+        }
+    }
+
+    /// 束縛変数の名前を位置で決まる名前に付け替えたもの（α 同値なら同じになる）
+    pub fn canonical(&self) -> Term {
+        self.canon_in(&mut 0)
+    }
+
+    fn canon_in(&self, k: &mut usize) -> Term {
+        match self {
+            Term::App(f, args) => Term::App(f.clone(), args.iter().map(|a| a.canon_in(k)).collect()),
+            Term::Lam(ps, b) => {
+                let mut ren = Vec::new();
+                let mut ps2 = Vec::new();
+                for (p, t) in ps {
+                    let v = format!("#c{k}");
+                    *k += 1;
+                    ren.push((p.clone(), Term::Var(v.clone())));
+                    ps2.push((v, t.clone()));
+                }
+                Term::Lam(ps2, Box::new(b.subst_many(&ren).canon_in(k)))
+            }
+            Term::Set(ps, phi) => {
+                let mut ren = Vec::new();
+                let mut ps2 = Vec::new();
+                for (p, t) in ps {
+                    let v = format!("#c{k}");
+                    *k += 1;
+                    ren.push((p.clone(), Term::Var(v.clone())));
+                    ps2.push((v, t.clone()));
+                }
+                Term::Set(ps2, Box::new(phi.subst_many(&ren).canon_in(k)))
+            }
+            _ => self.clone(),
+        }
+    }
+
     pub fn to_latex(&self) -> String {
         show_term_latex(self, 0)
-    }
-    /// 関数記号 old を new に付け替える（`old(t…)` と、引数として渡された `old` の両方）
-    pub fn rename_fn(&self, old: &str, new: &str) -> Term {
-        match self {
-            Term::Var(x) if x == old => Term::Var(new.to_string()),
-            Term::App(f, args) => {
-                let f = if f == old { new.to_string() } else { f.clone() };
-                Term::App(f, args.iter().map(|a| a.rename_fn(old, new)).collect())
-            }
-            _ => self.clone(),
-        }
     }
 }
 
@@ -180,12 +342,14 @@ impl Formula {
         self.fv_into(&mut out, &mut Vec::new());
         out
     }
+
     fn fv_into(&self, out: &mut BTreeSet<String>, bound: &mut Vec<String>) {
         match self {
-            Formula::Atom(_, ts) => {
-                let mut s = BTreeSet::new();
-                ts.iter().for_each(|t| t.vars(&mut s));
-                out.extend(s.into_iter().filter(|v| !bound.contains(v)));
+            Formula::Atom(p, ts) => {
+                if !is_builtin_rel(p) && !bound.contains(p) && p != "@" {
+                    out.insert(p.clone());
+                }
+                ts.iter().for_each(|t| t.vars_in(out, bound));
             }
             Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => {
                 a.fv_into(out, bound);
@@ -199,22 +363,22 @@ impl Formula {
             Formula::Bot => {}
         }
     }
+
     pub fn has_meta(&self) -> bool {
         match self {
             Formula::Atom(_, ts) => ts.iter().any(|t| t.has_meta()),
-            Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => {
-                a.has_meta() || b.has_meta()
-            }
+            Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => a.has_meta() || b.has_meta(),
             Formula::Forall(_, _, b) | Formula::Exists(_, _, b) => b.has_meta(),
             Formula::Bot => false,
         }
     }
 
-    /// 捕獲を避ける代入 φ[x := t]
+    /// 捕獲を避ける代入 φ[x := t]。x が述語として使われていて t が集合なら β 簡約する。
     pub fn subst(&self, x: &str, t: &Term) -> Formula {
         match self {
             Formula::Atom(p, ts) => {
-                Formula::Atom(p.clone(), ts.iter().map(|s| s.subst(x, t)).collect())
+                let ts: Vec<Term> = ts.iter().map(|s| s.subst(x, t)).collect();
+                if p == x { holds(t, &ts) } else { Formula::Atom(p.clone(), ts) }
             }
             Formula::Imp(a, b) => Formula::Imp(Box::new(a.subst(x, t)), Box::new(b.subst(x, t))),
             Formula::And(a, b) => Formula::And(Box::new(a.subst(x, t)), Box::new(b.subst(x, t))),
@@ -252,26 +416,11 @@ impl Formula {
         show_formula_latex(self, 0)
     }
 
-    pub fn map_terms(&self, g: &impl Fn(&Term) -> Term) -> Formula {
-        match self {
-            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(g).collect()),
-            Formula::Imp(a, b) => Formula::Imp(Box::new(a.map_terms(g)), Box::new(b.map_terms(g))),
-            Formula::And(a, b) => Formula::And(Box::new(a.map_terms(g)), Box::new(b.map_terms(g))),
-            Formula::Or(a, b) => Formula::Or(Box::new(a.map_terms(g)), Box::new(b.map_terms(g))),
-            Formula::Forall(x, t, b) => Formula::Forall(x.clone(), t.clone(), Box::new(b.map_terms(g))),
-            Formula::Exists(x, t, b) => Formula::Exists(x.clone(), t.clone(), Box::new(b.map_terms(g))),
-            Formula::Bot => Formula::Bot,
-        }
-    }
-
-    pub fn rename_fn(&self, old: &str, new: &str) -> Formula {
-        self.map_terms(&|t| t.rename_fn(old, new))
-    }
-
-    /// 束縛変数の型を書き換える（図式のソート変数の具体化など）
+    /// 束縛変数・λ・集合の型を書き換える（図式の型変数の具体化など）
     pub fn map_sorts(&self, g: &impl Fn(&str) -> String) -> Formula {
         match self {
-            Formula::Atom(..) | Formula::Bot => self.clone(),
+            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(|t| t.map_sorts(g)).collect()),
+            Formula::Bot => Formula::Bot,
             Formula::Imp(a, b) => Formula::Imp(Box::new(a.map_sorts(g)), Box::new(b.map_sorts(g))),
             Formula::And(a, b) => Formula::And(Box::new(a.map_sorts(g)), Box::new(b.map_sorts(g))),
             Formula::Or(a, b) => Formula::Or(Box::new(a.map_sorts(g)), Box::new(b.map_sorts(g))),
@@ -292,6 +441,26 @@ impl Formula {
         f
     }
 
+    fn canon_in(&self, k: &mut usize) -> Formula {
+        match self {
+            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(|t| t.canon_in(k)).collect()),
+            Formula::Bot => Formula::Bot,
+            Formula::Imp(a, b) => Formula::Imp(Box::new(a.canon_in(k)), Box::new(b.canon_in(k))),
+            Formula::And(a, b) => Formula::And(Box::new(a.canon_in(k)), Box::new(b.canon_in(k))),
+            Formula::Or(a, b) => Formula::Or(Box::new(a.canon_in(k)), Box::new(b.canon_in(k))),
+            Formula::Forall(x, t, b) | Formula::Exists(x, t, b) => {
+                let v = format!("#c{k}");
+                *k += 1;
+                let body = Box::new(b.subst(x, &Term::Var(v.clone())).canon_in(k));
+                if matches!(self, Formula::Forall(..)) {
+                    Formula::Forall(v, t.clone(), body)
+                } else {
+                    Formula::Exists(v, t.clone(), body)
+                }
+            }
+        }
+    }
+
     /// 現れる述語の名前
     pub fn preds(&self, out: &mut BTreeSet<String>) {
         match self {
@@ -310,11 +479,30 @@ impl Formula {
 
 // ---------------------------------------------------------------- 表示
 
+fn binder_names(ps: &[(String, String)]) -> String {
+    if ps.len() == 1 {
+        ps[0].0.clone()
+    } else {
+        format!("({})", ps.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>().join(", "))
+    }
+}
+
+/// `x : ℕ` / `(x, y) : ℕ × ℕ`（型が表示しないものなら名前だけ）
+fn binder_typed(ps: &[(String, String)]) -> String {
+    if ps.iter().any(|(_, t)| hidden_sort(t)) {
+        return binder_names(ps);
+    }
+    let ts: Vec<&str> = ps.iter().map(|(_, t)| t.as_str()).collect();
+    format!("{} : {}", binder_names(ps), ts.join(" × "))
+}
+
 pub fn show_term(t: &Term, prec: u8) -> String {
     match t {
         Term::Var(x) => x.clone(),
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
+        Term::Lam(ps, b) => format!("({} ↦ {})", binder_names(ps), show_term(b, 0)),
+        Term::Set(ps, phi) => format!("{{{} | {}}}", binder_typed(ps), show_formula(phi, 0)),
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 ("+" | "-" | "∪" | "∩" | "\\", [a, b]) => {
@@ -614,11 +802,43 @@ pub fn rel_to_latex(r: &str) -> &str {
     }
 }
 
+fn binder_latex_list(ps: &[(String, String)], typed: bool) -> String {
+    let names: Vec<String> = ps.iter().map(|(p, _)| ident_to_latex(p)).collect();
+    let names = if names.len() == 1 { names[0].clone() } else { format!("({})", names.join(", ")) };
+    if !typed || ps.iter().any(|(_, t)| hidden_sort(t)) {
+        return names;
+    }
+    let ts: Vec<String> = ps.iter().map(|(_, t)| type_latex(t)).collect();
+    format!("{names} \\in {}", ts.join(" \\times "))
+}
+
+/// 型の LaTeX（`ℕ → ℝ` は `\mathbb{N} \to \mathbb{R}`）
+pub fn type_latex(t: &str) -> String {
+    t.split(' ')
+        .map(|w| match w {
+            "→" => "\\to".to_string(),
+            "×" => "\\times".to_string(),
+            _ => {
+                let (open, rest) = match w.strip_prefix('(') { Some(r) => ("(", r), None => ("", w) };
+                let (core, close) = match rest.strip_suffix(')') { Some(r) => (r, ")"), None => (rest, "") };
+                format!("{open}{}{close}", ident_to_latex(core))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn show_term_latex(t: &Term, prec: u8) -> String {
     match t {
         Term::Var(x) => ident_to_latex(x),
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
+        Term::Lam(ps, b) => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
+        Term::Set(ps, phi) => format!(
+            "\\left\\{{ {} \\mid {} \\right\\}}",
+            binder_latex_list(ps, true),
+            show_formula_latex(phi, 0)
+        ),
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 ("+" | "-", [a, b]) => (
@@ -754,6 +974,8 @@ fn binder_latex(q: &str, x: &str, ty: &str) -> String {
     let xl = ident_to_latex(x);
     if hidden_sort(ty) {
         format!("{q} {xl}")
+    } else if ty.contains('→') || ty == "Prop" {
+        format!("{q} {xl} : {}", type_latex(ty))
     } else {
         format!("{q} {xl} \\in {}", ident_to_latex(ty))
     }

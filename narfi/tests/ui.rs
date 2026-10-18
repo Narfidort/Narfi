@@ -4,7 +4,9 @@
 use std::path::Path;
 use std::process::Command;
 
-const FILES: [&str; 9] = [
+const FILES: [&str; 11] = [
+    "examples/hol.narfi",
+    "tests/unsound_hol.narfi",
     "examples/basics.narfi",
     "examples/analysis.narfi",
     "examples/errors.narfi",

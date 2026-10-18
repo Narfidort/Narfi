@@ -11,7 +11,8 @@ fn run(files: &[&str]) -> String {
 fn correct_proofs_pass() {
     let out = run(&["examples/basics.narfi", "examples/analysis.narfi"])
         + &run(&["tests/exercises_answers.narfi"])
-        + &run(&["examples/limits.narfi"]);
+        + &run(&["examples/limits.narfi"])
+        + &run(&["examples/hol.narfi"]);
     assert!(!out.contains('✗'), "{out}");
     assert!(out.contains("すべて検証しました"), "{out}");
 }
@@ -23,6 +24,7 @@ fn wrong_proofs_fail() {
         "tests/unsound.narfi",
         "tests/unsound_defs.narfi",
         "tests/unsound_sorts.narfi",
+        "tests/unsound_hol.narfi",
     ] {
         let out = run(&[f]);
         let passed: Vec<&str> = out.lines().filter(|l| l.trim_start().starts_with('✓')).collect();
@@ -45,8 +47,8 @@ fn bad_definitions_are_rejected() {
     let cases = [
         ("notation a \"->\" b := P(a, b)", "衝突する"),
         ("def r(a) := r(a)", "自身を使っている"),
-        ("def p(x) := q(x)\ndef q(x) := p(x)", "あとから定義できない"),
-        ("def bad(a) := a(n) > 0", "引数にない"),
+        ("def p(x) := q(x)\ndef q(x) := p(x)", "定義済みの記号でもない"),
+        ("def bad(a) := a(n) > 0", "定義済みの記号でもない"),
         ("def pos(x) := x > 0\nthm t : ⊢ pos(1, 2)\nsorry", "引数 1 個の定義"),
     ];
     for (i, (src, msg)) in cases.iter().enumerate() {

@@ -12,11 +12,11 @@ mod just;
 mod stmt;
 mod unify;
 
-use crate::kernel::env::{FnSig, KEnv, LocalSig};
+use crate::kernel::env::{DefBody, KEnv};
 use crate::kernel::Statement;
 use crate::parser::{CtxItem, Decl, Def, Item, Module, ParseError};
 use crate::sorts::Infer;
-use crate::syntax::{Formula, Term, ident_to_latex, is_fn_sort};
+use crate::syntax::{Formula, Term, ident_to_latex};
 use std::collections::{BTreeSet, HashSet};
 
 // ================================================================ 環境
@@ -156,14 +156,12 @@ const BUILTINS: [&str; 8] = ["sorry", "refl", "ring", "linarith", "decide", "EQ2
 
 pub struct Checker<'a> {
     env: &'a Env,
-    /// この定理の局所記号（証明の中で新しく増えることがある）
-    sig: LocalSig,
     /// 項のメタ変数
     metas: Vec<Option<Term>>,
     /// ソートのメタ変数（`?σ3`）
     sort_metas: Vec<Option<String>>,
-    /// 関数記号のメタ変数（`?F2`）
-    fn_metas: Vec<Option<String>>,
+    /// 関数型・述語型のメタ変数（`?F2`）：中身（名前・λ・集合）と型
+    fn_metas: Vec<(Option<Term>, String)>,
     /// 定理を使ったときの「パラメータの型 = 引数の項の型」という約束。
     /// 引数が穴のうちは型が分からないので、最後（穴が埋まったあと）に解く。
     pending: Vec<(Vec<(String, String)>, String, Term)>,
@@ -178,10 +176,9 @@ pub struct Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
-    fn new(env: &'a Env, sig: LocalSig, trace: bool) -> Self {
+    fn new(env: &'a Env, trace: bool) -> Self {
         Checker {
             env,
-            sig,
             metas: vec![],
             sort_metas: vec![],
             fn_metas: vec![],
@@ -248,7 +245,7 @@ impl<'a> Checker<'a> {
     /// 証明の中で書かれた論理式の型を推論し、束縛変数の型を埋める
     fn infer_written(&mut self, ctx: &Ctx, f: &Formula) -> CResult<Formula> {
         let vs = self.var_sorts(ctx);
-        match crate::sorts::infer_formula(&self.env.kernel, &mut self.sig, &vs, f) {
+        match crate::sorts::infer_formula(&self.env.kernel, &vs, f) {
             Ok(f) => Ok(f),
             Err(m) => self.err(format!("型：{m}")),
         }
@@ -256,7 +253,27 @@ impl<'a> Checker<'a> {
 
     fn term_sort(&self, ctx: &Ctx, t: &Term) -> Option<String> {
         let vs = self.var_sorts(ctx);
-        crate::sorts::term_sort(&self.env.kernel, &self.sig, &vs, &self.zonk_t(t))
+        crate::sorts::term_sort(&self.env.kernel, &vs, &self.zonk_t(t))
+    }
+
+    /// 証明の中で書かれた項の λ・集合の型を埋める（expected はその項の型）
+    fn annotate_term(&mut self, ctx: &Ctx, t: &Term, expected: Option<&str>) -> CResult<Term> {
+        fn has_binder(t: &Term) -> bool {
+            match t {
+                Term::Lam(..) | Term::Set(..) => true,
+                Term::App(_, a) => a.iter().any(has_binder),
+                _ => false,
+            }
+        }
+        if !has_binder(t) {
+            return Ok(t.clone());
+        }
+        let vs = self.var_sorts(ctx);
+        let e = expected.map(|e| self.zonk_sort(e)).filter(|e| !e.contains("?σ"));
+        match crate::sorts::infer_term(&self.env.kernel, &vs, t, e.as_deref()) {
+            Ok(t) => Ok(t),
+            Err(m) => self.err(format!("型：{m}")),
+        }
     }
 }
 
@@ -280,20 +297,16 @@ fn simple_err(line: usize, msg: String) -> CheckError {
 }
 
 /// 定理・公理の文の型を推論して、kernel に渡せる形にする
-fn statement_of(env: &Env, d: &Decl, core: bool) -> Result<(Statement, Vec<(String, Formula)>), String> {
-    let mut sig = LocalSig::default();
-    let mut declared = Vec::new();
-    for c in &d.ctx {
-        if let CtxItem::Var(x, t) = c {
-            if is_fn_sort(t) {
-                let fs = FnSig::parse(t).ok_or(format!("`{x}` の型 `{t}` が読めない"))?;
-                sig.fns.insert(x.clone(), fs);
-            } else {
-                declared.push((x.clone(), t.clone()));
-            }
-        }
-    }
-    let mut inf = Infer::new(&env.kernel, sig, declared.clone(), true);
+fn statement_of(env: &Env, d: &Decl, core: bool) -> Result<Statement, String> {
+    let declared: Vec<(String, String)> = d
+        .ctx
+        .iter()
+        .filter_map(|c| match c {
+            CtxItem::Var(x, t) => Some((x.clone(), t.clone())),
+            _ => None,
+        })
+        .collect();
+    let mut inf = Infer::new(&env.kernel, declared.clone(), true);
     for c in &d.ctx {
         if let CtxItem::Hyp(_, f) = c {
             inf.formula(f)?;
@@ -311,17 +324,7 @@ fn statement_of(env: &Env, d: &Decl, core: bool) -> Result<(Statement, Vec<(Stri
     let concl = r.annotate(&d.concl, &mut k);
     let mut vars = declared;
     vars.extend(r.free.iter().cloned());
-    let st = Statement {
-        name: d.name.clone(),
-        sig: r.sig.clone(),
-        sort_params: r.sort_params.clone(),
-        vars,
-        hyps: hyps.clone(),
-        concl,
-        is_axiom: d.is_axiom,
-        core,
-    };
-    Ok((st, hyps))
+    Ok(Statement { name: d.name.clone(), type_params: r.type_params.clone(), vars, hyps, concl, is_axiom: d.is_axiom, core })
 }
 
 fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
@@ -343,7 +346,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
         report.is_axiom = false;
         return report;
     }
-    let (st, _) = match statement_of(env, d, core) {
+    let st = match statement_of(env, d, core) {
         Ok(x) => x,
         Err(m) => {
             env.failed.insert(d.name.clone());
@@ -362,7 +365,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
     if trace {
         println!("\n── thm {} ──", d.name);
     }
-    let mut ch = Checker::new(env, st.sig.clone(), trace);
+    let mut ch = Checker::new(env, trace);
     let result = ch.check_decl(d, &st);
     report.sorries = std::mem::take(&mut ch.sorries);
     report.steps = std::mem::take(&mut ch.steps);
@@ -374,8 +377,6 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
             return report;
         }
     };
-    // 証明の中で増えた局所記号も kernel に伝える
-    let st = Statement { sig: ch.sig.clone(), ..st };
     match env.kernel.add_statement(&st, Some(&proof)) {
         Ok(deps) => {
             report.axioms = deps.axioms;
@@ -397,20 +398,14 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
 
 /// def の引数の型を推論して kernel に登録する
 fn add_def(env: &mut Env, d: &Def) -> Result<(), String> {
-    let mut sig = LocalSig::default();
-    let mut typed = Vec::new();
-    for (x, s) in &d.params {
-        if is_fn_sort(s) {
-            sig.fns.insert(x.clone(), FnSig::parse(s).ok_or(format!("`{x}` の型 `{s}` が読めない"))?);
-        } else if s != "?" {
-            typed.push((x.clone(), s.clone()));
-        }
+    let typed: Vec<(String, String)> = d.params.iter().filter(|(_, s)| s != "?").cloned().collect();
+    let mut inf = Infer::new(&env.kernel, typed, true);
+    match &d.term {
+        None => inf.formula(&d.body)?,
+        Some((r, t)) => inf.term_expect(t, r)?,
     }
-    let mut inf = Infer::new(&env.kernel, sig, typed.clone(), true);
-    inf.formula(&d.body)?;
     let r = inf.finish()?;
-    let body = r.annotate(&d.body, &mut 0);
-    if !r.sort_params.is_empty() {
+    if !r.type_params.is_empty() {
         return Err("定義の引数の型が決まらない。`def P(x : ℕ, …)` のように型を書く".into());
     }
     let mut params = Vec::new();
@@ -425,12 +420,12 @@ fn add_def(env: &mut Env, d: &Def) -> Result<(), String> {
         }
     }
     if let Some((v, _)) = r.free.iter().find(|(y, _)| !d.params.iter().any(|(x, _)| x == y)) {
-        return Err(format!("定義の本体の `{v}` が引数にない"));
+        return Err(format!("定義の本体の `{v}` が引数にない（未定義の記号か）"));
     }
-    if !r.sig.preds.is_empty() {
-        let p: Vec<&String> = r.sig.preds.keys().collect();
-        return Err(format!("述語 {:?} が定義されていない（定義の中では定義済みの述語だけを使える）", p));
-    }
+    let body = match &d.term {
+        None => DefBody::Pred(r.annotate(&d.body, &mut 0)),
+        Some((ty, t)) => DefBody::Term(ty.clone(), r.annotate_t(t, &mut 0)),
+    };
     env.kernel.add_def(&d.name, &params, &body).map_err(|e| e.msg)
 }
 

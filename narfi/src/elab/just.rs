@@ -4,7 +4,8 @@
 use super::{BUILTINS, CResult, Checker, Ctx, Entry};
 use crate::kernel::arith::{decide, ring_eq};
 use crate::kernel::proof::Proof;
-use crate::syntax::{Formula, Term, instantiate, is_fn_sort};
+use crate::syntax::{Formula, Term, instantiate};
+use crate::types::Ty;
 use std::collections::BTreeSet;
 
 impl<'a> Checker<'a> {
@@ -22,50 +23,33 @@ impl<'a> Checker<'a> {
             return self.err(format!("`{name}` は検証に失敗した定理なので使えない"));
         }
         if let Some(sc) = self.env.kernel.thms.get(name).cloned() {
-            // ソート変数・パラメータを穴にして具体化する
-            let sorts: Vec<String> = sc.sort_params.iter().map(|_| self.new_sort_meta()).collect();
-            let (params, preds, formula) = sc.instance(&sorts);
-            let mut args = Vec::new();
-            for (_, s) in &params {
-                args.push(if is_fn_sort(s) { Term::Var(self.new_fn_meta()) } else { self.new_meta() });
-            }
-            // 図式の局所述語は、この定理でも同じ名前・同じ型で使う
-            for (p, ss) in preds {
-                match self.sig.preds.get(&p).cloned() {
-                    Some(have) => {
-                        if have.len() != ss.len() || !have.iter().zip(&ss).all(|(a, b)| self.unify_sort(a, b)) {
-                            return self.err(format!("`{name}` の述語 `{p}` の型が、この定理の `{p}` と違う"));
-                        }
-                    }
-                    None => {
-                        self.sig.preds.insert(p, ss);
-                    }
-                }
-            }
+            // 型変数・パラメータを穴にして具体化する
+            let tys: Vec<String> = sc.type_params.iter().map(|_| self.new_sort_meta()).collect();
+            let (params, formula) = sc.instance(&tys);
+            let args = self.holes_for(&params);
             let vs = self.var_sorts(ctx);
             for ((_, s), a) in params.iter().zip(&args) {
-                if !is_fn_sort(s) {
+                if !is_higher(s) {
                     self.pending.push((vs.clone(), s.clone(), a.clone()));
                 }
             }
             let f = instantiate(&params, &formula, &args);
-            return Ok((f, Proof::Thm { name: name.to_string(), sorts, args }));
+            return Ok((f, Proof::Thm { name: name.to_string(), sorts: tys, args }));
         }
         if let Some(base) = name.strip_suffix(".def") {
             if let Some(d) = self.env.kernel.defs.get(base).cloned() {
-                // 定義の同値 P(x) ↔ φ(x)：kernel は δ で両辺を同一視するので、どちら向きも恒等写像で示せる
-                let mut args = Vec::new();
-                for (_, s) in &d.params {
-                    args.push(if is_fn_sort(s) { Term::Var(self.new_fn_meta()) } else { self.new_meta() });
+                if let crate::kernel::env::DefBody::Pred(body) = &d.body {
+                    // 定義の同値 P(x) ↔ φ(x)：kernel は δ で両辺を同一視するので、どちら向きも恒等写像で示せる
+                    let args = self.holes_for(&d.params);
+                    let atom = Formula::Atom(base.to_string(), args.clone());
+                    let body = instantiate(&d.params, body, &args);
+                    let id = |a: &Formula| Proof::ImpI { h: "#d".into(), phi: a.clone(), body: Proof::Hyp("#d".into()).b() };
+                    let f = Formula::And(
+                        Box::new(Formula::Imp(Box::new(atom.clone()), Box::new(body.clone()))),
+                        Box::new(Formula::Imp(Box::new(body.clone()), Box::new(atom.clone()))),
+                    );
+                    return Ok((f, Proof::AndI(id(&atom).b(), id(&body).b())));
                 }
-                let atom = Formula::Atom(base.to_string(), args.clone());
-                let body = instantiate(&d.params, &d.body, &args);
-                let id = |a: &Formula| Proof::ImpI { h: "#d".into(), phi: a.clone(), body: Proof::Hyp("#d".into()).b() };
-                let f = Formula::And(
-                    Box::new(Formula::Imp(Box::new(atom.clone()), Box::new(body.clone()))),
-                    Box::new(Formula::Imp(Box::new(body.clone()), Box::new(atom.clone()))),
-                );
-                return Ok((f, Proof::AndI(id(&atom).b(), id(&body).b())));
             }
         }
         if let Some((base, field)) = name.rsplit_once('.') {
@@ -81,6 +65,14 @@ impl<'a> Checker<'a> {
             }
         }
         self.err(format!("`{name}` が見つからない（文脈にも定理にもない）"))
+    }
+
+    /// パラメータごとの穴：関数型・述語型・命題型なら関数の穴（λ や集合が入りうる）、それ以外は項の穴
+    fn holes_for(&mut self, params: &[(String, String)]) -> Vec<Term> {
+        params
+            .iter()
+            .map(|(_, s)| if is_higher(s) { Term::Var(self.new_fn_meta(s)) } else { self.new_meta() })
+            .collect()
     }
 
     pub(super) fn names_proof(&self, ctx: &Ctx, n: &str) -> bool {
@@ -115,7 +107,7 @@ impl<'a> Checker<'a> {
         let mut vs = BTreeSet::new();
         t.vars(&mut vs);
         for v in vs {
-            if !ctx.is_term_var(&v) {
+            if !ctx.is_term_var(&v) && !self.env.kernel.is_global(&v) {
                 return self.err(format!("`{v}` は文脈にない（スコープの外か、まだ導入されていない）"));
             }
         }
@@ -154,6 +146,7 @@ impl<'a> Checker<'a> {
                             continue;
                         }
                         self.check_term_scope(ctx, arg)?;
+                        let arg = &self.annotate_term(ctx, arg, Some(&s))?;
                         if let Some(t) = self.term_sort(ctx, arg) {
                             if !self.unify_sort(&s, &t) {
                                 let s = self.zonk_sort(&s);
@@ -219,7 +212,7 @@ impl<'a> Checker<'a> {
                     return self.err("ring に渡す命題がまだ決まっていない");
                 }
                 match &e {
-                    Formula::Atom(r, ts) if r == "=" && ring_eq(&ts[0], &ts[1]) => {
+                    Formula::Atom(r, ts) if r == "=" && ring_eq(&self.unfold_terms(&ts[0]), &self.unfold_terms(&ts[1])) => {
                         Ok(Proof::Ring { lhs: ts[0].clone(), rhs: ts[1].clone() })
                     }
                     _ => self.err(format!("ring では「{e}」を示せない")),
@@ -241,7 +234,7 @@ impl<'a> Checker<'a> {
                 if !e.free_vars().is_empty() || e.has_meta() {
                     return self.err(format!("decide は変数を含まない命題にしか使えない（「{e}」）"));
                 }
-                match decide(&e) {
+                match decide(&self.unfold_terms_f(&e)) {
                     Some(true) => Ok(Proof::Decide(e)),
                     Some(false) => self.err(format!("decide：「{e}」は偽")),
                     None => self.err(format!("decide では「{e}」を計算できない")),
@@ -326,8 +319,10 @@ impl<'a> Checker<'a> {
             let s = self.term_sort(ctx, a).or_else(|| self.term_sort(ctx, b));
             s.is_none() || goal_sort.is_none() || s == goal_sort
         });
-        let fs: Vec<(String, Term, Term)> = facts.iter().map(|(r, a, b, _)| (r.clone(), a.clone(), b.clone())).collect();
-        let Some(cert) = crate::arith::find_certificate(&fs, (&rel, &l, &r)) else {
+        let fs: Vec<(String, Term, Term)> =
+            facts.iter().map(|(r, a, b, _)| (r.clone(), self.unfold_terms(a), self.unfold_terms(b))).collect();
+        let (ul, ur) = (self.unfold_terms(&l), self.unfold_terms(&r));
+        let Some(cert) = crate::arith::find_certificate(&fs, (&rel, &ul, &ur)) else {
             return self.err(format!("linarith では「{e}」を示せない"));
         };
         let mut used = Vec::new();
@@ -386,13 +381,18 @@ impl<'a> Checker<'a> {
     }
 }
 
+/// 頭の名前 f を g に置き換えてよいか（x・y が関数・述語の変数の名前のとき）
+fn head_repl(f: &str, g: &str, x: &Term, y: &Term) -> bool {
+    f == g || (*x == Term::Var(f.to_string()) && *y == Term::Var(g.to_string()))
+}
+
 fn repl_t(p: &Term, g: &Term, x: &Term, y: &Term) -> bool {
     if p == g || (p == x && g == y) {
         return true;
     }
     match (p, g) {
         (Term::App(f, ps), Term::App(h, gs)) => {
-            f == h && ps.len() == gs.len() && ps.iter().zip(gs).all(|(a, b)| repl_t(a, b, x, y))
+            head_repl(f, h, x, y) && ps.len() == gs.len() && ps.iter().zip(gs).all(|(a, b)| repl_t(a, b, x, y))
         }
         _ => false,
     }
@@ -402,7 +402,9 @@ fn repl_t(p: &Term, g: &Term, x: &Term, y: &Term) -> bool {
 fn repl_f(p: &Formula, g: &Formula, x: &Term, y: &Term) -> bool {
     use Formula::*;
     match (p, g) {
-        (Atom(a, ps), Atom(b, gs)) => a == b && ps.len() == gs.len() && ps.iter().zip(gs).all(|(s, t)| repl_t(s, t, x, y)),
+        (Atom(a, ps), Atom(b, gs)) => {
+            head_repl(a, b, x, y) && ps.len() == gs.len() && ps.iter().zip(gs).all(|(s, t)| repl_t(s, t, x, y))
+        }
         (Imp(a1, b1), Imp(a2, b2)) | (And(a1, b1), And(a2, b2)) | (Or(a1, b1), Or(a2, b2)) => {
             repl_f(a1, a2, x, y) && repl_f(b1, b2, x, y)
         }
@@ -423,8 +425,9 @@ fn motive_t(p: &Term, g: &Term, x: &Term, y: &Term, z: &str) -> Term {
         return Term::Var(z.to_string());
     }
     match (p, g) {
-        (Term::App(f, ps), Term::App(_, gs)) => {
-            Term::App(f.clone(), ps.iter().zip(gs).map(|(a, b)| motive_t(a, b, x, y, z)).collect())
+        (Term::App(f, ps), Term::App(h, gs)) => {
+            let head = if f != h { z.to_string() } else { f.clone() };
+            Term::App(head, ps.iter().zip(gs).map(|(a, b)| motive_t(a, b, x, y, z)).collect())
         }
         _ => p.clone(),
     }
@@ -434,7 +437,10 @@ fn motive_f(p: &Formula, g: &Formula, x: &Term, y: &Term, z: &str) -> Formula {
     use Formula::*;
     let go = |a: &Formula, b: &Formula| Box::new(motive_f(a, b, x, y, z));
     match (p, g) {
-        (Atom(a, ps), Atom(_, gs)) => Atom(a.clone(), ps.iter().zip(gs).map(|(s, t)| motive_t(s, t, x, y, z)).collect()),
+        (Atom(a, ps), Atom(b, gs)) => {
+            let head = if a != b { z.to_string() } else { a.clone() };
+            Atom(head, ps.iter().zip(gs).map(|(s, t)| motive_t(s, t, x, y, z)).collect())
+        }
         (Imp(a1, b1), Imp(a2, b2)) => Imp(go(a1, a2), go(b1, b2)),
         (And(a1, b1), And(a2, b2)) => And(go(a1, a2), go(b1, b2)),
         (Or(a1, b1), Or(a2, b2)) => Or(go(a1, a2), go(b1, b2)),
@@ -442,4 +448,9 @@ fn motive_f(p: &Formula, g: &Formula, x: &Term, y: &Term, z: &str) -> Formula {
         (Exists(v, t, b1), Exists(_, _, b2)) => Exists(v.clone(), t.clone(), go(b1, b2)),
         _ => p.clone(),
     }
+}
+
+/// 関数型・命題型（穴に λ・集合・論理式が入りうる型）か
+fn is_higher(s: &str) -> bool {
+    matches!(Ty::parse(s), Some(Ty::Fun(..)) | Some(Ty::Prop))
 }

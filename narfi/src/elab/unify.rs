@@ -2,14 +2,19 @@
 //!
 //! 「まだ決まっていないもの」を穴（メタ変数）として置き、式どうしを見比べて穴を埋める。
 //! - 項のメタ変数 `Term::Meta(n)`：定理を使うときの暗黙の引数など
-//! - ソートのメタ変数 `?σn`：ソート変数を持つ定理（`eq.symm` など）を使うとき
-//! - 関数記号のメタ変数 `?Fn`：局所関数記号を持つ定理を使うとき
+//! - 型のメタ変数 `?σn`：型変数を持つ定理（`eq.symm` など）を使うとき
+//! - 関数・述語のメタ変数 `?Fn`：関数型・述語型のパラメータを持つ定理を使うとき。
+//!   中身は名前・λ・集合のどれでもよく、`?F(x) =?= x > 0` のように、穴が異なる変数に
+//!   適用されている形（Miller のパターン）なら `?F := {x | x > 0}` と一意に決まる。
 //! 最後に zonk（穴を中身で置き換える）してから kernel に渡す。
 
 use super::{CResult, Checker, Ctx};
 use crate::kernel::proof::Proof;
-use crate::syntax::{Formula, Term};
+use crate::syntax::{Formula, Term, apply_term, holds};
+use crate::types::{Ty, map_ty_str};
 use std::collections::BTreeSet;
+
+type Saved = (Vec<Option<Term>>, Vec<Option<String>>, Vec<(Option<Term>, String)>);
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------ メタ変数を作る
@@ -24,8 +29,9 @@ impl<'a> Checker<'a> {
         format!("?σ{}", self.sort_metas.len() - 1)
     }
 
-    pub(super) fn new_fn_meta(&mut self) -> String {
-        self.fn_metas.push(None);
+    /// 関数型・述語型の穴（型 ty）
+    pub(super) fn new_fn_meta(&mut self, ty: &str) -> String {
+        self.fn_metas.push((None, ty.to_string()));
         format!("?F{}", self.fn_metas.len() - 1)
     }
 
@@ -37,30 +43,28 @@ impl<'a> Checker<'a> {
         s.strip_prefix("?F")?.parse().ok()
     }
 
+    fn fn_binding(&self, name: &str) -> Option<Term> {
+        self.fn_metas.get(Self::fn_meta_index(name)?)?.0.clone()
+    }
+
+    fn is_open_fn_meta(&self, name: &str) -> bool {
+        Self::fn_meta_index(name).is_some_and(|i| self.fn_metas[i].0.is_none())
+    }
+
     // ------------------------------------------------ zonk（穴を中身で置き換える）
 
     pub(super) fn zonk_sort(&self, s: &str) -> String {
-        // 関数型（`?σ1 → ℝ`）の中も置き換える
-        if s.contains(' ') {
-            return s.split(' ').map(|w| self.zonk_sort(w)).collect::<Vec<_>>().join(" ");
+        if !s.contains("?σ") {
+            return s.to_string();
         }
-        match Self::sort_meta_index(s) {
-            Some(i) => match &self.sort_metas[i] {
-                Some(t) => self.zonk_sort(t),
-                None => s.to_string(),
-            },
-            None => s.to_string(),
-        }
-    }
-
-    fn zonk_fn(&self, f: &str) -> String {
-        match Self::fn_meta_index(f) {
-            Some(i) => match &self.fn_metas[i] {
-                Some(g) => self.zonk_fn(g),
-                None => f.to_string(),
-            },
-            None => f.to_string(),
-        }
+        map_ty_str(s, &|t| match t {
+            Ty::Meta(m) => {
+                let i = Self::sort_meta_index(m)?;
+                let b = self.sort_metas.get(i)?.as_ref()?;
+                Ty::parse(&self.zonk_sort(b))
+            }
+            _ => None,
+        })
     }
 
     pub(super) fn zonk_t(&self, t: &Term) -> Term {
@@ -69,15 +73,36 @@ impl<'a> Checker<'a> {
                 Some(u) => self.zonk_t(u),
                 None => t.clone(),
             },
-            Term::App(f, a) => Term::App(self.zonk_fn(f), a.iter().map(|x| self.zonk_t(x)).collect()),
-            Term::Var(x) if Self::fn_meta_index(x).is_some() => Term::Var(self.zonk_fn(x)),
-            _ => t.clone(),
+            Term::Var(x) => match self.fn_binding(x) {
+                Some(b) => self.zonk_t(&b),
+                None => t.clone(),
+            },
+            Term::App(f, a) => {
+                let a: Vec<Term> = a.iter().map(|x| self.zonk_t(x)).collect();
+                match self.fn_binding(f) {
+                    Some(b) => self.zonk_t(&apply_term(&self.zonk_t(&b), &a)),
+                    None => Term::App(f.clone(), a),
+                }
+            }
+            Term::Lam(ps, b) => {
+                Term::Lam(ps.iter().map(|(p, s)| (p.clone(), self.zonk_sort(s))).collect(), Box::new(self.zonk_t(b)))
+            }
+            Term::Set(ps, phi) => {
+                Term::Set(ps.iter().map(|(p, s)| (p.clone(), self.zonk_sort(s))).collect(), Box::new(self.zonk_f(phi)))
+            }
+            Term::Num(_) => t.clone(),
         }
     }
 
     pub(super) fn zonk_f(&self, f: &Formula) -> Formula {
         match f {
-            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(|t| self.zonk_t(t)).collect()),
+            Formula::Atom(p, ts) => {
+                let ts: Vec<Term> = ts.iter().map(|t| self.zonk_t(t)).collect();
+                match self.fn_binding(p) {
+                    Some(b) => self.zonk_f(&holds(&self.zonk_t(&b), &ts)),
+                    None => Formula::Atom(p.clone(), ts),
+                }
+            }
             Formula::Imp(a, b) => Formula::Imp(Box::new(self.zonk_f(a)), Box::new(self.zonk_f(b))),
             Formula::And(a, b) => Formula::And(Box::new(self.zonk_f(a)), Box::new(self.zonk_f(b))),
             Formula::Or(a, b) => Formula::Or(Box::new(self.zonk_f(a)), Box::new(self.zonk_f(b))),
@@ -87,18 +112,28 @@ impl<'a> Checker<'a> {
         }
     }
 
+    fn open_holes_f(&self, f: &Formula) -> bool {
+        f.has_meta() || f.free_vars().iter().any(|v| v.starts_with("?F")) || sort_holes_f(f)
+    }
+
+    fn open_holes_t(&self, t: &Term) -> bool {
+        let mut vs = BTreeSet::new();
+        t.vars(&mut vs);
+        t.has_meta() || vs.iter().any(|v| v.starts_with("?F")) || sort_holes_t(t)
+    }
+
     /// 証明項の穴をすべて埋める。埋まらない穴が残ればエラー。
     pub(super) fn zonk_proof(&self, p: &Proof) -> CResult<Proof> {
         let zf = |f: &Formula| -> CResult<Formula> {
             let g = self.zonk_f(f);
-            if g.has_meta() {
-                return self.err(format!("決まらない項が残っている：{g}（引数を明示する）"));
+            if self.open_holes_f(&g) {
+                return self.err(format!("決まらない項・型が残っている：{g}（引数や型を明示する）"));
             }
             Ok(g)
         };
         let zt = |t: &Term| -> CResult<Term> {
             let u = self.zonk_t(t);
-            if u.has_meta() {
+            if self.open_holes_t(&u) {
                 return self.err(format!("決まらない項が残っている：{u}（引数を明示する）"));
             }
             Ok(u)
@@ -179,9 +214,49 @@ impl<'a> Checker<'a> {
         match f {
             Formula::Atom(p, ts) => {
                 let d = self.env.kernel.defs.get(p)?;
-                (d.params.len() == ts.len()).then(|| crate::syntax::instantiate(&d.params, &d.body, ts))
+                match &d.body {
+                    crate::kernel::env::DefBody::Pred(b) if d.params.len() == ts.len() => {
+                        Some(crate::syntax::instantiate(&d.params, b, ts))
+                    }
+                    _ => None,
+                }
             }
             _ => None,
+        }
+    }
+
+    /// 項の定義をすべて展開する（算術に渡す前。kernel の unfold_terms と同じ）
+    pub(super) fn unfold_terms(&self, t: &Term) -> Term {
+        use crate::kernel::env::{DefBody, KDef};
+        match t {
+            Term::App(f, args) => {
+                let args: Vec<Term> = args.iter().map(|a| self.unfold_terms(a)).collect();
+                match self.env.kernel.defs.get(f) {
+                    Some(KDef { params, body: DefBody::Term(_, b) }) if params.len() == args.len() => {
+                        let subs: Vec<(String, Term)> = params.iter().map(|(p, _)| p.clone()).zip(args).collect();
+                        self.unfold_terms(&b.subst_many(&subs))
+                    }
+                    _ => Term::App(f.clone(), args),
+                }
+            }
+            Term::Var(x) => match self.env.kernel.defs.get(x) {
+                Some(KDef { params, body: DefBody::Term(_, b) }) if params.is_empty() => self.unfold_terms(b),
+                _ => t.clone(),
+            },
+            _ => t.clone(),
+        }
+    }
+
+    /// 論理式の中の項の定義を展開する
+    pub(super) fn unfold_terms_f(&self, f: &Formula) -> Formula {
+        match f {
+            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(|t| self.unfold_terms(t)).collect()),
+            Formula::Bot => Formula::Bot,
+            Formula::Imp(a, b) => Formula::Imp(Box::new(self.unfold_terms_f(a)), Box::new(self.unfold_terms_f(b))),
+            Formula::And(a, b) => Formula::And(Box::new(self.unfold_terms_f(a)), Box::new(self.unfold_terms_f(b))),
+            Formula::Or(a, b) => Formula::Or(Box::new(self.unfold_terms_f(a)), Box::new(self.unfold_terms_f(b))),
+            Formula::Forall(x, s, b) => Formula::Forall(x.clone(), s.clone(), Box::new(self.unfold_terms_f(b))),
+            Formula::Exists(x, s, b) => Formula::Exists(x.clone(), s.clone(), Box::new(self.unfold_terms_f(b))),
         }
     }
 
@@ -219,36 +294,51 @@ impl<'a> Checker<'a> {
         Some(out)
     }
 
-    // ------------------------------------------------ 単一化
+    // ------------------------------------------------ 型の単一化
 
     pub(super) fn unify_sort(&mut self, a: &str, b: &str) -> bool {
         let (a, b) = (self.zonk_sort(a), self.zonk_sort(b));
         if a == b {
             return true;
         }
-        if let Some(i) = Self::sort_meta_index(&a) {
-            self.sort_metas[i] = Some(b);
-            return true;
+        match (Ty::parse(&a), Ty::parse(&b)) {
+            (Some(x), Some(y)) => self.unify_ty(&x, &y),
+            _ => false,
         }
-        if let Some(i) = Self::sort_meta_index(&b) {
-            self.sort_metas[i] = Some(a);
-            return true;
-        }
-        // 関数型どうし：語ごとに
-        let (wa, wb): (Vec<&str>, Vec<&str>) = (a.split(' ').collect(), b.split(' ').collect());
-        if wa.len() > 1 && wa.len() == wb.len() {
-            let (wa, wb): (Vec<String>, Vec<String>) =
-                (wa.iter().map(|s| s.to_string()).collect(), wb.iter().map(|s| s.to_string()).collect());
-            return wa.iter().zip(&wb).all(|(x, y)| self.unify_sort(x, y));
-        }
-        false
     }
 
-    fn save(&self) -> (Vec<Option<Term>>, Vec<Option<String>>, Vec<Option<String>>) {
+    fn unify_ty(&mut self, x: &Ty, y: &Ty) -> bool {
+        match (x, y) {
+            (Ty::Meta(m), t) | (t, Ty::Meta(m)) => {
+                if let Ty::Meta(n) = t {
+                    if n == m {
+                        return true;
+                    }
+                }
+                let Some(i) = Self::sort_meta_index(m) else { return false };
+                if let Some(b) = self.sort_metas[i].clone() {
+                    return self.unify_sort(&b, &t.show());
+                }
+                if t.any(&|u| matches!(u, Ty::Meta(n) if n == m)) {
+                    return false;
+                }
+                self.sort_metas[i] = Some(t.show());
+                true
+            }
+            (Ty::Fun(a1, r1), Ty::Fun(a2, r2)) if a1.len() == a2.len() => {
+                a1.iter().zip(a2).all(|(p, q)| self.unify_ty(p, q)) && self.unify_ty(r1, r2)
+            }
+            _ => x == y,
+        }
+    }
+
+    // ------------------------------------------------ 単一化
+
+    fn save(&self) -> Saved {
         (self.metas.clone(), self.sort_metas.clone(), self.fn_metas.clone())
     }
 
-    fn restore(&mut self, s: (Vec<Option<Term>>, Vec<Option<String>>, Vec<Option<String>>)) {
+    fn restore(&mut self, s: Saved) {
         self.metas = s.0;
         self.sort_metas = s.1;
         self.fn_metas = s.2;
@@ -265,9 +355,19 @@ impl<'a> Checker<'a> {
         ok
     }
 
+    fn fresh_var(&mut self) -> Term {
+        self.fresh += 1;
+        Term::Var(format!("#{}", self.fresh))
+    }
+
     fn uf(&mut self, a: &Formula, b: &Formula) -> bool {
         use Formula::*;
-        match (a, b) {
+        let (a, b) = (self.zonk_f(a), self.zonk_f(b));
+        match (&a, &b) {
+            (Atom(p, ts), other) | (other, Atom(p, ts)) if self.is_open_fn_meta(p) => {
+                let (p, ts, other) = (p.clone(), ts.clone(), other.clone());
+                self.solve_pred(&p, &ts, &other)
+            }
             (Atom(p, ts), Atom(q, us)) if p == q && ts.len() == us.len() => {
                 let save = self.save();
                 if ts.iter().zip(us).all(|(t, u)| self.ut(t, u)) {
@@ -275,11 +375,8 @@ impl<'a> Checker<'a> {
                 }
                 // 引数が合わなくても、展開すれば一致することがある
                 self.restore(save);
-                match (self.unfold_head(a), self.unfold_head(b)) {
-                    (Some(x), Some(y)) => {
-                        let (x, y) = (self.zonk_f(&x), self.zonk_f(&y));
-                        self.uf(&x, &y)
-                    }
+                match (self.unfold_head(&a), self.unfold_head(&b)) {
+                    (Some(x), Some(y)) => self.uf(&x, &y),
                     _ => false,
                 }
             }
@@ -290,19 +387,16 @@ impl<'a> Checker<'a> {
                 if !self.unify_sort(t1, t2) {
                     return false;
                 }
-                self.fresh += 1;
-                let v = Term::Var(format!("#{}", self.fresh));
+                let v = self.fresh_var();
                 self.uf(&b1.subst(x, &v), &b2.subst(y, &v))
             }
             (Bot, Bot) => true,
             // 形が違っても、片方が定義された述語なら展開して比べる
             _ => {
-                if let Some(x) = self.unfold_head(a) {
-                    let x = self.zonk_f(&x);
-                    self.uf(&x, b)
-                } else if let Some(y) = self.unfold_head(b) {
-                    let y = self.zonk_f(&y);
-                    self.uf(a, &y)
+                if let Some(x) = self.unfold_head(&a) {
+                    self.uf(&x, &b)
+                } else if let Some(y) = self.unfold_head(&b) {
+                    self.uf(&a, &y)
                 } else {
                     false
                 }
@@ -323,30 +417,157 @@ impl<'a> Checker<'a> {
                 self.metas[*m as usize] = Some(t.clone());
                 true
             }
-            (Term::Var(x), Term::Var(y)) => self.unify_fn_name(x, y),
+            (Term::Var(x), t) | (t, Term::Var(x)) if self.is_open_fn_meta(x) => {
+                if matches!(t, Term::Var(y) if y == x) {
+                    return true;
+                }
+                let mut vs = BTreeSet::new();
+                t.vars(&mut vs);
+                if vs.contains(x) || vs.iter().any(|v| v.starts_with('#')) {
+                    return false;
+                }
+                let i = Self::fn_meta_index(x).unwrap();
+                self.fn_metas[i].0 = Some(t.clone());
+                true
+            }
+            (Term::App(f, xs), u) | (u, Term::App(f, xs)) if self.is_open_fn_meta(f) => {
+                let (f, xs, u) = (f.clone(), xs.clone(), u.clone());
+                self.solve_app(&f, &xs, &u)
+            }
+            (Term::Var(x), Term::Var(y)) => x == y,
             (Term::Num(x), Term::Num(y)) => x == y,
             (Term::App(f, xs), Term::App(g, ys)) => {
-                xs.len() == ys.len() && self.unify_fn_name(f, g) && xs.iter().zip(ys).all(|(x, y)| self.ut(x, y))
+                f == g && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.ut(x, y))
+            }
+            (Term::Lam(p1, b1), Term::Lam(p2, b2)) if p1.len() == p2.len() => {
+                if !p1.iter().zip(p2).all(|((_, s), (_, t))| self.unify_sort(s, t)) {
+                    return false;
+                }
+                let vs: Vec<Term> = p1.iter().map(|_| self.fresh_var()).collect();
+                let s1: Vec<(String, Term)> = p1.iter().map(|(p, _)| p.clone()).zip(vs.iter().cloned()).collect();
+                let s2: Vec<(String, Term)> = p2.iter().map(|(p, _)| p.clone()).zip(vs.iter().cloned()).collect();
+                self.ut(&b1.subst_many(&s1), &b2.subst_many(&s2))
+            }
+            (Term::Set(p1, f1), Term::Set(p2, f2)) if p1.len() == p2.len() => {
+                if !p1.iter().zip(p2).all(|((_, s), (_, t))| self.unify_sort(s, t)) {
+                    return false;
+                }
+                let vs: Vec<Term> = p1.iter().map(|_| self.fresh_var()).collect();
+                let s1: Vec<(String, Term)> = p1.iter().map(|(p, _)| p.clone()).zip(vs.iter().cloned()).collect();
+                let s2: Vec<(String, Term)> = p2.iter().map(|(p, _)| p.clone()).zip(vs.iter().cloned()).collect();
+                self.uf(&f1.subst_many(&s1), &f2.subst_many(&s2))
             }
             _ => false,
         }
     }
 
-    /// 関数記号の名前どうし（関数記号のメタ変数があれば埋める）
-    fn unify_fn_name(&mut self, f: &str, g: &str) -> bool {
-        let (f, g) = (self.zonk_fn(f), self.zonk_fn(g));
-        if f == g {
-            return true;
+    /// パターンの引数（相異なる変数）なら、そのパラメータの名前と型を返す
+    fn pattern_params(&self, f: &str, xs: &[Term], body_vars: &BTreeSet<String>) -> Option<Vec<(String, String)>> {
+        let i = Self::fn_meta_index(f)?;
+        let ty = Ty::parse(&self.zonk_sort(&self.fn_metas[i].1))?;
+        let arg_tys: Vec<Ty> = match ty {
+            Ty::Fun(a, _) => a,
+            Ty::Prop => vec![],
+            _ => return None,
+        };
+        if arg_tys.len() != xs.len() {
+            return None;
         }
-        if let Some(i) = Self::fn_meta_index(&f) {
-            self.fn_metas[i] = Some(g);
-            return true;
+        let mut names = Vec::new();
+        for (k, x) in xs.iter().enumerate() {
+            let Term::Var(v) = x else { return None };
+            if names.iter().any(|(n, _): &(String, String)| n == v) || v.starts_with("?F") {
+                return None;
+            }
+            // 束縛変数の仮の名前（#3）は読みやすい名前にする
+            let name = if v.starts_with('#') {
+                let mut n = ["x", "y", "z", "w"].get(k).copied().unwrap_or("v").to_string();
+                while body_vars.contains(&n) || names.iter().any(|(m, _)| *m == n) {
+                    n.push('\'');
+                }
+                n
+            } else {
+                v.clone()
+            };
+            names.push((name, arg_tys[k].show()));
         }
-        if let Some(i) = Self::fn_meta_index(&g) {
-            self.fn_metas[i] = Some(f);
-            return true;
+        Some(names)
+    }
+
+    /// ?F(xs) =?= u を解く
+    fn solve_app(&mut self, f: &str, xs: &[Term], u: &Term) -> bool {
+        let i = Self::fn_meta_index(f).unwrap();
+        // 1. 頭が同じ形なら名前を入れる：?F(a) =?= g(b) なら ?F := g, a =?= b
+        if let Term::App(g, ys) = u {
+            if ys.len() == xs.len() && !self.is_open_fn_meta(g) {
+                let save = self.save();
+                self.fn_metas[i].0 = Some(Term::Var(g.clone()));
+                if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
+                    return true;
+                }
+                self.restore(save);
+            }
         }
-        false
+        // 2. パターン：?F(x, y) =?= u なら ?F := ((x, y) ↦ u)
+        let mut vs = BTreeSet::new();
+        u.vars(&mut vs);
+        if vs.contains(f) {
+            return false;
+        }
+        let Some(ps) = self.pattern_params(f, xs, &vs) else { return false };
+        let xnames: Vec<String> = xs.iter().filter_map(|x| if let Term::Var(v) = x { Some(v.clone()) } else { None }).collect();
+        if vs.iter().any(|v| v.starts_with('#') && !xnames.contains(v)) {
+            return false;
+        }
+        let subs: Vec<(String, Term)> = xnames.iter().cloned().zip(ps.iter().map(|(p, _)| Term::Var(p.clone()))).collect();
+        self.fn_metas[i].0 = Some(Term::Lam(ps, Box::new(u.subst_many(&subs))));
+        true
+    }
+
+    /// ?P(xs) =?= φ を解く
+    fn solve_pred(&mut self, p: &str, xs: &[Term], phi: &Formula) -> bool {
+        let i = Self::fn_meta_index(p).unwrap();
+        if let Formula::Atom(q, ys) = phi {
+            if ys.len() == xs.len() && !self.is_open_fn_meta(q) && !["=", "<", "≤", ">", "≥"].contains(&q.as_str()) {
+                let save = self.save();
+                self.fn_metas[i].0 = Some(Term::Var(q.clone()));
+                if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
+                    return true;
+                }
+                self.restore(save);
+            }
+        }
+        let vs = phi.free_vars();
+        if vs.contains(p) {
+            return false;
+        }
+        let Some(ps) = self.pattern_params(p, xs, &vs) else { return false };
+        let xnames: Vec<String> = xs.iter().filter_map(|x| if let Term::Var(v) = x { Some(v.clone()) } else { None }).collect();
+        if vs.iter().any(|v| v.starts_with('#') && !xnames.contains(v)) {
+            return false;
+        }
+        let subs: Vec<(String, Term)> = xnames.iter().cloned().zip(ps.iter().map(|(p, _)| Term::Var(p.clone()))).collect();
+        self.fn_metas[i].0 = Some(Term::Set(ps, Box::new(phi.subst_many(&subs))));
+        true
+    }
+}
+
+/// 束縛変数・λ・集合の型に、決まっていない型 ?σ が残っているか
+fn sort_holes_t(t: &Term) -> bool {
+    match t {
+        Term::App(_, a) => a.iter().any(sort_holes_t),
+        Term::Lam(ps, b) => ps.iter().any(|(_, s)| s.contains("?σ")) || sort_holes_t(b),
+        Term::Set(ps, phi) => ps.iter().any(|(_, s)| s.contains("?σ")) || sort_holes_f(phi),
+        _ => false,
+    }
+}
+
+fn sort_holes_f(f: &Formula) -> bool {
+    match f {
+        Formula::Atom(_, ts) => ts.iter().any(sort_holes_t),
+        Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => sort_holes_f(a) || sort_holes_f(b),
+        Formula::Forall(_, s, b) | Formula::Exists(_, s, b) => s.contains("?σ") || sort_holes_f(b),
+        Formula::Bot => false,
     }
 }
 
@@ -354,6 +575,8 @@ fn occurs(m: u32, t: &Term) -> bool {
     match t {
         Term::Meta(n) => *n == m,
         Term::App(_, a) => a.iter().any(|x| occurs(m, x)),
+        Term::Lam(_, b) => occurs(m, b),
+        Term::Set(_, phi) => phi.has_meta(),
         _ => false,
     }
 }

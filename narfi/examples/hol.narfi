@@ -1,0 +1,67 @@
+-- v2.1：関数・述語を値として扱う（単純型理論）
+
+-- 関数についての ∀
+thm fun.refl :
+  ⊢ ∀f:ℕ → ℕ. ∀x:ℕ. f(x) = f(x)
+
+Fix f, x
+  refl
+
+
+-- λ：関数そのものを値として選ぶ
+thm exists.succ_fun :
+  ⊢ ∃f:ℕ → ℕ. ∀x:ℕ. f(x) = x + 1
+
+choose (n ↦ n + 1)
+Fix x
+  refl
+
+
+-- 集合（述語）と ∈
+thm mem.example :
+  ⊢ 2 ∈ {n : ℕ | n > 1}
+
+decide
+
+
+thm subset.refl :
+  ⊢ ∀A:ℕ → Prop. A ⊆ A
+
+Fix A
+  Fix x
+    assume h
+      h
+
+
+-- 述語の変数への代入（二階の図式の具体化）：P に「x > 0」を入れる
+thm forall_and :
+  h : ∀x:ℕ. P(x) ∧ Q(x)
+  ⊢ ∀x:ℕ. P(x)
+
+Fix x
+  have hx : P(x) ∧ Q(x) := h(x)
+  hx.left
+
+
+thm use.forall_and :
+  h : ∀y:ℕ. y > 0 ∧ y < 5
+  ⊢ ∀y:ℕ. y > 0
+
+forall_and(h)
+
+
+-- 項の定義
+def sq(x : ℝ) : ℝ := x · x
+
+thm sq.expand :
+  a : ℝ, b : ℝ
+  ⊢ sq(a + b) = sq(a) + 2·a·b + sq(b)
+
+ring
+
+
+-- 関数の外延性
+thm fun.eq :
+  ⊢ (n:ℕ ↦ n + 0) = (n:ℕ ↦ n)
+
+funext((n:ℕ ↦ n + 0), (n:ℕ ↦ n), add.zero)

@@ -3,8 +3,9 @@
 //! 行指向で読む。字下げでスコープ（ブロック）を作り、各行を再帰下降でパースする。
 
 use crate::syntax::{
-    Formula, Notation, RELS, Term, not, notation_for_sym, with_syntax,
+    Formula, Notation, RELS, Term, holds, not, notation_for_sym, with_syntax,
 };
+use crate::types::Ty;
 use std::collections::BTreeSet;
 
 // ================================================================ 宣言・文
@@ -32,7 +33,10 @@ pub struct Def {
     pub line: usize,
     /// (引数名, 型)。型は書かれていなければ "?"（いまは検査に使わない）
     pub params: Vec<(String, String)>,
+    /// 述語の定義の本体（項の定義では使わない）
     pub body: Formula,
+    /// 項の定義 `def f(x : ℕ) : ℕ := t` の (値の型, 本体)
+    pub term: Option<(String, Term)>,
     pub src: String,
 }
 
@@ -464,6 +468,7 @@ fn tex_macro_replacement(cmd: &str) -> Option<&'static str> {
         "because" => "by",
         "impby" | "Leftarrow" | "impliedby" => "⇐",
         "longrightarrow" | "lto" => "⟶",
+        "mapsto" => "↦",
         "le" | "leq" => "≤",
         "ge" | "geq" => "≥",
         "ne" | "neq" => "≠",
@@ -752,6 +757,11 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             i += 3;
             continue;
         }
+        if three == "|->" {
+            out.push(Tok::Sym("↦".to_string()));
+            i += 3;
+            continue;
+        }
         let two: String = cs[i..(i + 2).min(cs.len())].iter().collect();
         let sym2 = match two.as_str() {
             ":=" => Some(":="),
@@ -775,7 +785,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             '²' | '³' | '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
             | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆'
             | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−'
-            | '·' | '/' | '^' | '⇐' | '∴' | '×' => {
+            | '·' | '/' | '^' | '⇐' | '∴' | '×' | '{' | '}' | '↦' => {
                 if c == '−' {
                     "-".to_string()
                 } else {
@@ -824,9 +834,6 @@ impl P {
     }
     fn peek(&self) -> Option<&Tok> {
         self.toks.get(self.pos)
-    }
-    fn peek_at(&self, k: usize) -> Option<&Tok> {
-        self.toks.get(self.pos + k)
     }
     fn is_sym(&self, s: &str) -> bool {
         matches!(self.peek(), Some(Tok::Sym(x)) if x == s)
@@ -891,9 +898,60 @@ impl P {
     }
 
     // ------------------------------------------------ 型
-    fn ty(&mut self) -> PResult<String> {
-        let t = self.ident()?;
-        Ok(t)
+    /// 型の式：`ℕ`・`ℕ → ℝ`・`ℕ × ℕ → Prop`・`(ℕ → ℚ) → Prop`
+    pub fn ty(&mut self) -> PResult<String> {
+        Ok(self.ty_expr()?.show())
+    }
+
+    fn ty_expr(&mut self) -> PResult<Ty> {
+        let mut args = vec![self.ty_atom()?];
+        while self.eat_sym("×") {
+            args.push(self.ty_atom()?);
+        }
+        if self.eat_sym("→") {
+            let r = self.ty_expr()?;
+            return Ok(Ty::fun(args, r));
+        }
+        if args.len() > 1 {
+            return self.err("積の型（ℕ × ℕ）だけでは値の型にならない（ℕ × ℕ → Prop のように使う）");
+        }
+        Ok(args.pop().unwrap())
+    }
+
+    fn ty_atom(&mut self) -> PResult<Ty> {
+        if self.eat_sym("(") {
+            let t = self.ty_expr()?;
+            self.expect_sym(")")?;
+            return Ok(t);
+        }
+        let x = self.ident()?;
+        Ok(if x == "Prop" { Ty::Prop } else { Ty::Base(x) })
+    }
+
+    /// λ・集合の束縛変数：`x`・`x : ℕ`・`(x, y)`・`(x, y) : ℕ × ℕ`
+    fn binders(&mut self) -> PResult<Vec<(String, String)>> {
+        if self.eat_sym("(") {
+            let mut names = vec![self.ident()?];
+            while self.eat_sym(",") {
+                names.push(self.ident()?);
+            }
+            self.expect_sym(")")?;
+            let mut tys = vec!["?".to_string(); names.len()];
+            if self.eat_sym(":") {
+                let mut ts = vec![self.ty_atom()?.show()];
+                while self.eat_sym("×") {
+                    ts.push(self.ty_atom()?.show());
+                }
+                if ts.len() != names.len() {
+                    return self.err(format!("変数が {} 個あるのに、型が {} 個", names.len(), ts.len()));
+                }
+                tys = ts;
+            }
+            return Ok(names.into_iter().zip(tys).collect());
+        }
+        let x = self.ident()?;
+        let t = if self.eat_sym(":") { self.ty()? } else { "?".to_string() };
+        Ok(vec![(x, t)])
     }
 
     // ------------------------------------------------ 論理式
@@ -961,7 +1019,11 @@ impl P {
                                 .map(|(_, t)| t.clone());
                         }
                     }
-                    Some(Formula::Atom(r, vec![Term::Var(x.clone()), t]))
+                    if r == "∈" {
+                        Some(self.mem(&Term::Var(x.clone()), &t)?)
+                    } else {
+                        Some(Formula::Atom(r, vec![Term::Var(x.clone()), t]))
+                    }
                 }
                 _ => None,
             };
@@ -1007,6 +1069,13 @@ impl P {
         if let Some(r) = self.peek_rel() {
             self.pos += 1;
             let u = self.term()?;
+            match r.as_str() {
+                "∈" => return self.mem(&t, &u),
+                "∉" => return Ok(not(self.mem(&t, &u)?)),
+                "⊆" | "⊂" => return self.subset(&t, &u),
+                "⊇" | "⊃" => return self.subset(&u, &t),
+                _ => {}
+            }
             return Ok(if r == "≠" {
                 not(Formula::Atom("=".into(), vec![t, u]))
             } else {
@@ -1033,6 +1102,28 @@ impl P {
         }
         Ok(Formula::Atom(p, args))
     }
+    /// t ∈ A：A が名前なら述語 A の適用、集合 {x | φ} なら φ[x := t]
+    fn mem(&self, t: &Term, a: &Term) -> PResult<Formula> {
+        match a {
+            Term::Var(_) | Term::Set(..) => Ok(holds(a, std::slice::from_ref(t))),
+            _ => self.err(format!("`∈` の右には集合の名前か {{x | φ}} を書く（`{a}`）")),
+        }
+    }
+
+    /// A ⊆ B は ∀x. x ∈ A → x ∈ B
+    fn subset(&self, a: &Term, b: &Term) -> PResult<Formula> {
+        let mut used = std::collections::BTreeSet::new();
+        a.vars(&mut used);
+        b.vars(&mut used);
+        let mut x = "x".to_string();
+        while used.contains(&x) {
+            x.push('\'');
+        }
+        let v = Term::Var(x.clone());
+        let body = Formula::Imp(Box::new(self.mem(&v, a)?), Box::new(self.mem(&v, b)?));
+        Ok(Formula::Forall(x, "?".into(), Box::new(body)))
+    }
+
     fn is_term_op(&self) -> bool {
         ["+", "-", "·", "/", "^", "²", "³", "∪", "∩", "\\"]
             .iter()
@@ -1122,10 +1213,29 @@ impl P {
                 }
             }
             Some(Tok::Sym(s)) if s == "(" => {
+                // λ：(x ↦ t)・(x : ℕ ↦ t)・((x, y) ↦ t)
+                let save = self.pos;
                 self.pos += 1;
+                if let Ok(ps) = self.binders() {
+                    if self.eat_sym("↦") {
+                        let body = self.term()?;
+                        self.expect_sym(")")?;
+                        return Ok(Term::Lam(ps, Box::new(body)));
+                    }
+                }
+                self.pos = save + 1;
                 let t = self.term()?;
                 self.expect_sym(")")?;
                 Ok(t)
+            }
+            // 集合：{x : ℕ | φ}・{(x, y) : ℕ × ℕ | φ}
+            Some(Tok::Sym(s)) if s == "{" => {
+                self.pos += 1;
+                let ps = self.binders()?;
+                self.expect_sym("|")?;
+                let phi = self.formula()?;
+                self.expect_sym("}")?;
+                Ok(Term::Set(ps, Box::new(phi)))
             }
             Some(Tok::Sym(s)) if s == "|" => {
                 self.pos += 1;
@@ -1432,7 +1542,7 @@ fn notation_latex(raw: &str, sym: &str) -> String {
     }
 }
 
-/// `def is_lim(a, α) := φ` / `def is_lim(a : ℕ → ℝ, α : ℝ) : Prop := φ`
+/// `def is_lim(a : ℕ → ℝ, α : ℝ) := φ`（述語）/ `def sq(x : ℕ) : ℕ := x · x`（項）
 fn parse_def(text: &str, line: usize) -> PResult<Def> {
     let mut p = P::new(lex(text, line)?, line, vec![]);
     p.ident()?; // def
@@ -1441,17 +1551,7 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
     if p.eat_sym("(") && !p.eat_sym(")") {
         loop {
             let x = p.ident()?;
-            let ty = if p.eat_sym(":") {
-                // 型は `ℕ → ℝ` のような列もありうるので、`,` か `)` までをそのまま持つ
-                let mut parts = Vec::new();
-                while !p.at_end() && !p.is_sym(",") && !p.is_sym(")") {
-                    parts.push(p.here().trim_matches('\'').to_string());
-                    p.pos += 1;
-                }
-                parts.join(" ")
-            } else {
-                "?".to_string()
-            };
+            let ty = if p.eat_sym(":") { p.ty()? } else { "?".to_string() };
             if params.iter().any(|(y, _)| *y == x) {
                 return p.err(format!("引数 `{x}` が2回書かれている"));
             }
@@ -1462,43 +1562,45 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
             p.expect_sym(",")?;
         }
     }
-    if p.eat_sym(":") {
-        let ret = p.ident()?;
-        if ret != "Prop" {
-            return p.err(format!(
-                "いまの def は命題（Prop）の定義だけを扱う（`: {ret}` は未対応。項には let を使う）"
-            ));
-        }
-    }
+    let result = if p.eat_sym(":") { Some(p.ty()?) } else { None };
     p.expect_sym(":=")?;
-    p.tyenv = params
-        .iter()
-        .filter(|(_, t)| TYPE_NAMES.contains(&t.as_str()))
-        .cloned()
-        .collect();
-    let body = p.formula()?;
-    p.expect_end()?;
+    p.tyenv = params.iter().filter(|(_, t)| !t.contains('→') && t != "?").cloned().collect();
     let names: Vec<String> = params.iter().map(|(x, _)| x.clone()).collect();
-    for v in body.free_vars() {
-        if !names.contains(&v) {
+    let is_global = |v: &str| with_syntax(|t| t.defs.contains_key(v) || t.consts.contains(v));
+    let (body, term, fv) = match result.as_deref() {
+        None | Some("Prop") => {
+            let f = p.formula()?;
+            let fv = f.free_vars();
+            (f, None, fv)
+        }
+        Some(r) => {
+            let t = p.term()?;
+            let mut fv = std::collections::BTreeSet::new();
+            t.vars(&mut fv);
+            (Formula::Bot, Some((r.to_string(), t)), fv)
+        }
+    };
+    p.expect_end()?;
+    if fv.contains(&name) {
+        return p.err(format!("`{name}` の定義の中で `{name}` 自身を使っている（再帰的な定義は未対応）"));
+    }
+    for v in fv {
+        if !names.contains(&v) && !is_global(&v) {
             return p.err(format!(
-                "定義の本体の `{v}` が引数にない（def {name}(…, {v}) のように引数に加える）"
+                "定義の本体の `{v}` は引数でも定義済みの記号でもない（引数に加えるか、先に定義する）"
             ));
         }
     }
-    Ok(Def {
-        name,
-        line,
-        params,
-        body,
-        src: text.to_string(),
-    })
+    Ok(Def { name, line, params, body, term, src: text.to_string() })
 }
 
 /// 定義の名前を表に登録する。再帰的な定義（展開が止まらなくなる）はここで止める。
 fn register_def(d: &Def) -> PResult<()> {
     let mut preds = BTreeSet::new();
     d.body.preds(&mut preds);
+    if let Some((_, t)) = &d.term {
+        t.vars(&mut preds);
+    }
     let err = |msg: String| Err(ParseError { line: d.line, msg });
     if RELS.contains(&d.name.as_str()) {
         return err(format!("`{}` は組み込みの関係なので定義できない", d.name));
@@ -1522,6 +1624,14 @@ fn register_def(d: &Def) -> PResult<()> {
     })
 }
 
+/// 型として読めるもの（数の型・Prop・typedef で作った型からなる）
+fn known_type(t: &Ty) -> bool {
+    !t.any(&|u| match u {
+        Ty::Base(b) => !TYPE_NAMES.contains(&b.as_str()) && !with_syntax(|tb| tb.types.contains(b)),
+        _ => false,
+    })
+}
+
 fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
     let toks = lex(text, line)?;
     let mut p = P::new(toks, line, vec![]);
@@ -1534,25 +1644,24 @@ fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
         while !p.eat_sym("⊢") {
             let x = p.ident()?;
             p.expect_sym(":")?;
-            // `x : ℕ` は変数の宣言、`a : ℕ → ℝ`・`f : ℕ × ℕ → ℕ` は関数記号の宣言、それ以外は仮定
-            let is_type = matches!(p.peek(), Some(Tok::Ident(t)) if TYPE_NAMES.contains(&t.as_str()))
-                && matches!(p.peek_at(1), Some(Tok::Sym(s)) if s == "," || s == "⊢" || s == "→" || s == "×");
-            if is_type {
-                let mut t = p.ident()?;
-                while p.is_sym("×") || p.is_sym("→") {
-                    let op = if p.eat_sym("×") { "×" } else { p.pos += 1; "→" };
-                    let u = p.ident()?;
-                    if !TYPE_NAMES.contains(&u.as_str()) {
-                        return p.err(format!("型 `{u}` は使えない"));
+            // `x : ℕ`・`a : ℕ → ℝ`・`P : ℕ → Prop` は変数の宣言、それ以外は仮定
+            let save = p.pos;
+            let decl = match p.ty_expr() {
+                Ok(t) if known_type(&t) && (p.is_sym(",") || p.is_sym("⊢")) => Some(t),
+                _ => None,
+            };
+            match decl {
+                Some(t) => {
+                    let t = t.show();
+                    if !t.contains('→') {
+                        p.tyenv.push((x.clone(), t.clone()));
                     }
-                    t = format!("{t} {op} {u}");
+                    ctx.push(CtxItem::Var(x, t));
                 }
-                if !t.contains('→') {
-                    p.tyenv.push((x.clone(), t.clone()));
+                None => {
+                    p.pos = save;
+                    ctx.push(CtxItem::Hyp(x, p.formula()?));
                 }
-                ctx.push(CtxItem::Var(x, t));
-            } else {
-                ctx.push(CtxItem::Hyp(x, p.formula()?));
             }
             if !p.is_sym("⊢") {
                 p.expect_sym(",")?;
@@ -1650,7 +1759,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             loop {
                 let x = p.ident()?;
                 let t = if p.eat_sym(":") {
-                    Some(p.ident()?)
+                    Some(p.ty()?)
                 } else {
                     None
                 };

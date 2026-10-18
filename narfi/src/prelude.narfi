@@ -33,3 +33,18 @@ thm congr.S :
   ⊢ S(x) = S(y)
 
 EQ2(h, refl)
+
+
+-- 単純型理論（HOL）の公理：外延性と選択（仕様 §8）
+
+-- 関数は、すべての点で値が等しければ等しい
+axiom funext : ∀f. ∀g. (∀x. f(x) = g(x)) → f = g
+
+-- 命題は、互いに導けるなら等しい
+axiom propext : ∀P:Prop. ∀Q:Prop. (P → Q) → (Q → P) → P = Q
+
+-- 集合（述語）は、同じ元を持てば等しい
+axiom setext : ∀A. ∀B. (∀x. A(x) → B(x)) → (∀x. B(x) → A(x)) → A = B
+
+-- 選択：P を満たすものがあれば、some(P) は P を満たす（Hilbert の ε）
+axiom choice : ∀P. (∃x. P(x)) → P(some(P))

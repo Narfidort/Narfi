@@ -1,17 +1,15 @@
 -- def・notation・import：極限の加法性を a ⟶ α の記法で書く
 --
--- v2.0 には λ（数列を値として作る仕組み）がないので、和の数列 a + b は書けない。
--- 代わりに「c(n) = a(n) + b(n) を満たす数列 c」を仮定に置く。
+-- 数列の和は λ で書く：(n ↦ a(n) + b(n)) は「n に a(n) + b(n) を対応させる数列」
 
 import analysis.limits
 
 
 thm conv.add :
-  a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
+  a : ℕ → ℝ, b : ℕ → ℝ,
   conv_a : a ⟶ α,
-  conv_b : b ⟶ β,
-  hc : ∀n:ℕ. c(n) = a(n) + b(n)
-  ⊢ c ⟶ α + β
+  conv_b : b ⟶ β
+  ⊢ (n ↦ a(n) + b(n)) ⟶ α + β
 
 Fix ε | hε
   Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
@@ -19,23 +17,21 @@ Fix ε | hε
   let N := max(N₁, N₂)
   choose N
   Fix n | hn
-    |c(n) - (α + β)|
-      = |(a(n) + b(n)) - (α + β)|  by EQ2(hc(n), refl)
-      ≤ |a(n) - α| + |b(n) - β|    by triangle(a(n) - α, b(n) - β)
-      < ε/2 + ε/2                   by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
-      = ε                           by ring
-  ∴ ∀n≥N. |c(n) - (α + β)| < ε
+    |(a(n) + b(n)) - (α + β)|
+      ≤ |a(n) - α| + |b(n) - β|   by triangle(a(n) - α, b(n) - β)
+      < ε/2 + ε/2                  by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
+      = ε                          by ring
+  ∴ ∀n≥N. |(a(n) + b(n)) - (α + β)| < ε
 
 
--- 定理として使うときは記法のまま単一化される（関数記号 a, b, c も単一化で決まる）
+-- 定理として使うときは記法のまま単一化される（関数の穴に λ が入る）
 thm conv.add3 :
-  a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ, d : ℕ → ℝ, e : ℕ → ℝ,
-  ha : a ⟶ α, hb : b ⟶ β, hc : c ⟶ γ,
-  hd : ∀n:ℕ. d(n) = a(n) + b(n),
-  he : ∀n:ℕ. e(n) = d(n) + c(n)
-  ⊢ e ⟶ (α + β) + γ
+  a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
+  ha : a ⟶ α, hb : b ⟶ β, hc : c ⟶ γ
+  ⊢ (n ↦ (a(n) + b(n)) + c(n)) ⟶ (α + β) + γ
 
-conv.add(conv.add(ha, hb, hd), hc, he)
+conv.add(conv.add(ha, hb), hc)
+
 
 
 -- 明示的に展開する：unfold と定義の同値 is_lim.def

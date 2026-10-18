@@ -1,0 +1,59 @@
+-- v2.1：関数・述語・集合を使った間違った証明。1本も通ってはいけない。
+
+-- 違う関数は等しくない（β 簡約しても n + 1 と n は違う）
+thm u.lam.neq :
+  ⊢ (n:ℕ ↦ n + 1) = (n:ℕ ↦ n)
+
+refl
+
+
+-- 集合に入っていないものを入っていると言う
+thm u.mem :
+  ⊢ 0 ∈ {n : ℕ | n > 1}
+
+decide
+
+
+-- 外延性に、すべての点で等しいことの証明を渡さない
+thm u.funext :
+  ⊢ (n:ℕ ↦ n + 1) = (n:ℕ ↦ n)
+
+funext((n:ℕ ↦ n + 1), (n:ℕ ↦ n), add.zero)
+
+
+-- 選択：存在の証明なしに some(P) が P を満たすとは言えない
+thm u.choice :
+  P : ℕ → Prop
+  ⊢ P(some(P))
+
+choice(P)
+
+
+-- 述語の変数について任意に一般化してはいけない：P(0) から ∀P. P(0) は出ない
+thm u.pred.general :
+  h : P(0)
+  ⊢ ∀Q:ℕ → Prop. Q(0)
+
+Fix Q
+  h
+
+
+-- 二階の具体化で、束縛変数が逃げてはいけない：∀x. ∃y. R(x, y) から ∃y. ∀x. R(x, y) は出ない
+thm u.pattern.escape :
+  R : ℕ × ℕ → Prop,
+  h : ∀x:ℕ. ∃y:ℕ. R(x, y)
+  ⊢ ∃y:ℕ. ∀x:ℕ. R(x, y)
+
+Obtain y, hy : h(0)
+choose y
+Fix x
+  hy
+
+
+-- 関数の型を取り違える
+thm u.fun.type :
+  f : ℕ → ℕ
+  ⊢ ∀x:ℝ. f(x) = f(x)
+
+Fix x
+  refl
