@@ -3,7 +3,7 @@
 //! 行指向で読む。字下げでスコープ（ブロック）を作り、各行を再帰下降でパースする。
 
 use crate::syntax::{
-    Formula, Notation, RELS, Term, not, notation_for_sym, to_apply_form, with_syntax,
+    Formula, Notation, RELS, Term, not, notation_for_sym, with_syntax,
 };
 use std::collections::BTreeSet;
 
@@ -775,7 +775,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             '²' | '³' | '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
             | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆'
             | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−'
-            | '·' | '/' | '^' | '⇐' | '∴' => {
+            | '·' | '/' | '^' | '⇐' | '∴' | '×' => {
                 if c == '−' {
                     "-".to_string()
                 } else {
@@ -1479,7 +1479,6 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
     let body = p.formula()?;
     p.expect_end()?;
     let names: Vec<String> = params.iter().map(|(x, _)| x.clone()).collect();
-    let body = to_apply_form(&body, &names);
     for v in body.free_vars() {
         if !names.contains(&v) {
             return p.err(format!(
@@ -1535,12 +1534,22 @@ fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
         while !p.eat_sym("⊢") {
             let x = p.ident()?;
             p.expect_sym(":")?;
-            // `x : ℕ` は変数の宣言、それ以外は仮定
+            // `x : ℕ` は変数の宣言、`a : ℕ → ℝ`・`f : ℕ × ℕ → ℕ` は関数記号の宣言、それ以外は仮定
             let is_type = matches!(p.peek(), Some(Tok::Ident(t)) if TYPE_NAMES.contains(&t.as_str()))
-                && matches!(p.peek_at(1), Some(Tok::Sym(s)) if s == "," || s == "⊢");
+                && matches!(p.peek_at(1), Some(Tok::Sym(s)) if s == "," || s == "⊢" || s == "→" || s == "×");
             if is_type {
-                let t = p.ident()?;
-                p.tyenv.push((x.clone(), t.clone()));
+                let mut t = p.ident()?;
+                while p.is_sym("×") || p.is_sym("→") {
+                    let op = if p.eat_sym("×") { "×" } else { p.pos += 1; "→" };
+                    let u = p.ident()?;
+                    if !TYPE_NAMES.contains(&u.as_str()) {
+                        return p.err(format!("型 `{u}` は使えない"));
+                    }
+                    t = format!("{t} {op} {u}");
+                }
+                if !t.contains('→') {
+                    p.tyenv.push((x.clone(), t.clone()));
+                }
                 ctx.push(CtxItem::Var(x, t));
             } else {
                 ctx.push(CtxItem::Hyp(x, p.formula()?));

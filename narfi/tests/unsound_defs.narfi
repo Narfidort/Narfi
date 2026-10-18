@@ -4,6 +4,7 @@ import analysis.limits
 
 -- 別の数列の収束は出てこない
 thm wrong.other :
+  a : ℕ → ℝ, b : ℕ → ℝ,
   h : a ⟶ α
   ⊢ b ⟶ α
 
@@ -12,6 +13,7 @@ h
 
 -- 極限値を取り違えている
 thm wrong.limit :
+  a : ℕ → ℝ,
   h : a ⟶ α
   ⊢ a ⟶ β
 
@@ -21,9 +23,11 @@ h
 
 -- ε/2 ではなく ε で評価すると和は 2ε になり、通らない
 thm wrong.eps :
+  a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
   conv_a : a ⟶ α,
-  conv_b : b ⟶ β
-  ⊢ (a + b) ⟶ (α + β)
+  conv_b : b ⟶ β,
+  hc : ∀n:ℕ. c(n) = a(n) + b(n)
+  ⊢ c ⟶ α + β
 
 Fix ε | hε
   Obtain N₁(ε), hN₁ : conv_a(ε, hε)
@@ -31,24 +35,30 @@ Fix ε | hε
   let N := max(N₁, N₂)
   choose N
   Fix n | hn
-    |(a(n) + b(n)) - (α + β)|
-      ≤ |a(n) - α| + |b(n) - β|   by triangle(a(n) - α, b(n) - β)
-      < ε + ε                      by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
-      = ε                          by ring
+    |c(n) - (α + β)|
+      = |(a(n) + b(n)) - (α + β)|  by EQ2(hc(n), refl)
+      ≤ |a(n) - α| + |b(n) - β|    by triangle(a(n) - α, b(n) - β)
+      < ε + ε                       by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
+      = ε                           by ring
 
 
--- 展開での変数の捕獲：極限値 n を代入しても、束縛変数 n とは別物
+-- 展開での変数の捕獲：上界 n を代入しても、定義の中の束縛変数 n とは別物
+def bounded_by(a : ℕ → ℕ, M : ℕ) := ∀n:ℕ. a(n) ≤ M
+
 thm wrong.capture :
-  h : a ⟶ n
-  ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - n| < ε
+  a : ℕ → ℕ,
+  h : bounded_by(a, n)
+  ⊢ ∀n:ℕ. a(n) ≤ n
 
-unfold is_lim at h
+unfold bounded_by at h
 h
 
 
 -- 和の収束から、各項の収束は出てこない
 thm wrong.split :
-  h : (a + b) ⟶ (α + β)
+  a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
+  hc : ∀n:ℕ. c(n) = a(n) + b(n),
+  h : c ⟶ α + β
   ⊢ a ⟶ α
 
 h
@@ -56,6 +66,7 @@ h
 
 -- 定義されていない名前は unfold できない
 thm wrong.unfold :
+  a : ℕ → ℝ,
   h : a ⟶ α
   ⊢ a ⟶ α
 

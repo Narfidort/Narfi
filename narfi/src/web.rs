@@ -2,7 +2,7 @@
 //! 外部クレートを使わず `std::net::TcpListener` のみで動作し、
 //! リアルタイム検証・日本語証明生成・LaTeX出力・ファイル保存・AIアシストを提供する。
 
-use crate::check::Report;
+use crate::elab::Report;
 use crate::module::load_and_check;
 use crate::parser::Decl;
 use crate::syntax::with_syntax;

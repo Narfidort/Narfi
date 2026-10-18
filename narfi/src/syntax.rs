@@ -37,9 +37,6 @@ pub fn not(f: Formula) -> Formula {
     Formula::Imp(Box::new(f), Box::new(Formula::Bot))
 }
 
-pub fn types_compatible(a: &str, b: &str) -> bool {
-    a == b || a == "?" || b == "?"
-}
 
 // ---------------------------------------------------------------- 記法・定義の表
 //
@@ -96,84 +93,36 @@ pub fn notation_for_pred(pred: &str) -> Option<Notation> {
     with_syntax(|t| t.notations.iter().find(|n| n.pred == pred).cloned())
 }
 
-// ---------------------------------------------------------------- 定義の展開
-//
-// def の本体では、引数 a が関数の位置に現れる（`a(n)`）。これを `@(a, n)` の形で持ち、
-// 代入のあとで apply_term によって普通の項に戻す。数列の和 `a + b` を渡したときは
-// `(a + b)(n) = a(n) + b(n)` と各点ごとに読む。
+// ---------------------------------------------------------------- 定義・図式の具体化
 
-const POINTWISE: [&str; 6] = ["+", "-", "·", "/", "neg", "abs"];
-
-/// 項 h を引数 args に適用する（h(args)）
-pub fn apply_term(h: &Term, args: &[Term]) -> Term {
-    match h {
-        Term::Var(f) => Term::App(f.clone(), args.to_vec()),
-        Term::Num(_) => h.clone(),
-        Term::App(op, xs) if POINTWISE.contains(&op.as_str()) => {
-            Term::App(op.clone(), xs.iter().map(|x| apply_term(x, args)).collect())
-        }
-        Term::App(op, xs) if op == "^" && xs.len() == 2 => {
-            Term::App(op.clone(), vec![apply_term(&xs[0], args), xs[1].clone()])
-        }
-        _ => {
-            let mut v = vec![h.clone()];
-            v.extend(args.iter().cloned());
-            Term::App("@".into(), v)
-        }
-    }
+/// 関数型のソート（`ℕ → ℝ`）か
+pub fn is_fn_sort(s: &str) -> bool {
+    s.contains('→')
 }
 
-/// 本体の中で、引数 params が関数の位置に現れる `p(t…)` を `@(p, t…)` に書き換える
-pub fn to_apply_form(f: &Formula, params: &[String]) -> Formula {
-    fn t_go(t: &Term, ps: &[&String]) -> Term {
-        match t {
-            Term::App(h, xs) => {
-                let xs: Vec<Term> = xs.iter().map(|x| t_go(x, ps)).collect();
-                if ps.iter().any(|p| *p == h) {
-                    let mut v = vec![Term::Var(h.clone())];
-                    v.extend(xs);
-                    Term::App("@".into(), v)
-                } else {
-                    Term::App(h.clone(), xs)
-                }
-            }
-            _ => t.clone(),
-        }
-    }
-    fn f_go(f: &Formula, ps: &[&String]) -> Formula {
-        match f {
-            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(|t| t_go(t, ps)).collect()),
-            Formula::Imp(a, b) => Formula::Imp(Box::new(f_go(a, ps)), Box::new(f_go(b, ps))),
-            Formula::And(a, b) => Formula::And(Box::new(f_go(a, ps)), Box::new(f_go(b, ps))),
-            Formula::Or(a, b) => Formula::Or(Box::new(f_go(a, ps)), Box::new(f_go(b, ps))),
-            Formula::Forall(x, ty, b) | Formula::Exists(x, ty, b) => {
-                let inner: Vec<&String> = ps.iter().copied().filter(|p| *p != x).collect();
-                let b = Box::new(f_go(b, &inner));
-                if matches!(f, Formula::Forall(..)) {
-                    Formula::Forall(x.clone(), ty.clone(), b)
-                } else {
-                    Formula::Exists(x.clone(), ty.clone(), b)
-                }
-            }
-            Formula::Bot => Formula::Bot,
-        }
-    }
-    f_go(f, &params.iter().collect::<Vec<_>>())
-}
-
-/// 定義の本体 body（`@` 形）の引数 params に args を同時に代入し、`@` を簡約する
-pub fn instantiate(params: &[String], body: &Formula, args: &[Term]) -> Formula {
-    // 同時代入にするため、まず引数名をソースに現れない名前に置き換える
+/// 定義・図式のパラメータ params に args を同時に代入する。
+/// 関数型のパラメータには関数記号の名前（`Term::Var(g)`）だけを渡せ、記号の付け替えになる。
+pub fn instantiate(params: &[(String, String)], body: &Formula, args: &[Term]) -> Formula {
     let mut f = body.clone();
-    for (i, p) in params.iter().enumerate() {
-        f = f.subst(p, &Term::Var(format!("%{i}")));
+    let mut subs = Vec::new();
+    let mut renames = Vec::new();
+    for (i, ((p, sort), a)) in params.iter().zip(args).enumerate() {
+        if is_fn_sort(sort) {
+            if let Term::Var(g) = a {
+                // 同時に付け替えるため、まずソースに現れない名前を経由する（a→b, b→c が混ざらないように）
+                let tmp = format!("%f{i}");
+                f = f.rename_fn(p, &tmp);
+                renames.push((tmp, g.clone()));
+            }
+        } else {
+            subs.push((p.clone(), a.clone()));
+        }
     }
-    for (i, a) in args.iter().enumerate() {
-        f = f.subst(&format!("%{i}"), a);
+    for (tmp, g) in &renames {
+        f = f.rename_fn(tmp, g);
     }
-    f.beta()
+    f.subst_many(&subs)
 }
-
 // ---------------------------------------------------------------- 自由変数
 
 impl Term {
@@ -212,16 +161,13 @@ impl Term {
     pub fn to_latex(&self) -> String {
         show_term_latex(self, 0)
     }
-    /// `@(h, t…)` を、h が決まっていれば h(t…) に簡約する
-    pub fn beta(&self) -> Term {
+    /// 関数記号 old を new に付け替える（`old(t…)` と、引数として渡された `old` の両方）
+    pub fn rename_fn(&self, old: &str, new: &str) -> Term {
         match self {
+            Term::Var(x) if x == old => Term::Var(new.to_string()),
             Term::App(f, args) => {
-                let args: Vec<Term> = args.iter().map(|a| a.beta()).collect();
-                if f == "@" && !args.is_empty() && !matches!(args[0], Term::Meta(_)) {
-                    apply_term(&args[0], &args[1..])
-                } else {
-                    Term::App(f.clone(), args)
-                }
+                let f = if f == old { new.to_string() } else { f.clone() };
+                Term::App(f, args.iter().map(|a| a.rename_fn(old, new)).collect())
             }
             _ => self.clone(),
         }
@@ -318,8 +264,32 @@ impl Formula {
         }
     }
 
-    pub fn beta(&self) -> Formula {
-        self.map_terms(&|t| t.beta())
+    pub fn rename_fn(&self, old: &str, new: &str) -> Formula {
+        self.map_terms(&|t| t.rename_fn(old, new))
+    }
+
+    /// 束縛変数の型を書き換える（図式のソート変数の具体化など）
+    pub fn map_sorts(&self, g: &impl Fn(&str) -> String) -> Formula {
+        match self {
+            Formula::Atom(..) | Formula::Bot => self.clone(),
+            Formula::Imp(a, b) => Formula::Imp(Box::new(a.map_sorts(g)), Box::new(b.map_sorts(g))),
+            Formula::And(a, b) => Formula::And(Box::new(a.map_sorts(g)), Box::new(b.map_sorts(g))),
+            Formula::Or(a, b) => Formula::Or(Box::new(a.map_sorts(g)), Box::new(b.map_sorts(g))),
+            Formula::Forall(x, t, b) => Formula::Forall(x.clone(), g(t), Box::new(b.map_sorts(g))),
+            Formula::Exists(x, t, b) => Formula::Exists(x.clone(), g(t), Box::new(b.map_sorts(g))),
+        }
+    }
+
+    /// 同時代入 φ[x₁ := t₁, …]（tᵢ の中の変数が xⱼ と同じ名前でも混ざらない）
+    pub fn subst_many(&self, subs: &[(String, Term)]) -> Formula {
+        let mut f = self.clone();
+        for (i, (x, _)) in subs.iter().enumerate() {
+            f = f.subst(x, &Term::Var(format!("%{i}")));
+        }
+        for (i, (_, t)) in subs.iter().enumerate() {
+            f = f.subst(&format!("%{i}"), t);
+        }
+        f
     }
 
     /// 現れる述語の名前
@@ -356,10 +326,6 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                 ("^", [a, Term::Num(2)]) => (format!("{}²", show_term(a, 5)), 4),
                 ("^", [a, b]) => (format!("{}^{}", show_term(a, 5), show_term(b, 5)), 4),
                 ("abs", [a]) => (format!("|{}|", show_term(a, 0)), 5),
-                ("@", [h, rest @ ..]) => {
-                    let a: Vec<String> = rest.iter().map(|a| show_term(a, 0)).collect();
-                    (format!("{}({})", show_term(h, 5), a.join(", ")), 5)
-                }
                 _ => {
                     let a: Vec<String> = args.iter().map(|a| show_term(a, 0)).collect();
                     (format!("{}({})", f, a.join(", ")), 5)
@@ -390,8 +356,13 @@ pub fn bounded(x: &str, guard: &Formula) -> Option<(String, Term)> {
     None
 }
 
+/// 表示しない型：書かれていない型（?）・ソート変数（'a）・推論途中の型（?σ1）
+fn hidden_sort(ty: &str) -> bool {
+    ty == "?" || ty.starts_with('\'') || ty.starts_with("?σ")
+}
+
 fn binder(q: &str, x: &str, ty: &str) -> String {
-    if ty == "?" {
+    if hidden_sort(ty) {
         format!("{q}{x}")
     } else {
         format!("{q}{x}:{ty}")
@@ -757,10 +728,6 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     ),
                     3,
                 ),
-                ("@", [h, rest @ ..]) => {
-                    let a: Vec<String> = rest.iter().map(|a| show_term_latex(a, 0)).collect();
-                    (format!("{}({})", show_term_latex(h, 5), a.join(", ")), 5)
-                }
                 ("lim", [sub, body]) => (
                     format!(
                         "\\lim_{{{}}} {}",
@@ -785,7 +752,7 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
 
 fn binder_latex(q: &str, x: &str, ty: &str) -> String {
     let xl = ident_to_latex(x);
-    if ty == "?" {
+    if hidden_sort(ty) {
         format!("{q} {xl}")
     } else {
         format!("{q} {xl} \\in {}", ident_to_latex(ty))

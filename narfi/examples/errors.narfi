@@ -2,8 +2,8 @@
 
 -- (1) N が x に依存しているのに、N(ε) と宣言している
 thm wrong.dependency :
-  conv : ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
-  ⊢ ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
+  conv : ∀x:ℝ. ∀ε:ℝ>0. ∃N:ℕ. P(x, ε, N)
+  ⊢ ∀x:ℝ. ∀ε:ℝ>0. ∃N:ℕ. P(x, ε, N)
 
 Fix x
   Fix ε | hε
@@ -14,8 +14,8 @@ Fix x
 
 -- (2) 各点収束から一様収束を出そうとする：N を選ぶ時点で x はまだない
 thm pointwise.to.uniform :
-  conv : ∀x:ℝ. ∀ε>0. ∃N:ℕ. P(x, ε, N)
-  ⊢ ∀ε>0. ∃N:ℕ. ∀x:ℝ. P(x, ε, N)
+  conv : ∀x:ℝ. ∀ε:ℝ>0. ∃N:ℕ. P(x, ε, N)
+  ⊢ ∀ε:ℝ>0. ∃N:ℕ. ∀x:ℝ. P(x, ε, N)
 
 Fix ε | hε
   Obtain N, hN : conv(x, ε, hε)

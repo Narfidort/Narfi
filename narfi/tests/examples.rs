@@ -18,7 +18,12 @@ fn correct_proofs_pass() {
 
 #[test]
 fn wrong_proofs_fail() {
-    for f in ["examples/errors.narfi", "tests/unsound.narfi", "tests/unsound_defs.narfi"] {
+    for f in [
+        "examples/errors.narfi",
+        "tests/unsound.narfi",
+        "tests/unsound_defs.narfi",
+        "tests/unsound_sorts.narfi",
+    ] {
         let out = run(&[f]);
         let passed: Vec<&str> = out.lines().filter(|l| l.trim_start().starts_with('✓')).collect();
         assert!(passed.is_empty(), "{f} で通ってしまった証明: {passed:?}\n{out}");

@@ -6,12 +6,12 @@ Fix x, y
   refl
 
 thm u.linarith :
-  h : x < 3
+  x : ℝ, h : x < 3
   ⊢ x < 2
 linarith
 
 thm u.ring :
-  ⊢ ∀a. ∀b. (a + b)² = a² + b²
+  ⊢ ∀a:ℝ. ∀b:ℝ. (a + b)² = a² + b²
 Fix a, b
   ring
 
@@ -32,16 +32,16 @@ Fix y
   hx
 
 thm u.forall.swap :
-  h : ∃x. ∀y. R(x, y)
-  ⊢ ∀y. ∃x. R(x, y)
+  h : ∃x:ℕ. ∀y:ℕ. R(x, y)
+  ⊢ ∀y:ℕ. ∃x:ℕ. R(x, y)
 Fix y
   Obtain x, hx : h
   choose y
   hx(y)
 
 thm u.exists.swap :
-  h : ∀y. ∃x. R(x, y)
-  ⊢ ∃x. ∀y. R(x, y)
+  h : ∀y:ℕ. ∃x:ℕ. R(x, y)
+  ⊢ ∃x:ℕ. ∀y:ℕ. R(x, y)
 Fix y
   Obtain x, hx : h(y)
   choose x
@@ -67,13 +67,13 @@ thm u.contra :
 contradiction h k
 
 thm u.chain :
-  h : a < b
+  a : ℝ, b : ℝ, h : a < b
   ⊢ b < a
 a
   < b    by h
 
 thm u.chain.dir :
-  h1 : a < b, h2 : c < b
+  a : ℝ, b : ℝ, c : ℝ, h1 : a < b, h2 : c < b
   ⊢ a < c
 a
   < b    by h1

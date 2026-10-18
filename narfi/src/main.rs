@@ -1,12 +1,14 @@
 mod arith;
-mod check;
+mod elab;
+mod kernel;
 mod module;
 mod parser;
 mod prose;
+mod sorts;
 mod syntax;
 mod web;
 
-use check::{Report, check_module};
+use elab::{Report, check_module};
 use module::Loader;
 use std::path::Path;
 use std::process::ExitCode;
@@ -72,7 +74,13 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let reports = check_module(&mut env, &m, false, false);
+            let reports = match check_module(&mut env, &m, false, false) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("エラー {path}:{}: {}", e.line, e.msg);
+                    return ExitCode::FAILURE;
+                }
+            };
             let decls: Vec<&parser::Decl> = m.decls().collect();
 
             if mode == "prose" {
@@ -148,7 +156,19 @@ fn main() -> ExitCode {
                 continue;
             }
         };
-        for r in check_module(&mut env, &m, trace, false) {
+        let reports = match check_module(&mut env, &m, trace, false) {
+            Ok(r) => r,
+            Err(e) => {
+                if diag {
+                    println!("ERROR\t{}\t{}", e.line, esc(&e.msg));
+                    return ExitCode::FAILURE;
+                }
+                println!("  エラー  {path}:{}: {}", e.line, e.msg);
+                failed += 1;
+                continue;
+            }
+        };
+        for r in reports {
             if !r.is_axiom {
                 total += 1;
             }
@@ -207,7 +227,7 @@ fn print_report(path: &str, r: &Report) {
                 .cloned()
                 .collect();
             if !oracles.is_empty() {
-                notes.push(format!("自動証明: {}", oracles.join(", ")));
+                notes.push(format!("算術: {}", oracles.join(", ")));
             }
             let notes = if notes.is_empty() {
                 String::new()

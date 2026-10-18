@@ -1,6 +1,6 @@
 //! Narfi の AST から「自然な日本語の証明（レポート・板書用）」「LaTeX ソース」「日本語シュガー Narfi」を生成する。
 
-use crate::check::StepTrace;
+use crate::elab::StepTrace;
 use crate::parser::{Choice, CtxItem, Decl, Item, Just, Stmt, StmtKind};
 use crate::syntax::{Term, ident_to_latex, rel_to_latex};
 
@@ -46,12 +46,29 @@ fn find_hyp_formula_latex(
     None
 }
 
+/// `x ∈ ℝ` / `a : ℕ → ℝ` の右側（関数型は ∈ ではなく : で書く）
+fn sort_decl_latex(t: &str) -> String {
+    if t.contains('→') {
+        let parts: Vec<String> = t
+            .split(' ')
+            .map(|w| match w {
+                "→" => "\\to".to_string(),
+                "×" => "\\times".to_string(),
+                _ => ident_to_latex(w),
+            })
+            .collect();
+        format!(": {}", parts.join(" "))
+    } else {
+        format!("\\in {}", ident_to_latex(t))
+    }
+}
+
 pub fn decl_header_latex(d: &Decl) -> String {
     let mut parts = Vec::new();
     for c in &d.ctx {
         match c {
             CtxItem::Var(x, t) => {
-                parts.push(format!("{} \\in {}", ident_to_latex(x), ident_to_latex(t)))
+                parts.push(format!("{} {}", ident_to_latex(x), sort_decl_latex(t)))
             }
             CtxItem::Hyp(h, f) => parts.push(format!("{} : {}", ident_to_latex(h), f.to_latex())),
         }
@@ -88,8 +105,11 @@ pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> 
     let mut hyp_items = Vec::new();
     for c in &d.ctx {
         match c {
+            CtxItem::Var(x, t) if t.contains('→') => {
+                hyp_items.push(format!("関数 ${} {}$", ident_to_latex(x), sort_decl_latex(t)));
+            }
             CtxItem::Var(x, t) => {
-                hyp_items.push(format!("変数 ${} \\in {}$", ident_to_latex(x), ident_to_latex(t)));
+                hyp_items.push(format!("変数 ${} {}$", ident_to_latex(x), sort_decl_latex(t)));
             }
             CtxItem::Hyp(h, f) => {
                 hyp_items.push(format!(

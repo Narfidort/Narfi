@@ -6,7 +6,7 @@
 //!   3. 標準ライブラリ `narfi/lib/`
 //! 読み込んだファイルはその場で検査され、定理・定義・notation が環境に入る。
 
-use crate::check::{Env, Report, check_module};
+use crate::elab::{Env, Report, check_module};
 use crate::parser::{Module, ParseError, parse_module, parse_standalone};
 use crate::syntax::reset_syntax;
 use std::collections::HashSet;
@@ -27,8 +27,11 @@ impl Loader {
         reset_syntax();
         let mut env = Env::default();
         let prelude = parse_standalone(PRELUDE).expect("prelude のパースに失敗");
-        for r in check_module(&mut env, &prelude, false, true) {
-            assert!(r.err.is_none(), "prelude の定理 {} が通らない", r.name);
+        let reports = check_module(&mut env, &prelude, false, true).unwrap_or_else(|e| panic!("prelude:{}: {}", e.line, e.msg));
+        for r in reports {
+            if let Some(e) = &r.err {
+                panic!("prelude の定理 {} が通らない: {}", r.name, e.msg);
+            }
         }
         let mut search: Vec<PathBuf> = std::env::var("NARFI_PATH")
             .map(|v| v.split(':').filter(|s| !s.is_empty()).map(PathBuf::from).collect())
@@ -101,7 +104,10 @@ impl Loader {
             Err(e) if e.msg.starts_with("循環 import") => return err(e.msg),
             Err(e) => return err(format!("import {name}: {shown}:{}: {}", e.line, e.msg)),
         };
-        let reports: Vec<Report> = check_module(env, &m, false, false);
+        let reports: Vec<Report> = match check_module(env, &m, false, false) {
+            Ok(r) => r,
+            Err(e) => return err(format!("import {name}: {shown}:{}: {}", e.line, e.msg)),
+        };
         if let Some(r) = reports.iter().find(|r| r.err.is_some()) {
             let e = r.err.as_ref().unwrap();
             return err(format!(
@@ -124,7 +130,7 @@ pub fn load_and_check(src: &str, file: Option<&Path>) -> Result<(Env, Module, Ve
         Some(f) => ld.parse_file(&mut env, src, f)?,
         None => ld.parse(&mut env, src, None)?,
     };
-    let reports = check_module(&mut env, &m, false, false);
+    let reports = check_module(&mut env, &m, false, false)?;
     Ok((env, m, reports))
 }
 

@@ -1,7 +1,7 @@
--- 数列の極限：a ⟶ α は「a は α に収束する」
+-- 数列の極限：a ⟶ α は「数列 a は α に収束する」
 -- ASCII では a \longrightarrow alpha（または a \lto alpha）と書ける。
 
 import analysis.real
 
-def is_lim(a, α) := ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
+def is_lim(a : ℕ → ℝ, α : ℝ) := ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
 notation a "⟶" α := is_lim(a, α)

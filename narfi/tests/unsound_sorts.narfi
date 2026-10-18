@@ -1,0 +1,52 @@
+-- v2：型（ソート）を間違えた証明。1本も通ってはいけない。
+
+-- ℕ には引き算がない（0 - 1 の値が決まらない）
+thm u.nat.sub :
+  n : ℕ
+  ⊢ n - 1 < n
+
+linarith
+
+
+-- ℝ についての仮定を ℕ の変数に使うことはできない（埋め込みは自動では入れない）
+thm u.nat.real :
+  n : ℕ,
+  h : ∀x:ℝ. x ≥ 0 → x · x ≥ 0
+  ⊢ n · n ≥ 0
+
+h(n, linarith)
+
+
+-- 型の違う不等式を混ぜて linarith に渡すことはできない
+thm u.mixed :
+  n : ℕ, x : ℝ,
+  h : n < 3
+  ⊢ x < 3
+
+linarith
+
+
+-- 型が決まらない変数は使えない（ℕ と ℝ では x + 1 > x の意味が同じでも、型を書かせる）
+thm u.ambiguous :
+  ⊢ ∀x. x + 1 > x
+
+Fix x
+  linarith
+
+
+-- ℤ には割り算がない
+thm u.int.div :
+  x : ℤ
+  ⊢ x / 2 ≤ x
+
+sorry
+
+
+-- 関数記号の型を取り違える
+thm u.fn.sort :
+  a : ℕ → ℕ,
+  h : ∀n:ℕ. a(n) > 0
+  ⊢ ∀x:ℝ. a(x) > 0
+
+Fix x
+  h(x)

@@ -103,9 +103,10 @@ Fix m
         = S(k) + m   by eq.symm(succ_add(k, m))
 
 
-axiom pos_half : h : x > 0 ⊢ x/2 > 0
+axiom pos_half : x : ℝ, h : x > 0 ⊢ x/2 > 0
 
 thm ex4.chain :
+  x : ℝ, y : ℝ, z : ℝ,
   h1 : x < y, h2 : y ≤ z
   ⊢ x < z
 
@@ -115,7 +116,7 @@ x
 
 
 thm ex4.smaller :
-  ⊢ ∀ε>0. ∃δ>0. δ < ε
+  ⊢ ∀ε:ℝ>0. ∃δ:ℝ>0. δ < ε
 
 Fix ε | hε
   choose ε/2, pos_half(hε)
