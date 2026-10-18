@@ -2,7 +2,10 @@
 //!
 //! 行指向で読む。字下げでスコープ（ブロック）を作り、各行を再帰下降でパースする。
 
-use crate::syntax::{Formula, RELS, Term, not};
+use crate::syntax::{
+    Formula, Notation, RELS, Term, not, notation_for_sym, to_apply_form, with_syntax,
+};
+use std::collections::BTreeSet;
 
 // ================================================================ 宣言・文
 
@@ -20,6 +23,41 @@ pub struct Decl {
     pub ctx: Vec<CtxItem>,
     pub concl: Formula,
     pub body: Vec<Stmt>,
+}
+
+/// `def name(params) := body`。body は引数が関数の位置に現れる所を `@` 形にしたもの。
+#[derive(Debug, Clone)]
+pub struct Def {
+    pub name: String,
+    pub line: usize,
+    /// (引数名, 型)。型は書かれていなければ "?"（いまは検査に使わない）
+    pub params: Vec<(String, String)>,
+    pub body: Formula,
+    pub src: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    Decl(Decl),
+    Def(Def),
+    /// notation 宣言（読み込み時に記法の表へ登録済み）。src は元の行
+    Notation { src: String },
+    Import { path: String },
+}
+
+/// 1ファイル分。宣言を書かれた順に持つ。
+#[derive(Debug, Clone, Default)]
+pub struct Module {
+    pub items: Vec<Item>,
+}
+
+impl Module {
+    pub fn decls(&self) -> impl Iterator<Item = &Decl> {
+        self.items.iter().filter_map(|i| match i {
+            Item::Decl(d) => Some(d),
+            _ => None,
+        })
+    }
 }
 
 /// 根拠。カンマ区切りの列（2個以上なら ∧導入）。各要素は項の形で持ち、検査時に証拠として解釈する。
@@ -99,6 +137,11 @@ pub enum StmtKind {
         term: Term,
     },
     Therefore(Formula),
+    /// `unfold is_lim` / `unfold is_lim at h₁, h₂`
+    Unfold {
+        names: Vec<String>,
+        at: Vec<String>,
+    },
     Close(Just),
     Chain {
         start: Term,
@@ -259,6 +302,16 @@ pub fn normalize_japanese_sugar(raw: &str) -> String {
         }
     }
 
+    // Unfold: `is_lim を展開する` / `h の is_lim を展開する`
+    for suffix in ["の定義を展開する", "を展開する"] {
+        if let Some(body) = s.strip_suffix(suffix) {
+            if let Some((hs, names)) = body.split_once('の') {
+                return format!("unfold {} at {}", names.trim(), hs.trim());
+            }
+            return format!("unfold {}", body.trim());
+        }
+    }
+
     // Cases / Induction: `h で場合分けする` / `n に関する帰納法` / `n で帰納法を行う`
     for suffix in ["で場合分けする", "について場合分けする", "で場合分け"] {
         if let Some(h) = s.strip_suffix(suffix) {
@@ -292,6 +345,8 @@ pub fn normalize_japanese_sugar(raw: &str) -> String {
         ("補題 ", "thm "),
         ("命題 ", "thm "),
         ("公理 ", "axiom "),
+        ("定義 ", "def "),
+        ("記法 ", "notation "),
         ("固定 ", "Fix "),
         ("任意に ", "Fix "),
         ("仮定 ", "assume "),
@@ -408,6 +463,7 @@ fn tex_macro_replacement(cmd: &str) -> Option<&'static str> {
         "tf" | "therefore" => "∴",
         "because" => "by",
         "impby" | "Leftarrow" | "impliedby" => "⇐",
+        "longrightarrow" | "lto" => "⟶",
         "le" | "leq" => "≤",
         "ge" | "geq" => "≥",
         "ne" | "neq" => "≠",
@@ -582,14 +638,43 @@ fn extract_braced(cs: &[char], start: usize) -> Option<(String, usize)> {
 
 pub fn lex(s: &str, line: usize) -> PResult<Vec<Tok>> {
     let norm = expand_tex_macros(&normalize_japanese_sugar(s));
+    lex_raw(&norm, line, true)
+}
+
+/// 記号の notation（`⟶` など、名前の形でないもの）。長いものから試す。
+fn symbolic_notations() -> Vec<Vec<char>> {
+    let mut v: Vec<Vec<char>> = with_syntax(|t| {
+        t.notations
+            .iter()
+            .map(|n| n.sym.chars().collect::<Vec<char>>())
+            .filter(|cs| !is_ident_start(cs[0]))
+            .collect()
+    });
+    v.sort_by_key(|cs| std::cmp::Reverse(cs.len()));
+    v
+}
+
+fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
     let cs: Vec<char> = norm.chars().collect();
+    let nots = if with_notations {
+        symbolic_notations()
+    } else {
+        vec![]
+    };
     let mut i = 0;
     let mut out = Vec::new();
-    while i < cs.len() {
+    'outer: while i < cs.len() {
         let c = cs[i];
         if c.is_whitespace() {
             i += 1;
             continue;
+        }
+        for n in &nots {
+            if cs[i..].starts_with(n) {
+                out.push(Tok::Sym(n.iter().collect()));
+                i += n.len();
+                continue 'outer;
+            }
         }
         if is_type_char(c) {
             out.push(Tok::Ident(c.to_string()));
@@ -700,7 +785,9 @@ pub fn lex(s: &str, line: usize) -> PResult<Vec<Tok>> {
             _ => {
                 return Err(ParseError {
                     line,
-                    msg: format!("読めない文字: '{c}'"),
+                    msg: format!(
+                        "読めない文字: '{c}'（新しい記号は notation で宣言してから使う）"
+                    ),
                 });
             }
         };
@@ -792,6 +879,13 @@ impl P {
     fn peek_rel(&self) -> Option<String> {
         match self.peek() {
             Some(Tok::Sym(s)) if RELS.contains(&s.as_str()) => Some(s.clone()),
+            _ => None,
+        }
+    }
+    /// notation で宣言した中置記号
+    fn peek_notation(&self) -> Option<Notation> {
+        match self.peek() {
+            Some(Tok::Sym(s)) | Some(Tok::Ident(s)) => notation_for_sym(s),
             _ => None,
         }
     }
@@ -899,7 +993,11 @@ impl P {
             let save = self.pos;
             self.pos += 1;
             if let Ok(f) = self.formula() {
-                if self.eat_sym(")") && self.peek_rel().is_none() && !self.is_term_op() {
+                if self.eat_sym(")")
+                    && self.peek_rel().is_none()
+                    && self.peek_notation().is_none()
+                    && !self.is_term_op()
+                {
                     return Ok(f);
                 }
             }
@@ -915,13 +1013,25 @@ impl P {
                 Formula::Atom(r, vec![t, u])
             });
         }
-        match t {
-            Term::Var(p) => Ok(Formula::Atom(p, vec![])),
-            Term::App(p, args) if p.chars().next().is_some_and(is_ident_start) => {
-                Ok(Formula::Atom(p, args))
-            }
-            _ => self.err(format!("論理式が必要（{} の位置）", self.here())),
+        if let Some(n) = self.peek_notation() {
+            self.pos += 1;
+            let u = self.term()?;
+            return Ok(n.atom(t, u));
         }
+        let (p, args) = match t {
+            Term::Var(p) => (p, vec![]),
+            Term::App(p, args) if p.chars().next().is_some_and(is_ident_start) => (p, args),
+            _ => return self.err(format!("論理式が必要（{} の位置）", self.here())),
+        };
+        if let Some(k) = with_syntax(|t| t.defs.get(&p).copied()) {
+            if k != args.len() {
+                return self.err(format!(
+                    "`{p}` は引数 {k} 個の定義だが、{} 個渡されている",
+                    args.len()
+                ));
+            }
+        }
+        Ok(Formula::Atom(p, args))
     }
     fn is_term_op(&self) -> bool {
         ["+", "-", "·", "/", "^", "²", "³", "∪", "∩", "\\"]
@@ -1084,10 +1194,16 @@ fn indent_of(s: &str) -> usize {
         .sum()
 }
 
-fn starts_decl(text: &str) -> bool {
+fn decl_keyword(text: &str) -> String {
     let norm = normalize_japanese_sugar(text);
-    let w = norm.split_whitespace().next().unwrap_or("");
-    w == "thm" || w == "axiom"
+    norm.split_whitespace().next().unwrap_or("").to_string()
+}
+
+fn starts_decl(text: &str) -> bool {
+    matches!(
+        decl_keyword(text).as_str(),
+        "thm" | "axiom" | "def" | "notation" | "import"
+    )
 }
 
 fn is_axiom_decl(text: &str) -> bool {
@@ -1095,7 +1211,12 @@ fn is_axiom_decl(text: &str) -> bool {
     norm.starts_with("axiom")
 }
 
-pub fn parse_file(src: &str) -> PResult<Vec<Decl>> {
+/// ファイルを読む。`import` に出会うとその場で on_import を呼ぶ（読み込み側が
+/// 先のファイルを検査し、notation を登録する）。notation は宣言した行より後ろで使える。
+pub fn parse_module(
+    src: &str,
+    on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
+) -> PResult<Module> {
     let mut lines: Vec<Line> = Vec::new();
     let mut in_fence = false;
     for (i, raw) in src.lines().enumerate() {
@@ -1117,15 +1238,49 @@ pub fn parse_file(src: &str) -> PResult<Vec<Decl>> {
         }
     }
 
-    let mut decls = Vec::new();
+    let mut items = Vec::new();
     let mut i = 0;
     while i < lines.len() {
         let l = &lines[i];
         if l.indent != 0 || !starts_decl(&l.text) {
             return Err(ParseError {
                 line: l.no,
-                msg: "トップレベルには thm か axiom を書く".into(),
+                msg: "トップレベルには thm・axiom・def・notation・import のどれかを書く".into(),
             });
+        }
+        match decl_keyword(&l.text).as_str() {
+            "import" => {
+                let path = parse_import(&l.text, l.no)?;
+                on_import(&path, l.no)?;
+                items.push(Item::Import { path });
+                i += 1;
+                continue;
+            }
+            "notation" => {
+                let n = parse_notation(&l.text, l.no)?;
+                with_syntax(|t| t.notations.push(n));
+                items.push(Item::Notation {
+                    src: l.text.clone(),
+                });
+                i += 1;
+                continue;
+            }
+            "def" => {
+                // 字下げされた続きの行も定義の本体
+                let mut text = l.text.clone();
+                let no = l.no;
+                while i + 1 < lines.len() && lines[i + 1].indent > 0 {
+                    i += 1;
+                    text.push(' ');
+                    text.push_str(&lines[i].text);
+                }
+                i += 1;
+                let d = parse_def(&text, no)?;
+                register_def(&d)?;
+                items.push(Item::Def(d));
+                continue;
+            }
+            _ => {}
         }
         let is_axiom = is_axiom_decl(&l.text);
         // 見出し：thm は ⊢ を含む行まで、axiom は字下げされた続きの行まで
@@ -1170,9 +1325,202 @@ pub fn parse_file(src: &str) -> PResult<Vec<Decl>> {
                 .collect();
             decl.body = parse_block(&tree, &tyenv)?;
         }
-        decls.push(decl);
+        items.push(Item::Decl(decl));
     }
-    Ok(decls)
+    Ok(Module { items })
+}
+
+/// import を許さない読み込み（prelude 用）
+pub fn parse_standalone(src: &str) -> PResult<Module> {
+    parse_module(src, &mut |_, line| {
+        Err(ParseError {
+            line,
+            msg: "ここでは import は使えない".into(),
+        })
+    })
+}
+
+/// `import analysis.limits`
+fn parse_import(text: &str, line: usize) -> PResult<String> {
+    let mut p = P::new(lex(text, line)?, line, vec![]);
+    p.ident()?;
+    let path = p.ident()?;
+    p.expect_end()?;
+    Ok(path)
+}
+
+/// `notation a "⟶" α := is_lim(a, α)`
+fn parse_notation(text: &str, line: usize) -> PResult<Notation> {
+    let err = |msg: String| Err(ParseError { line, msg });
+    let norm = normalize_japanese_sugar(text);
+    let rest = norm.trim_start().strip_prefix("notation").unwrap_or(&norm);
+    let (lhs, rest) = match rest.split_once('"') {
+        Some(x) => x,
+        None => return err("notation の記号は \"…\" で囲む：notation a \"⟶\" α := is_lim(a, α)".into()),
+    };
+    let (raw_sym, rest) = match rest.split_once('"') {
+        Some(x) => x,
+        None => return err("notation の記号の \" が閉じていない".into()),
+    };
+    let raw_sym = raw_sym.trim();
+    let sym = expand_tex_macros(raw_sym).trim().to_string();
+    if sym.is_empty() || sym.chars().any(|c| c.is_whitespace() || c == '"') {
+        return err(format!("notation の記号「{sym}」には空白を含められない"));
+    }
+    // 組み込みの記号（→ < + など）と同じなら、式の読み方が変わってしまうので禁止
+    if let Ok(toks) = lex_raw(&sym, line, false) {
+        if let [Tok::Sym(b)] = toks.as_slice() {
+            return err(format!(
+                "記号「{raw_sym}」は組み込みの「{b}」と衝突する（例えば \"⟶\"（\\longrightarrow）を使う）"
+            ));
+        }
+    }
+    if notation_for_sym(&sym).is_some() {
+        return err(format!("記号「{sym}」の notation はすでにある"));
+    }
+    let mut p = P::new(lex_raw(&expand_tex_macros(lhs), line, false)?, line, vec![]);
+    let l = p.ident()?;
+    p.expect_end()?;
+    let mut p = P::new(lex(rest, line)?, line, vec![]);
+    let r = p.ident()?;
+    p.expect_sym(":=")?;
+    let target = p.formula()?;
+    p.expect_end()?;
+    let (pred, swap) = match &target {
+        Formula::Atom(pred, ts) if l != r => match ts.as_slice() {
+            [Term::Var(x), Term::Var(y)] if *x == l && *y == r => (pred.clone(), false),
+            [Term::Var(x), Term::Var(y)] if *x == r && *y == l => (pred.clone(), true),
+            _ => return err(format!("notation の右辺は {pred}({l}, {r}) の形にする")),
+        },
+        _ => {
+            return err(format!(
+                "notation の右辺は述語の適用 P({l}, {r}) の形にする（「{target}」）"
+            ));
+        }
+    };
+    let latex = notation_latex(raw_sym, &sym);
+    Ok(Notation {
+        sym,
+        pred,
+        swap,
+        latex,
+    })
+}
+
+fn notation_latex(raw: &str, sym: &str) -> String {
+    if raw.starts_with('\\') {
+        return raw.to_string();
+    }
+    let known = match sym {
+        "⟶" => Some("\\longrightarrow"),
+        "⇝" => Some("\\rightsquigarrow"),
+        "⇀" => Some("\\rightharpoonup"),
+        "↦" => Some("\\mapsto"),
+        "≺" => Some("\\prec"),
+        "≻" => Some("\\succ"),
+        "≼" => Some("\\preceq"),
+        "≽" => Some("\\succeq"),
+        "⊥⊥" => Some("\\perp\\!\\!\\!\\perp"),
+        _ => None,
+    };
+    match known {
+        Some(k) => k.to_string(),
+        None if sym.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => {
+            format!("\\mathrel{{\\mathrm{{{}}}}}", sym.replace('_', "\\_"))
+        }
+        None => format!("\\mathrel{{\\text{{{sym}}}}}"),
+    }
+}
+
+/// `def is_lim(a, α) := φ` / `def is_lim(a : ℕ → ℝ, α : ℝ) : Prop := φ`
+fn parse_def(text: &str, line: usize) -> PResult<Def> {
+    let mut p = P::new(lex(text, line)?, line, vec![]);
+    p.ident()?; // def
+    let name = p.ident()?;
+    let mut params: Vec<(String, String)> = Vec::new();
+    if p.eat_sym("(") && !p.eat_sym(")") {
+        loop {
+            let x = p.ident()?;
+            let ty = if p.eat_sym(":") {
+                // 型は `ℕ → ℝ` のような列もありうるので、`,` か `)` までをそのまま持つ
+                let mut parts = Vec::new();
+                while !p.at_end() && !p.is_sym(",") && !p.is_sym(")") {
+                    parts.push(p.here().trim_matches('\'').to_string());
+                    p.pos += 1;
+                }
+                parts.join(" ")
+            } else {
+                "?".to_string()
+            };
+            if params.iter().any(|(y, _)| *y == x) {
+                return p.err(format!("引数 `{x}` が2回書かれている"));
+            }
+            params.push((x, ty));
+            if p.eat_sym(")") {
+                break;
+            }
+            p.expect_sym(",")?;
+        }
+    }
+    if p.eat_sym(":") {
+        let ret = p.ident()?;
+        if ret != "Prop" {
+            return p.err(format!(
+                "いまの def は命題（Prop）の定義だけを扱う（`: {ret}` は未対応。項には let を使う）"
+            ));
+        }
+    }
+    p.expect_sym(":=")?;
+    p.tyenv = params
+        .iter()
+        .filter(|(_, t)| TYPE_NAMES.contains(&t.as_str()))
+        .cloned()
+        .collect();
+    let body = p.formula()?;
+    p.expect_end()?;
+    let names: Vec<String> = params.iter().map(|(x, _)| x.clone()).collect();
+    let body = to_apply_form(&body, &names);
+    for v in body.free_vars() {
+        if !names.contains(&v) {
+            return p.err(format!(
+                "定義の本体の `{v}` が引数にない（def {name}(…, {v}) のように引数に加える）"
+            ));
+        }
+    }
+    Ok(Def {
+        name,
+        line,
+        params,
+        body,
+        src: text.to_string(),
+    })
+}
+
+/// 定義の名前を表に登録する。再帰的な定義（展開が止まらなくなる）はここで止める。
+fn register_def(d: &Def) -> PResult<()> {
+    let mut preds = BTreeSet::new();
+    d.body.preds(&mut preds);
+    let err = |msg: String| Err(ParseError { line: d.line, msg });
+    if RELS.contains(&d.name.as_str()) {
+        return err(format!("`{}` は組み込みの関係なので定義できない", d.name));
+    }
+    if preds.contains(&d.name) {
+        return err(format!("`{}` の定義の中で `{}` 自身を使っている（再帰的な定義は未対応）", d.name, d.name));
+    }
+    with_syntax(|t| {
+        if t.defs.contains_key(&d.name) {
+            return err(format!("`{}` はすでに定義されている", d.name));
+        }
+        if t.def_preds.contains(&d.name) {
+            return err(format!(
+                "`{}` は前の定義の中で（未定義の述語として）使われているので、あとから定義できない",
+                d.name
+            ));
+        }
+        t.defs.insert(d.name.clone(), d.params.len());
+        t.def_preds.extend(preds);
+        Ok(())
+    })
 }
 
 fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
@@ -1436,6 +1784,24 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             p.expect_end()?;
             no_children(n)?;
             StmtKind::Let { name, term }
+        }
+        "unfold" => {
+            p.pos += 1;
+            let mut names = vec![p.ident()?];
+            while p.eat_sym(",") {
+                names.push(p.ident()?);
+            }
+            let mut at = Vec::new();
+            if p.is_ident("at") {
+                p.pos += 1;
+                at.push(p.ident()?);
+                while p.eat_sym(",") {
+                    at.push(p.ident()?);
+                }
+            }
+            p.expect_end()?;
+            no_children(n)?;
+            StmtKind::Unfold { names, at }
         }
         "∴" => {
             p.pos += 1;

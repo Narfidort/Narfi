@@ -1,0 +1,45 @@
+-- def・notation・import：極限の加法性を a ⟶ α の記法で書く
+
+import analysis.limits
+
+
+thm conv.add :
+  conv_a : a ⟶ α,
+  conv_b : b ⟶ β
+  ⊢ (a + b) ⟶ (α + β)
+
+Fix ε | hε
+  Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
+  Obtain N₂(ε), hN₂ : conv_b(ε/2, pos_half(hε))
+  let N := max(N₁, N₂)
+  choose N
+  Fix n | hn
+    |(a(n) + b(n)) - (α + β)|
+      ≤ |a(n) - α| + |b(n) - β|   by triangle(a(n) - α, b(n) - β)
+      < ε/2 + ε/2                  by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
+      = ε                          by ring
+  ∴ ∀n≥N. |(a(n) + b(n)) - (α + β)| < ε
+
+
+-- 定理として使うときは記法のまま単一化される（展開は不要）
+thm conv.add3 :
+  ha : a ⟶ α, hb : b ⟶ β, hc : c ⟶ γ
+  ⊢ (a + b) + c ⟶ (α + β) + γ
+
+conv.add(conv.add(ha, hb), hc)
+
+
+-- 明示的に展開する：unfold と定義の同値 is_lim.def
+thm conv.unfold :
+  h : a ⟶ α
+  ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
+
+unfold is_lim at h
+h
+
+
+thm conv.fold :
+  h : ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
+  ⊢ a ⟶ α
+
+is_lim.def.right(h)

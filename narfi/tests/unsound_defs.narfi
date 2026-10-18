@@ -1,0 +1,63 @@
+-- def・notation を使った間違った証明。1本も通ってはいけない。
+
+import analysis.limits
+
+-- 別の数列の収束は出てこない
+thm wrong.other :
+  h : a ⟶ α
+  ⊢ b ⟶ α
+
+h
+
+
+-- 極限値を取り違えている
+thm wrong.limit :
+  h : a ⟶ α
+  ⊢ a ⟶ β
+
+unfold is_lim at h
+h
+
+
+-- ε/2 ではなく ε で評価すると和は 2ε になり、通らない
+thm wrong.eps :
+  conv_a : a ⟶ α,
+  conv_b : b ⟶ β
+  ⊢ (a + b) ⟶ (α + β)
+
+Fix ε | hε
+  Obtain N₁(ε), hN₁ : conv_a(ε, hε)
+  Obtain N₂(ε), hN₂ : conv_b(ε, hε)
+  let N := max(N₁, N₂)
+  choose N
+  Fix n | hn
+    |(a(n) + b(n)) - (α + β)|
+      ≤ |a(n) - α| + |b(n) - β|   by triangle(a(n) - α, b(n) - β)
+      < ε + ε                      by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))
+      = ε                          by ring
+
+
+-- 展開での変数の捕獲：極限値 n を代入しても、束縛変数 n とは別物
+thm wrong.capture :
+  h : a ⟶ n
+  ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - n| < ε
+
+unfold is_lim at h
+h
+
+
+-- 和の収束から、各項の収束は出てこない
+thm wrong.split :
+  h : (a + b) ⟶ (α + β)
+  ⊢ a ⟶ α
+
+h
+
+
+-- 定義されていない名前は unfold できない
+thm wrong.unfold :
+  h : a ⟶ α
+  ⊢ a ⟶ α
+
+unfold foo at h
+h

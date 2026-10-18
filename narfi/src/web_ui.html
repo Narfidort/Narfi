@@ -503,6 +503,10 @@ html, body {
   padding: 0 2px;
 }
 /* Blinking Caret inside structured sequence */
+.mc-sel {
+  background: rgba(82, 139, 255, 0.32);
+  border-radius: 2px;
+}
 .mc-caret {
   display: inline-block;
   width: 0;
@@ -804,6 +808,8 @@ const COMMAND_DICT = [
   { cmd: "implies", preview: "→", desc: "->", kind: "sym", ascii: "->", display: "→", cls: "" },
   { cmd: "Rightarrow", preview: "⇒", desc: "->", kind: "sym", ascii: "->", display: "→", cls: "" },
   { cmd: "iff", preview: "↔", desc: "<->", kind: "sym", ascii: "<->", display: "↔", cls: "" },
+  { cmd: "longrightarrow", preview: "⟶", desc: "notation (a ⟶ α)", kind: "sym", ascii: "\\longrightarrow", display: "⟶", cls: "" },
+  { cmd: "lto", preview: "⟶", desc: "notation (a ⟶ α)", kind: "sym", ascii: "\\longrightarrow", display: "⟶", cls: "" },
   { cmd: "leftrightarrow", preview: "↔", desc: "<->", kind: "sym", ascii: "<->", display: "↔", cls: "" },
   { cmd: "Leftrightarrow", preview: "⇔", desc: "<->", kind: "sym", ascii: "<->", display: "↔", cls: "" },
   { cmd: "impliedby", preview: "⇐", desc: "<-", kind: "sym", ascii: "<-", display: "⇐", cls: "" },
@@ -924,6 +930,10 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "cases", preview: "cases", desc: "∨-elim: cases h" },
   { cmd: "induction", preview: "induction", desc: "induction n" },
   { cmd: "let", preview: "let", desc: "local def: let x := t" },
+  { cmd: "unfold", preview: "unfold", desc: "unfold P at h" },
+  { cmd: "def", preview: "def", desc: "def P(a, b) := φ" },
+  { cmd: "notation", preview: "notation", desc: "notation a \"⟶\" b := P(a, b)" },
+  { cmd: "import", preview: "import", desc: "import analysis.limits" },
   { cmd: "contradiction", preview: "contradiction", desc: "contradiction h1 h2" },
   { cmd: "linarith", preview: "linarith", desc: "linear arithmetic solver" },
   { cmd: "ring", preview: "ring", desc: "ring normalization" },
@@ -932,8 +942,8 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "sorry", preview: "sorry", desc: "placeholder goal" }
 ];
 
-const DECL_KWS = new Set(["thm", "axiom"]);
-const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "have", "suffices", "choose", "contradiction", "cases", "Case", "induction", "let", "by"]);
+const DECL_KWS = new Set(["thm", "axiom", "def", "notation", "import"]);
+const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "have", "suffices", "choose", "contradiction", "cases", "Case", "induction", "let", "unfold", "at", "by"]);
 const JUST_KWS = new Set(["ring", "linarith", "refl", "decide", "sorry", "left", "right", "zero", "succ", "EQ1", "EQ2"]);
 const UPRIGHT_FNS = new Set(["max", "min", "sup", "inf", "sin", "cos", "tan", "exp", "log", "ln", "gcd", "lcm", "det", "dim", "ker", "im", "deg", "sgn", "mod", "Prop"]);
 
@@ -1027,6 +1037,17 @@ for (const c of COMMAND_DICT) {
   }
 }
 
+// notation で宣言された記号を補完候補に加える（/api/check の notations から）
+function registerNotations(list) {
+  for (const n of list || []) {
+    if (COMMAND_DICT.some(c => c.kind === "sym" && c.display === n.sym)) continue;
+    const ascii = /^\\[A-Za-z]+$/.test(n.latex) ? n.latex : n.sym;
+    const entry = { cmd: n.pred, preview: n.sym, desc: `notation ${n.pred}`, kind: "sym", ascii, display: n.sym, cls: "" };
+    COMMAND_DICT.push(entry);
+    if ([...n.sym].length === 1) UNICODE_TO_SYM[n.sym] = [ascii, n.sym, ""];
+  }
+}
+
 function findMatchingClose(str, openIdx, openCh, closeCh) {
   let depth = 0;
   for (let i = openIdx; i < str.length; i++) {
@@ -1096,9 +1117,16 @@ function parseAsciiToItems(str) {
       }
     }
 
-    // |...| -> Abs node (when not |- and not Fix x | h)
-    if (ch === "|" && str[i + 1] !== "-" && str[i - 1] !== " ") {
-      const nextBar = str.indexOf("|", i + 1);
+    // |...| -> Abs node。開きの | は直後に空白がないもの（`Fix x | h` の | や `|-` は除く）、
+    // 閉じの | は直前に空白がないもの。括弧の中の | は閉じとみなさない。
+    if (ch === "|" && i + 1 < str.length && str[i + 1] !== "-" && !/\s/.test(str[i + 1])) {
+      let depth = 0, nextBar = -1;
+      for (let k = i + 1; k < str.length; k++) {
+        const c = str[k];
+        if (c === "(") depth++;
+        else if (c === ")") depth--;
+        else if (c === "|" && depth === 0 && k > i + 1 && !/\s/.test(str[k - 1])) { nextBar = k; break; }
+      }
       if (nextBar > i + 1 && !str.substring(i + 1, nextBar).includes(" : ")) {
         const inner = str.substring(i + 1, nextBar);
         items.push(makeAbs(parseAsciiToItems(inner)));
@@ -1164,6 +1192,8 @@ function parseAsciiToItems(str) {
     if (str.startsWith(">=", i)) { items.push(makeSym(">=", "≥")); i += 2; continue; }
     if (str.startsWith("!=", i)) { items.push(makeSym("!=", "≠")); i += 2; continue; }
     if (str.startsWith("|-", i)) { items.push(makeSym("|-", "⊢")); i += 2; continue; }
+    const lto = str.slice(i).match(/^\\(longrightarrow|lto)(?![A-Za-z])\s?/);
+    if (lto) { items.push(makeSym("\\longrightarrow", "⟶")); i += lto[0].length; continue; }
 
     // 6. Direct Unicode symbol
     if (UNICODE_TO_SYM[ch]) {
@@ -1303,10 +1333,23 @@ function serializeSeqToAscii(seq) {
       out += it.ch;
     } else if (it.kind === "sym") {
       const wordLike = /^[A-Za-z]+$/.test(it.ascii);
+      const prev = items[i - 1];
+      // 名前の一部のギリシャ文字（hε など）は h_{eps} と書く（パーサが hε に戻す）
+      const isGreek = /^[α-ωΑ-Ω]$/.test(it.display);
+      if (isGreek && wordLike && prev && prev.kind === "char" && /[A-Za-z0-9']/.test(prev.ch)) {
+        out += `_{${it.ascii}}`;
+        continue;
+      }
       if (wordLike && out.length > 0 && isAlphaNumChar(out[out.length - 1])) {
         out += " ";
       }
       out += it.ascii;
+      // \longrightarrow などの TeX コマンドの後ろには空白を1つ置く（英字が続くと名前がつながるため。
+      // 読み込み側はこの空白を1つ読み飛ばす）
+      const nx = items[i + 1];
+      if (/^\\[A-Za-z]+$/.test(it.ascii) && nx && !(nx.kind === "char" && nx.ch === " ")) {
+        out += " ";
+      }
       const next = items[i + 1];
       const nextIsAlpha = next && ((next.kind === "char" && isAlphaNumChar(next.ch)) || (next.kind === "sym" && /^[A-Za-z]+$/.test(next.ascii)));
       const nextIsRelOrDot = next && ((next.kind === "char" && ".:,)><=".includes(next.ch)) || (next.kind === "sym" && ["<=", ">=", "!=", "in", "notin", "subset", "subseteq"].includes(next.ascii)) || next.kind === "sub" || next.kind === "sup");
@@ -1409,6 +1452,8 @@ function loadSourceIntoDoc(srcText) {
     docLines = [{ indent: 0, rootSeq: createSeq([], null, "root") }];
   }
   cursor = { lineIdx: 0, seqId: docLines[0].rootSeq.id, offset: 0 };
+  selAnchor = null;
+  resetHistory();
 }
 
 function serializeDocToAscii() {
@@ -1476,7 +1521,7 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
         else if (STEP_KWS.has(word)) cls = "mc-kw-step";
         else if (JUST_KWS.has(word)) cls = "mc-kw-just";
         else if (UPRIGHT_FNS.has(word) || word.includes(".") || word.includes("_")) cls = "mc-ident-fn";
-        else if (word.length > 3 && j < items.length && items[j].kind === "char" && items[j].ch === "(") cls = "mc-ident-fn";
+        else if (word.length > 3 || declNames.has(word)) cls = "mc-ident-fn";
         for (let k = i; k < j; k++) charClasses[k] = cls;
         i = j;
         continue;
@@ -1492,7 +1537,9 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
     if (isFocusedSeq && cursor.offset === idx) {
       html += `<span class="mc-caret"></span>`;
     }
-    html += renderSingleItemHtml(seq, items[idx], idx, charClasses[idx]);
+    const hl = selHL.get(seq.id);
+    const one = renderSingleItemHtml(seq, items[idx], idx, charClasses[idx]);
+    html += (hl && idx >= hl[0] && idx < hl[1]) ? `<span class="mc-sel">${one}</span>` : one;
   }
   if (isFocusedSeq && cursor.offset === endIdx) {
     html += `<span class="mc-caret"></span>`;
@@ -1759,6 +1806,305 @@ function renderRootSeqWithLens(rootSeq, lineNo) {
 </script>
 <script>
 // ================================================================
+// 5b. Selection, Clipboard, Undo / Redo
+// ================================================================
+//
+// 選択は「起点 selAnchor」と「終点 cursor」の2点で持つ。2点が同じ行にあれば、共通の親 Seq の
+// 中の範囲 [from, to) になる（分数のスロットの中と外にまたがるときは、分数ノードごと選ぶ）。
+// 違う行にあれば、行をまたぐ範囲になる。
+
+let selAnchor = null;     // { seqId, offset }
+let extendingSel = false; // true の間は setCursor が選択を解除しない
+let dragStart = null;     // マウスドラッグの起点
+let selHL = new Map();    // 描画用：seqId → [from, to)
+let declNames = new Set();// thm / axiom / def で宣言された名前（立体で描く）
+
+function collectDeclNames() {
+  const names = new Set();
+  for (const ln of docLines) {
+    let t = "";
+    for (const it of ln.rootSeq.items) {
+      if (it.kind !== "char") break;
+      t += it.ch;
+      if (t.length > 80) break;
+    }
+    const m = t.match(/^(?:thm|axiom|def)\s+([A-Za-z_][A-Za-z0-9_.']*)/);
+    if (m) names.add(m[1]);
+  }
+  return names;
+}
+
+function seqChain(seq) {
+  const chain = [seq];
+  let c = seq;
+  while (c.parentNode && c.parentNode.parentSeq) {
+    c = c.parentNode.parentSeq;
+    chain.push(c);
+  }
+  return chain;
+}
+
+// pos を祖先 Seq（target）の中の位置に持ち上げる。ノードの中から出るときは、そのノードの手前になる。
+function liftTo(pos, target) {
+  let seq = seqMap.get(pos.seqId);
+  let off = pos.offset, viaNode = false;
+  while (seq && seq !== target) {
+    const node = seq.parentNode;
+    if (!node || !node.parentSeq) return null;
+    off = node.parentSeq.items.indexOf(node);
+    viaNode = true;
+    seq = node.parentSeq;
+  }
+  return seq ? { off, viaNode } : null;
+}
+
+function normalizeSel() {
+  if (!selAnchor) return null;
+  const sa = seqMap.get(selAnchor.seqId), sh = seqMap.get(cursor.seqId);
+  if (!sa || !sh) return null;
+  const cur = { seqId: cursor.seqId, offset: cursor.offset };
+  const ra = getRootSeq(sa), rh = getRootSeq(sh);
+  if (ra === rh) {
+    const inH = new Set(seqChain(sh));
+    const common = seqChain(sa).find(x => inH.has(x));
+    const la = liftTo(selAnchor, common), lh = liftTo(cur, common);
+    if (!la || !lh) return null;
+    if (la.off === lh.off && !la.viaNode && !lh.viaNode) return null;
+    if (la.off === lh.off) return { mode: "seq", seq: common, from: la.off, to: la.off + 1 };
+    const [lo, hi] = la.off < lh.off ? [la, lh] : [lh, la];
+    return { mode: "seq", seq: common, from: lo.off, to: hi.viaNode ? hi.off + 1 : hi.off };
+  }
+  const ia = docLines.findIndex(l => l.rootSeq === ra);
+  const ih = docLines.findIndex(l => l.rootSeq === rh);
+  if (ia < 0 || ih < 0) return null;
+  const [a, b] = ia < ih ? [{ pos: selAnchor, line: ia }, { pos: cur, line: ih }] : [{ pos: cur, line: ih }, { pos: selAnchor, line: ia }];
+  const lf = liftTo(a.pos, docLines[a.line].rootSeq), ll = liftTo(b.pos, docLines[b.line].rootSeq);
+  if (!lf || !ll) return null;
+  return { mode: "lines", l1: a.line, o1: lf.off, l2: b.line, o2: ll.viaNode ? ll.off + 1 : ll.off };
+}
+
+function selHighlights() {
+  const m = new Map();
+  const s = normalizeSel();
+  if (!s) return m;
+  if (s.mode === "seq") {
+    m.set(s.seq.id, [s.from, s.to]);
+  } else {
+    for (let l = s.l1; l <= s.l2; l++) {
+      const r = docLines[l].rootSeq;
+      m.set(r.id, [l === s.l1 ? s.o1 : 0, l === s.l2 ? s.o2 : r.items.length]);
+    }
+  }
+  return m;
+}
+
+function selectionText() {
+  const s = normalizeSel();
+  if (!s) return "";
+  const ser = (items) => serializeSeqToAscii({ items });
+  if (s.mode === "seq") return ser(s.seq.items.slice(s.from, s.to));
+  const out = [];
+  for (let l = s.l1; l <= s.l2; l++) {
+    const ln = docLines[l], items = ln.rootSeq.items;
+    const from = l === s.l1 ? s.o1 : 0, to = l === s.l2 ? s.o2 : items.length;
+    // 行頭から選んでいるときだけ字下げも含める（途中から選んだ最初の行は字下げなし）
+    const pad = (l === s.l1 && from > 0) ? "" : "  ".repeat(ln.indent);
+    out.push(pad + ser(items.slice(from, to)));
+  }
+  return out.join("\n");
+}
+
+// 選択を消す。消すものがあったら true
+function deleteSelection() {
+  const s = normalizeSel();
+  selAnchor = null;
+  if (!s) return false;
+  if (s.mode === "seq") {
+    s.seq.items.splice(s.from, s.to - s.from);
+    cursor.lineIdx = docLines.findIndex(l => l.rootSeq === getRootSeq(s.seq));
+    cursor.seqId = s.seq.id;
+    cursor.offset = s.from;
+  } else {
+    const a = docLines[s.l1].rootSeq, b = docLines[s.l2].rootSeq;
+    const tail = b.items.slice(s.o2);
+    for (const it of tail) it.parentSeq = a;
+    a.items.splice(s.o1, a.items.length - s.o1, ...tail);
+    docLines.splice(s.l1 + 1, s.l2 - s.l1);
+    cursor.lineIdx = s.l1;
+    cursor.seqId = a.id;
+    cursor.offset = s.o1;
+  }
+  return true;
+}
+
+function selectAll() {
+  const first = docLines[0].rootSeq, last = docLines[docLines.length - 1].rootSeq;
+  selAnchor = { seqId: first.id, offset: 0 };
+  extendingSel = true;
+  setCursor(last.id, last.items.length, docLines.length - 1);
+  extendingSel = false;
+}
+
+function pasteText(text) {
+  text = text.replace(/\r\n?/g, "\n").replace(/\t/g, "    ");
+  deleteSelection();
+  const seq = seqMap.get(cursor.seqId);
+  if (!seq) return;
+  const root = getRootSeq(seq);
+  const lines = text.split("\n");
+  const items = (str, owner) => {
+    const its = parseAsciiToItems(str);
+    for (const it of its) it.parentSeq = owner;
+    return its;
+  };
+  if (lines.length === 1 || seq !== root) {
+    // 1行、または数式のスロットの中への貼り付け：1行にまとめて挿入する
+    const flat = lines.length === 1 ? text : lines.map(l => l.trim()).filter(Boolean).join(" ");
+    const its = items(flat, seq);
+    seq.items.splice(cursor.offset, 0, ...its);
+    cursor.offset += its.length;
+    return;
+  }
+  const indentOf = (l) => Math.floor(l.match(/^ */)[0].length / 2);
+  const base = indentOf(lines[0]);
+  const here = docLines[cursor.lineIdx];
+  const tail = root.items.splice(cursor.offset);
+  root.items.push(...items(lines[0].trim(), root));
+  let last = root, at = cursor.lineIdx;
+  for (let k = 1; k < lines.length; k++) {
+    const ns = createSeq(parseAsciiToItems(lines[k].trim()), null, "root");
+    docLines.splice(++at, 0, { indent: Math.max(0, here.indent + indentOf(lines[k]) - base), rootSeq: ns });
+    last = ns;
+  }
+  cursor.lineIdx = at;
+  cursor.seqId = last.id;
+  cursor.offset = last.items.length;
+  for (const it of tail) it.parentSeq = last;
+  last.items.push(...tail);
+}
+
+// 選択を伸ばしながら（shift）、または選択を畳みながらカーソルを動かす
+function moveWithSelection(fn, key, shift) {
+  if (shift) {
+    if (!selAnchor) selAnchor = { seqId: cursor.seqId, offset: cursor.offset };
+    extendingSel = true;
+    try { fn(); } finally { extendingSel = false; }
+    return;
+  }
+  const s = normalizeSel();
+  if (s && (key === "ArrowLeft" || key === "ArrowRight")) {
+    const toEnd = key === "ArrowRight";
+    selAnchor = null;
+    if (s.mode === "seq") {
+      setCursor(s.seq.id, toEnd ? s.to : s.from);
+    } else {
+      const l = toEnd ? s.l2 : s.l1;
+      setCursor(docLines[l].rootSeq.id, toEnd ? s.o2 : s.o1, l);
+    }
+    return;
+  }
+  selAnchor = null;
+  fn();
+}
+
+// ---- 元に戻す・やり直す
+// 文書の構造（ASCII ではなく AST）をそのまま複製して持つ。ASCII 経由だと空のスロットが
+// 「1」に化けるなど、編集途中の状態が戻らないため。
+
+let history = [], histIdx = -1, histTime = 0;
+
+function cloneItem(it) {
+  const o = {};
+  for (const k of Object.keys(it)) {
+    if (k === "parentSeq") continue;
+    const v = it[k];
+    o[k] = (v && typeof v === "object" && Array.isArray(v.items)) ? { items: v.items.map(cloneItem) } : v;
+  }
+  return o;
+}
+
+function reviveItem(o) {
+  const it = {};
+  const slots = [];
+  for (const k of Object.keys(o)) {
+    const v = o[k];
+    if (v && typeof v === "object" && Array.isArray(v.items)) slots.push(k);
+    else it[k] = v;
+  }
+  for (const k of slots) it[k] = createSeq(o[k].items.map(reviveItem), it, k);
+  return it;
+}
+
+function seqPath(seq) {
+  const path = [];
+  let c = seq;
+  while (c.parentNode && c.parentNode.parentSeq) {
+    const node = c.parentNode;
+    path.unshift([node.parentSeq.items.indexOf(node), c.slotName]);
+    c = node.parentSeq;
+  }
+  return path;
+}
+
+function seqFromPath(root, path) {
+  let s = root;
+  for (const [i, slot] of path) {
+    const node = s.items[i];
+    if (!node || !node[slot]) return s;
+    s = node[slot];
+  }
+  return s;
+}
+
+function snapshotDoc() {
+  return {
+    lines: docLines.map(l => ({ indent: l.indent, items: l.rootSeq.items.map(cloneItem) })),
+    cur: { lineIdx: cursor.lineIdx, path: seqPath(seqMap.get(cursor.seqId)), offset: cursor.offset }
+  };
+}
+
+function restoreSnapshot(s) {
+  seqMap.clear();
+  nextSeqId = 1;
+  docLines = s.lines.map(l => ({ indent: l.indent, rootSeq: createSeq(l.items.map(reviveItem), null, "root") }));
+  const li = Math.min(s.cur.lineIdx, docLines.length - 1);
+  const seq = seqFromPath(docLines[li].rootSeq, s.cur.path);
+  cursor = { lineIdx: li, seqId: seq.id, offset: Math.min(s.cur.offset, seq.items.length) };
+  selAnchor = null;
+}
+
+function resetHistory() {
+  history = [snapshotDoc()];
+  histIdx = 0;
+  histTime = 0;
+}
+
+// 編集のたびに呼ぶ。続けて打っている間（0.6秒以内）は1つの履歴にまとめる。
+function pushHistory() {
+  const snap = snapshotDoc(), now = Date.now();
+  history.length = histIdx + 1;
+  if (histIdx > 0 && now - histTime < 600) {
+    history[histIdx] = snap;
+  } else {
+    history.push(snap);
+    histIdx = history.length - 1;
+  }
+  histTime = now;
+  if (history.length > 300) { history.shift(); histIdx--; }
+}
+
+function undoDoc(delta) {
+  const ni = histIdx + delta;
+  if (ni < 0 || ni >= history.length) return;
+  histIdx = ni;
+  histTime = 0;
+  restoreSnapshot(history[ni]);
+  acMatches = [];
+  refreshAfterEdit();
+  renderGoalInspector();
+}
+
+// ================================================================
 // 6. Editor Rendering & Interactive Key Handling
 // ================================================================
 
@@ -1767,6 +2113,8 @@ const acPopup = document.getElementById("acPopup");
 
 function renderEditor() {
   pendingHypSuggestion = null;
+  declNames = collectDeclNames();
+  selHL = selHighlights();
   const errLines = new Set();
   const sorryLines = new Set();
   if (lastCheckData) {
@@ -1808,6 +2156,7 @@ function renderEditor() {
 }
 
 function setCursor(seqId, offset, lineIdx = null) {
+  if (!extendingSel) selAnchor = null;
   if (lineIdx !== null) cursor.lineIdx = lineIdx;
   else {
     const root = getRootSeq(seqMap.get(seqId));
@@ -1832,45 +2181,64 @@ function getRootSeq(seq) {
   return cur;
 }
 
-// Mouse click positioning inside structured math editor
-editorSurface.addEventListener("mousedown", (e) => {
-  editorSurface.focus();
-  const itemEl = e.target.closest("[data-seq][data-idx]");
+// クリック位置（要素と x 座標）から、カーソルの位置を求める
+function hitTestPos(target, clientX) {
+  const itemEl = target.closest("[data-seq][data-idx]");
   if (itemEl) {
     const seqId = Number(itemEl.getAttribute("data-seq"));
     const idx = Number(itemEl.getAttribute("data-idx"));
     const seq = seqMap.get(seqId);
-    if (seq) {
-      const it = seq.items[idx];
-      if (it && (it.kind === "char" || it.kind === "sym")) {
-        const rect = itemEl.getBoundingClientRect();
-        const after = (e.clientX - rect.left) > (rect.width / 2);
-        setCursor(seqId, after ? idx + 1 : idx);
-        e.preventDefault();
-        return;
-      }
+    const it = seq && seq.items[idx];
+    if (it && (it.kind === "char" || it.kind === "sym")) {
+      const rect = itemEl.getBoundingClientRect();
+      return { seqId, offset: (clientX - rect.left) > (rect.width / 2) ? idx + 1 : idx };
     }
   }
-  const slotEl = e.target.closest("[data-slot-seq]");
+  const slotEl = target.closest("[data-slot-seq]");
   if (slotEl) {
     const seqId = Number(slotEl.getAttribute("data-slot-seq"));
     const seq = seqMap.get(seqId);
-    if (seq) {
-      setCursor(seqId, seq.items.length);
-      e.preventDefault();
-      return;
-    }
+    if (seq) return { seqId, offset: seq.items.length };
   }
-  const lineEl = e.target.closest("[data-line-idx]");
+  const lineEl = target.closest("[data-line-idx]");
   if (lineEl) {
-    const lIdx = Number(lineEl.getAttribute("data-line-idx"));
-    const ln = docLines[lIdx];
-    if (ln) {
-      setCursor(ln.rootSeq.id, ln.rootSeq.items.length, lIdx);
-      e.preventDefault();
-    }
+    const lineIdx = Number(lineEl.getAttribute("data-line-idx"));
+    const ln = docLines[lineIdx];
+    if (ln) return { seqId: ln.rootSeq.id, offset: ln.rootSeq.items.length, lineIdx };
   }
+  return null;
+}
+
+function setCursorExtending(p) {
+  extendingSel = true;
+  try { setCursor(p.seqId, p.offset, p.lineIdx ?? null); } finally { extendingSel = false; }
+}
+
+// Mouse click / shift+click / drag
+editorSurface.addEventListener("mousedown", (e) => {
+  editorSurface.focus();
+  const p = hitTestPos(e.target, e.clientX);
+  if (!p) return;
+  e.preventDefault();
+  if (e.shiftKey) {
+    if (!selAnchor) selAnchor = { seqId: cursor.seqId, offset: cursor.offset };
+    setCursorExtending(p);
+    return;
+  }
+  setCursor(p.seqId, p.offset, p.lineIdx ?? null);
+  dragStart = { seqId: p.seqId, offset: p.offset };
 });
+window.addEventListener("mousemove", (e) => {
+  if (!dragStart) return;
+  if (!(e.buttons & 1)) { dragStart = null; return; }
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el || !editorSurface.contains(el)) return;
+  const p = hitTestPos(el, e.clientX);
+  if (!p || (p.seqId === cursor.seqId && p.offset === cursor.offset)) return;
+  if (!selAnchor) selAnchor = { ...dragStart };
+  setCursorExtending(p);
+});
+window.addEventListener("mouseup", () => { dragStart = null; });
 
 // ================================================================
 // 7. Tree Cursor Navigation & Structural Editing (Mathcha Behavior)
@@ -2297,6 +2665,14 @@ editorSurface.addEventListener("keydown", (e) => {
     return;
   }
 
+  // Undo / Redo / Select all
+  if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === "z") { e.preventDefault(); undoDoc(e.shiftKey ? 1 : -1); return; }
+    if (k === "y") { e.preventDefault(); undoDoc(1); return; }
+    if (k === "a") { e.preventDefault(); selectAll(); return; }
+  }
+
   // Autocomplete navigation
   if (acMatches.length > 0 && acPopup.style.display === "block") {
     const visibleCount = Math.min(8, acMatches.length);
@@ -2370,14 +2746,27 @@ editorSurface.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (e.key === "ArrowLeft") { e.preventDefault(); moveCursorLeft(); return; }
-  if (e.key === "ArrowRight") { e.preventDefault(); moveCursorRight(); return; }
-  if (e.key === "ArrowUp") { e.preventDefault(); moveCursorUp(); return; }
-  if (e.key === "ArrowDown") { e.preventDefault(); moveCursorDown(); return; }
-  if (e.key === "Backspace") { e.preventDefault(); handleBackspace(); return; }
+  const moves = { ArrowLeft: moveCursorLeft, ArrowRight: moveCursorRight, ArrowUp: moveCursorUp, ArrowDown: moveCursorDown };
+  if (moves[e.key]) { e.preventDefault(); moveWithSelection(moves[e.key], e.key, e.shiftKey); return; }
+  if (e.key === "Backspace") {
+    e.preventDefault();
+    if (deleteSelection()) onDocMutated(); else handleBackspace();
+    return;
+  }
+  if (e.key === "Delete") {
+    e.preventDefault();
+    if (deleteSelection()) { onDocMutated(); return; }
+    const seq = seqMap.get(cursor.seqId);
+    if (seq && cursor.offset < seq.items.length) {
+      seq.items.splice(cursor.offset, 1);
+      onDocMutated();
+    }
+    return;
+  }
 
   if (e.key === "Enter") {
     e.preventDefault();
+    deleteSelection();
     const ln = docLines[cursor.lineIdx];
     const root = ln.rootSeq;
     // Split line if in rootSeq, otherwise jump to new line below
@@ -2409,8 +2798,36 @@ editorSurface.addEventListener("keydown", (e) => {
 
   if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
+    deleteSelection();
     insertCharAtCursor(e.key);
   }
+});
+
+// コピー・切り取り・貼り付け：選択範囲を ASCII のコードとして出し入れする
+function editorFocused() { return document.activeElement === editorSurface; }
+document.addEventListener("copy", (e) => {
+  if (!editorFocused()) return;
+  const t = selectionText();
+  if (!t) return;
+  e.clipboardData.setData("text/plain", t);
+  e.preventDefault();
+});
+document.addEventListener("cut", (e) => {
+  if (!editorFocused()) return;
+  const t = selectionText();
+  if (!t) return;
+  e.clipboardData.setData("text/plain", t);
+  e.preventDefault();
+  deleteSelection();
+  onDocMutated();
+});
+document.addEventListener("paste", (e) => {
+  if (!editorFocused()) return;
+  const t = e.clipboardData.getData("text/plain");
+  if (!t) return;
+  e.preventDefault();
+  pasteText(t);
+  onDocMutated();
 });
 </script>
 <script>
@@ -2418,7 +2835,14 @@ editorSurface.addEventListener("keydown", (e) => {
 // 9. Verification, Inspector Views, File I/O, Theme & AI
 // ================================================================
 
+// 編集のたびに呼ぶ：選択を解除し、履歴に積み、再描画して検査を予約する
 function onDocMutated() {
+  selAnchor = null;
+  pushHistory();
+  refreshAfterEdit();
+}
+
+function refreshAfterEdit() {
   renderEditor();
   if (checkDebounce) clearTimeout(checkDebounce);
   checkDebounce = setTimeout(runCheckApi, 110);
@@ -2464,10 +2888,11 @@ async function runCheckApi() {
     const resp = await fetch("/api/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src, cursor_line })
+      body: JSON.stringify({ src, cursor_line, path: currentFilePath })
     });
     const data = await resp.json();
     lastCheckData = data;
+    registerNotations(data.notations);
     updateStatusPill(data);
     renderEditor();
     renderGoalInspector();

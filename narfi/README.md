@@ -4,6 +4,7 @@
 
 ```
 cargo run -- check examples/basics.narfi examples/analysis.narfi
+cargo run -- check examples/limits.narfi            # def・notation・import（lib/analysis/limits.narfi）
 cargo run -- check --trace examples/analysis.narfi   # 各行の文脈と goal を表示
 cargo run -- check examples/errors.narfi             # わざと間違えた証明
 cargo test                                           # 正しい証明は通り、間違った証明は1本も通らないことを確認
@@ -27,6 +28,23 @@ cargo test                                           # 正しい証明は通り�
 | `choose t, j` | 範囲付き ∃ の条件（`t > 0` など）を j で示す |
 | `axiom name : Γ ⊢ φ` | 補題を公理として置く（三角不等式など） |
 | `sorry` | 証明を後回しにする（残っている goal を表示） |
+| `def is_lim(a, α) := φ` | 述語の定義。証明の中では必要なところで自動的に展開される（`conv_a(ε/2, …)`・`Fix ε` など）。引数 `a` は関数の位置（`a(n)`）にも置け、`a + b` を渡すと `a(n) + b(n)` と各点ごとに読む |
+| `notation a "⟶" α := is_lim(a, α)` | 中置の記法。`a ⟶ α` は `is_lim(a, α)` として読まれ、表示・Prose・LaTeX でも記法のまま出る。ASCII では `\longrightarrow`（`\lto`）。組み込みの記号（`->` `<` など）とは衝突させられない |
+| `import analysis.limits` | `analysis/limits.narfi` を、同じディレクトリ → `NARFI_PATH` → `narfi/lib/` の順に探して読み込む。循環 import はエラー |
+| `unfold is_lim` / `unfold is_lim at h` | 定義を明示的に展開する（goal / 仮定）。定義の同値 `is_lim.def : is_lim(a, α) ↔ φ` も使える |
+
+## Web エディタの操作
+
+`cargo run -- web` で開く構造化エディタ。
+
+| 操作 | キー |
+|---|---|
+| 元に戻す／やり直す | `Cmd/Ctrl+Z` ／ `Cmd+Shift+Z`・`Ctrl+Y` |
+| 範囲選択 | `Shift+矢印`、マウスドラッグ、`Shift+クリック`、全選択 `Cmd/Ctrl+A` |
+| コピー・切り取り・貼り付け | `Cmd/Ctrl+C` / `X` / `V`（クリップボードには ASCII のコードが入る。複数行は字下げも保つ） |
+| 削除 | `Backspace` / `Delete`（選択中は選択範囲を消す。選択中に文字を打つと置き換わる） |
+
+名前の字体は、宣言した名前（`thm` / `axiom` / `def` の直後）と 4 文字以上の名前が立体、1〜3 文字の変数はイタリックで描かれる。字体はコードから決まり、コードには書かない。
 
 ## 信頼の土台（何を信じれば結果を信じてよいか）
 

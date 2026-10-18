@@ -1,8 +1,8 @@
 //! Narfi の AST から「自然な日本語の証明（レポート・板書用）」「LaTeX ソース」「日本語シュガー Narfi」を生成する。
 
 use crate::check::StepTrace;
-use crate::parser::{Choice, CtxItem, Decl, Just, Stmt, StmtKind};
-use crate::syntax::{bounded, show_term_latex, Formula, Term, ident_to_latex, rel_to_latex};
+use crate::parser::{Choice, CtxItem, Decl, Item, Just, Stmt, StmtKind};
+use crate::syntax::{Term, ident_to_latex, rel_to_latex};
 
 #[derive(Debug, Clone)]
 pub struct ProseBlock {
@@ -38,46 +38,6 @@ fn find_hyp_formula_latex(
                 if raw.starts_with(&prefix) {
                     if let Some(rest) = lat.strip_prefix(&prefix_l) {
                         return Some(rest.to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-/// ε-N 収束パターン ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε を検知する。
-/// 検出成功時、(数列の項 LaTeX, 極限値 LaTeX) を返す。
-pub fn detect_convergence(f: &Formula) -> Option<(String, String)> {
-    if let Formula::Forall(eps, _, b1) = f {
-        if let Formula::Imp(g1, b2) = &**b1 {
-            if let Some((r1, t1)) = bounded(eps, g1) {
-                if r1 == ">" && t1 == Term::Num(0) {
-                    if let Formula::Exists(n_cap, _, b3) = &**b2 {
-                        if let Formula::Forall(n, _, b4) = &**b3 {
-                            if let Formula::Imp(g2, b5) = &**b4 {
-                                if let Some((r2, t2)) = bounded(n, g2) {
-                                    if (r2 == "≥" || r2 == ">=") && t2 == Term::Var(n_cap.clone()) {
-                                        if let Formula::Atom(r3, ts) = &**b5 {
-                                            if (r3 == "<") && ts.len() == 2 && ts[1] == Term::Var(eps.clone()) {
-                                                if let Term::App(op_abs, args) = &ts[0] {
-                                                    if op_abs == "abs" && args.len() == 1 {
-                                                        if let Term::App(op_sub, sub_args) = &args[0] {
-                                                            if op_sub == "-" && sub_args.len() == 2 {
-                                                                return Some((
-                                                                    show_term_latex(&sub_args[0], 0),
-                                                                    show_term_latex(&sub_args[1], 0),
-                                                                ));
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -132,23 +92,11 @@ pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> 
                 hyp_items.push(format!("変数 ${} \\in {}$", ident_to_latex(x), ident_to_latex(t)));
             }
             CtxItem::Hyp(h, f) => {
-                if let Some((seq_lat, lim_lat)) = detect_convergence(f) {
-                    hyp_items.push(format!(
-                        "仮定 ${}$：数列 ${}$ は ${}$ に収束する（${} \\to {}$）<br>&emsp;&emsp;${}$",
-                        ident_to_latex(h),
-                        seq_lat,
-                        lim_lat,
-                        seq_lat,
-                        lim_lat,
-                        f.to_latex()
-                    ));
-                } else {
-                    hyp_items.push(format!(
-                        "仮定 ${}$：${}$",
-                        ident_to_latex(h),
-                        f.to_latex()
-                    ));
-                }
+                hyp_items.push(format!(
+                    "仮定 ${}$：${}$",
+                    ident_to_latex(h),
+                    f.to_latex()
+                ));
             }
         }
     }
@@ -164,36 +112,11 @@ pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> 
                 text: item,
             });
         }
-        if let Some((c_seq, c_lim)) = detect_convergence(&d.concl) {
-            out.push(ProseBlock {
-                depth: 0,
-                text: format!(
-                    "**【目標】** 数列 ${}$ が ${}$ に収束すること（${} \\to {}$）を示す：<br>&emsp;&emsp;${}$",
-                    c_seq, c_lim, c_seq, c_lim, d.concl.to_latex()
-                ),
-            });
-        } else {
-            out.push(ProseBlock {
-                depth: 0,
-                text: format!("**【目標】** ${}$ を示す。", d.concl.to_latex()),
-            });
-        }
-    } else {
-        if let Some((c_seq, c_lim)) = detect_convergence(&d.concl) {
-            out.push(ProseBlock {
-                depth: 0,
-                text: format!(
-                    "**【目標】** 数列 ${}$ が ${}$ に収束すること（${} \\to {}$）を示す：<br>&emsp;&emsp;${}$",
-                    c_seq, c_lim, c_seq, c_lim, d.concl.to_latex()
-                ),
-            });
-        } else {
-            out.push(ProseBlock {
-                depth: 0,
-                text: format!("**【目標】** ${}$ を示す。", d.concl.to_latex()),
-            });
-        }
     }
+    out.push(ProseBlock {
+        depth: 0,
+        text: format!("**【目標】** ${}$ を示す。", d.concl.to_latex()),
+    });
 
     stmts_to_prose(&d.body, steps, 0, &mut out);
     out
@@ -424,6 +347,16 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                 });
                 stmts_to_prose(body, steps, depth + 2, out);
             }
+            StmtKind::Unfold { names, at } => {
+                let ns: Vec<String> = names.iter().map(|n| format!("${}$", ident_to_latex(n))).collect();
+                let text = if at.is_empty() {
+                    format!("{} の定義を展開する。", ns.join("、"))
+                } else {
+                    let hs: Vec<String> = at.iter().map(|h| format!("${}$", ident_to_latex(h))).collect();
+                    format!("{} において {} の定義を展開する。", hs.join("、"), ns.join("、"))
+                };
+                out.push(ProseBlock { depth, text });
+            }
             StmtKind::Therefore(f) => {
                 out.push(ProseBlock {
                     depth,
@@ -501,13 +434,28 @@ pub fn decl_to_latex_env(d: &Decl, steps: &[StepTrace]) -> String {
     )
 }
 
+/// def・notation・import はそのまま書き戻す。thm・axiom なら返す。
+fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
+    match it {
+        Item::Decl(d) => return Some(d),
+        Item::Def(d) => out.push_str(&d.src),
+        Item::Notation { src, .. } => out.push_str(src),
+        Item::Import { path, .. } => out.push_str(&format!("import {path}")),
+    }
+    out.push_str("\n\n");
+    None
+}
+
 /// 標準 Narfi のソースコードを「日本語シュガー Narfi」に変換する（カーネルでそのまま実行可能）
 pub fn convert_source_to_japanese_sugar(src: &str) -> String {
-    let Ok(decls) = crate::parser::parse_file(src) else {
+    let Ok(m) = crate::module::parse_source(src, None) else {
         return src.to_string();
     };
     let mut out = String::new();
-    for d in &decls {
+    for it in &m.items {
+        let Some(d) = emit_non_decl(it, &mut out) else {
+            continue;
+        };
         if d.is_axiom {
             out.push_str(&format!("公理 {} : ", d.name));
         } else {
@@ -661,6 +609,13 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Let { name, term } => {
             out.push_str(&format!("{pad}{name} := {term} とする\n"));
         }
+        StmtKind::Unfold { names, at } => {
+            if at.is_empty() {
+                out.push_str(&format!("{pad}{} を展開する\n", names.join(", ")));
+            } else {
+                out.push_str(&format!("{pad}{} の {} を展開する\n", at.join(", "), names.join(", ")));
+            }
+        }
         StmtKind::Therefore(f) => {
             out.push_str(&format!("{pad}したがって {f}\n"));
         }
@@ -683,11 +638,14 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
 
 /// 日本語シュガー等を含む Narfi ソースを標準の簡潔な Narfi 構文へ正規化する
 pub fn convert_source_to_standard_narfi(src: &str) -> String {
-    let Ok(decls) = crate::parser::parse_file(src) else {
+    let Ok(m) = crate::module::parse_source(src, None) else {
         return src.to_string();
     };
     let mut out = String::new();
-    for d in &decls {
+    for it in &m.items {
+        let Some(d) = emit_non_decl(it, &mut out) else {
+            continue;
+        };
         if d.is_axiom {
             out.push_str(&format!("axiom {} : ", d.name));
         } else {
@@ -824,6 +782,13 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Let { name, term } => {
             out.push_str(&format!("{pad}let {name} := {term}\n"));
         }
+        StmtKind::Unfold { names, at } => {
+            if at.is_empty() {
+                out.push_str(&format!("{pad}unfold {}\n", names.join(", ")));
+            } else {
+                out.push_str(&format!("{pad}unfold {} at {}\n", names.join(", "), at.join(", ")));
+            }
+        }
         StmtKind::Therefore(f) => {
             out.push_str(&format!("{pad}∴ {f}\n"));
         }
@@ -905,6 +870,12 @@ pub fn to_ascii_code(s: &str) -> String {
         match c {
             '∀' => out.push_str("forall "),
             '∃' => out.push_str("exists "),
+            '⟶' => {
+                out.push_str("\\longrightarrow");
+                if cs.get(idx + 1).is_some_and(|c| !c.is_whitespace()) {
+                    out.push(' ');
+                }
+            }
             '→' => out.push_str("->"),
             '↔' => out.push_str("<->"),
             '∧' => out.push_str("and"),

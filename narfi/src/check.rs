@@ -1,8 +1,8 @@
 //! 証明検査器。各行で文脈 Γ と goal を追跡し、推論規則に合うかを確かめる。
 
 use crate::arith;
-use crate::parser::{ChainStep, Choice, CtxItem, Decl, Just, Stmt, StmtKind};
-use crate::syntax::{Formula, Term, ident_to_latex, not, types_compatible};
+use crate::parser::{ChainStep, Choice, CtxItem, Decl, Def, Item, Just, Module, Stmt, StmtKind};
+use crate::syntax::{Formula, Term, ident_to_latex, instantiate, not, types_compatible};
 use std::collections::{BTreeSet, HashMap};
 
 // ================================================================ 環境・文脈
@@ -18,9 +18,75 @@ pub struct Scheme {
     pub oracles: BTreeSet<String>,
 }
 
+/// def で定義した述語。body は引数が関数の位置に現れる所を `@` 形にしたもの。
+pub struct DefInfo {
+    pub params: Vec<String>,
+    pub body: Formula,
+}
+
 #[derive(Default)]
 pub struct Env {
     pub schemes: HashMap<String, Scheme>,
+    pub defs: HashMap<String, DefInfo>,
+}
+
+impl Env {
+    /// 定義を登録し、定義の同値 `name.def : name(params) ↔ body` も定理として置く
+    pub fn add_def(&mut self, d: &Def) {
+        let params: Vec<String> = d.params.iter().map(|(x, _)| x.clone()).collect();
+        let atom = Formula::Atom(
+            d.name.clone(),
+            params.iter().map(|x| Term::Var(x.clone())).collect(),
+        );
+        let iff = Formula::And(
+            Box::new(Formula::Imp(Box::new(atom.clone()), Box::new(d.body.clone()))),
+            Box::new(Formula::Imp(Box::new(d.body.clone()), Box::new(atom))),
+        );
+        self.schemes.entry(format!("{}.def", d.name)).or_insert(Scheme {
+            formula: iff,
+            implicit: params.clone(),
+            core: true,
+            is_axiom: true,
+            ok: true,
+            axioms: BTreeSet::new(),
+            oracles: BTreeSet::new(),
+        });
+        self.defs.insert(
+            d.name.clone(),
+            DefInfo {
+                params,
+                body: d.body.clone(),
+            },
+        );
+    }
+
+    /// 先頭が定義された述語なら1段だけ展開する
+    pub fn unfold_head(&self, f: &Formula) -> Option<Formula> {
+        match f {
+            Formula::Atom(p, ts) => {
+                let d = self.defs.get(p)?;
+                (d.params.len() == ts.len()).then(|| instantiate(&d.params, &d.body, ts))
+            }
+            _ => None,
+        }
+    }
+
+    /// names に挙げた定義を、式の中のすべての位置で展開する
+    pub fn unfold_named(&self, f: &Formula, names: &[String]) -> Formula {
+        let go = |g: &Formula| self.unfold_named(g, names);
+        match f {
+            Formula::Atom(p, _) if names.contains(p) => match self.unfold_head(f) {
+                Some(g) => go(&g),
+                None => f.clone(),
+            },
+            Formula::Atom(..) | Formula::Bot => f.clone(),
+            Formula::Imp(a, b) => Formula::Imp(Box::new(go(a)), Box::new(go(b))),
+            Formula::And(a, b) => Formula::And(Box::new(go(a)), Box::new(go(b))),
+            Formula::Or(a, b) => Formula::Or(Box::new(go(a)), Box::new(go(b))),
+            Formula::Forall(x, t, b) => Formula::Forall(x.clone(), t.clone(), Box::new(go(b))),
+            Formula::Exists(x, t, b) => Formula::Exists(x.clone(), t.clone(), Box::new(go(b))),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -211,7 +277,10 @@ impl<'a> Checker<'a> {
                 Some(u) => self.zonk_t(u),
                 None => t.clone(),
             },
-            Term::App(f, a) => Term::App(f.clone(), a.iter().map(|x| self.zonk_t(x)).collect()),
+            Term::App(f, a) => {
+                let t = Term::App(f.clone(), a.iter().map(|x| self.zonk_t(x)).collect());
+                if f == "@" { t.beta() } else { t }
+            }
             _ => t.clone(),
         }
     }
@@ -238,6 +307,33 @@ impl<'a> Checker<'a> {
         ctx.expand_f(&self.zonk_f(f))
     }
 
+    /// 先頭が def の述語である限り展開する（透過的な定義展開）。
+    /// 推論規則が「∀ の形か」「∃ の形か」などを見る前に通す。let は展開しない。
+    fn whnf(&self, f: &Formula) -> Formula {
+        let mut f = self.zonk_f(f);
+        while let Some(g) = self.env.unfold_head(&f) {
+            f = g;
+        }
+        f
+    }
+
+    /// A ∧ (B ∧ C) を [A, B, C] に。途中の定義も展開する。
+    fn split_and_w(&self, f: &Formula, n: usize) -> Option<Vec<Formula>> {
+        let mut out = Vec::new();
+        let mut cur = f.clone();
+        while out.len() + 1 < n {
+            match self.whnf(&cur) {
+                Formula::And(a, b) => {
+                    out.push(*a);
+                    cur = *b;
+                }
+                _ => return None,
+            }
+        }
+        out.push(cur);
+        Some(out)
+    }
+
     /// let の展開と束縛変数の名前の違いを無視して、a と b を単一化する。失敗したら元に戻す。
     fn unify(&mut self, ctx: &Ctx, a: &Formula, b: &Formula) -> bool {
         let save = self.metas.clone();
@@ -252,8 +348,17 @@ impl<'a> Checker<'a> {
     fn uf(&mut self, a: &Formula, b: &Formula) -> bool {
         use Formula::*;
         match (a, b) {
-            (Atom(p, ts), Atom(q, us)) => {
-                p == q && ts.len() == us.len() && ts.iter().zip(us).all(|(t, u)| self.ut(t, u))
+            (Atom(p, ts), Atom(q, us)) if p == q && ts.len() == us.len() => {
+                let save = self.metas.clone();
+                if ts.iter().zip(us).all(|(t, u)| self.ut(t, u)) {
+                    return true;
+                }
+                // 引数が合わなくても、展開すれば一致することがある
+                self.metas = save;
+                match (self.env.unfold_head(a), self.env.unfold_head(b)) {
+                    (Some(x), Some(y)) => self.uf(&self.zonk_f(&x), &self.zonk_f(&y)),
+                    _ => false,
+                }
             }
             (Imp(a1, b1), Imp(a2, b2)) | (And(a1, b1), And(a2, b2)) | (Or(a1, b1), Or(a2, b2)) => {
                 self.uf(a1, a2) && self.uf(b1, b2)
@@ -267,7 +372,18 @@ impl<'a> Checker<'a> {
                 self.uf(&b1.subst(x, &v), &b2.subst(y, &v))
             }
             (Bot, Bot) => true,
-            _ => false,
+            // 形が違っても、片方が定義された述語なら展開して比べる
+            _ => {
+                if let Some(x) = self.env.unfold_head(a) {
+                    let x = self.zonk_f(&x);
+                    self.uf(&x, b)
+                } else if let Some(y) = self.env.unfold_head(b) {
+                    let y = self.zonk_f(&y);
+                    self.uf(a, &y)
+                } else {
+                    false
+                }
+            }
         }
     }
 
@@ -282,6 +398,18 @@ impl<'a> Checker<'a> {
                     return false;
                 }
                 self.metas[*m as usize] = Some(t.clone());
+                true
+            }
+            // `.def` を使ったときに残る ?m(t…) と f(t…)：?m := f とする
+            (Term::App(at, xs), Term::App(g, ys)) | (Term::App(g, ys), Term::App(at, xs))
+                if at == "@"
+                    && g != "@"
+                    && matches!(xs.first(), Some(Term::Meta(_)))
+                    && xs[1..] == ys[..]
+                    && g.chars().next().is_some_and(|c| c.is_alphabetic()) =>
+            {
+                let Term::Meta(m) = xs[0] else { unreachable!() };
+                self.metas[m as usize] = Some(Term::Var(g.clone()));
                 true
             }
             (Term::Var(x), Term::Var(y)) => x == y,
@@ -326,7 +454,7 @@ impl<'a> Checker<'a> {
         if let Some((base, field)) = name.rsplit_once('.') {
             if field == "left" || field == "right" {
                 let f = self.resolve(ctx, base)?;
-                return match self.norm(ctx, &f) {
+                return match self.whnf(&self.norm(ctx, &f)) {
                     Formula::And(a, b) => Ok(if field == "left" { *a } else { *b }),
                     g => self.err(format!(
                         "`{base}` は「{g}」で ∧ の形ではないので、.{field} は使えない"
@@ -404,7 +532,7 @@ impl<'a> Checker<'a> {
         let mut f = f;
         for arg in args {
             loop {
-                match self.zonk_f(&f) {
+                match self.whnf(&f) {
                     Formula::Forall(x, _, body) => {
                         if self.is_proof(ctx, arg) {
                             // 証拠が来たら、∀ の変数は単一化で決める
@@ -443,7 +571,7 @@ impl<'a> Checker<'a> {
         }
         // j₁, j₂, … は ∧導入
         let e = self.norm(ctx, expected);
-        match e.split_and(j.len()) {
+        match self.split_and_w(&e, j.len()) {
             Some(parts) => {
                 for (p, f) in j.iter().zip(parts) {
                     self.check(ctx, p, &f)?;
@@ -461,6 +589,8 @@ impl<'a> Checker<'a> {
     /// 根拠 p が命題 expected を示すか
     fn check(&mut self, ctx: &Ctx, p: &Term, expected: &Formula) -> CResult<()> {
         let e = self.norm(ctx, expected);
+        let is_builtin = matches!(p, Term::Var(n) | Term::App(n, _) if BUILTINS.contains(&n.as_str()));
+        let e = if is_builtin { self.whnf(&e) } else { e };
         match p {
             Term::Var(n) if n == "refl" => match &e {
                 Formula::Atom(r, ts) if r == "=" && self.ut(&ts[0], &ts[1]) => Ok(()),
@@ -758,7 +888,7 @@ impl<'a> Checker<'a> {
                 let mut c2 = ctx.clone();
                 let mut cur = g.clone();
                 for (x, ty) in vars {
-                    match cur {
+                    match self.whnf(&cur) {
                         Formula::Forall(y, t, b) => {
                             if let Some(ty) = ty {
                                 if !types_compatible(ty, &t) {
@@ -779,7 +909,7 @@ impl<'a> Checker<'a> {
                     }
                 }
                 if let Some((h, f)) = hyp {
-                    match cur {
+                    match self.whnf(&cur) {
                         Formula::Imp(a, b) => {
                             let a = self.assumed(&c2, f.as_ref(), &a)?;
                             self.fresh_name(&c2, h)?;
@@ -796,7 +926,7 @@ impl<'a> Checker<'a> {
                 self.block(c2, body, cur, s.line)?;
                 *last = goal.take();
             }
-            StmtKind::Assume { name, ty, body } => match g.clone() {
+            StmtKind::Assume { name, ty, body } => match self.whnf(&g) {
                 Formula::Imp(a, b) => {
                     let mut c2 = ctx.clone();
                     let a = self.assumed(&c2, ty.as_ref(), &a)?;
@@ -835,7 +965,7 @@ impl<'a> Checker<'a> {
                 if f.has_meta() {
                     return self.err(format!("根拠の引数が足りず、命題が決まらない：{f}"));
                 }
-                match f {
+                match self.whnf(&f) {
                     Formula::Exists(y, ty, body) => {
                         self.fresh_name(ctx, var)?;
                         if let Some(deps) = deps {
@@ -853,7 +983,7 @@ impl<'a> Checker<'a> {
                         }
                         self.push(ctx, Entry::Var(var.clone(), ty, VarKind::Obtained));
                         let body = body.subst(&y, &Term::Var(var.clone()));
-                        let parts = match body.split_and(hyps.len()) {
+                        let parts = match self.split_and_w(&body, hyps.len()) {
                             Some(p) => p,
                             None => {
                                 return self.err(format!(
@@ -889,7 +1019,7 @@ impl<'a> Checker<'a> {
                 *goal = Some(ty.clone());
             }
             StmtKind::Choose { choice, just } => {
-                let next = match (choice, g.clone()) {
+                let next = match (choice, self.whnf(&g)) {
                     (Choice::Term(t), Formula::Exists(y, _, b)) => {
                         self.check_term_scope(ctx, t)?;
                         b.subst(&y, t)
@@ -909,7 +1039,7 @@ impl<'a> Checker<'a> {
                 *goal = Some(match just {
                     None => next,
                     // choose t, j：範囲付き ∃ の条件 t > 0 などを j で示す
-                    Some(j) => match next {
+                    Some(j) => match self.whnf(&next) {
                         Formula::And(a, b) => {
                             self.check_just(ctx, j, &a)?;
                             *b
@@ -937,7 +1067,7 @@ impl<'a> Checker<'a> {
             }
             StmtKind::Cases { hyp, left, right } => {
                 let f = self.resolve(ctx, hyp)?;
-                match self.norm(ctx, &f) {
+                match self.whnf(&self.norm(ctx, &f)) {
                     Formula::Or(a, b) => {
                         for ((h, body), side) in [(left, *a), (right, *b)] {
                             let mut c2 = ctx.clone();
@@ -963,7 +1093,7 @@ impl<'a> Checker<'a> {
                 let (pv, pred) = if ctx.is_term_var(var) {
                     (var.clone(), g.clone())
                 } else {
-                    match g.clone() {
+                    match self.whnf(&g) {
                         Formula::Forall(y, _, b) => (y, *b),
                         other => return self.err(format!(
                             "induction できない：`{var}` は文脈になく、goal「{other}」も ∀ ではない"
@@ -1008,6 +1138,37 @@ impl<'a> Checker<'a> {
                         return self.err(format!("∴ の命題が、直前に示したもの「{l}」と一致しない"));
                     }
                     None => return self.err("∴ の前に、示し終わったものがない"),
+                }
+            }
+            StmtKind::Unfold { names, at } => {
+                for n in names {
+                    if !self.env.defs.contains_key(n) {
+                        return self.err(format!("`{n}` は def で定義された名前ではない"));
+                    }
+                }
+                if at.is_empty() {
+                    let g0 = self.zonk_f(&g);
+                    let g2 = self.env.unfold_named(&g0, names);
+                    if g2 == g0 {
+                        return self.err(format!("goal「{g0}」に {} は現れない", names.join(", ")));
+                    }
+                    *goal = Some(g2);
+                } else {
+                    for h in at {
+                        let Some(k) = ctx
+                            .entries
+                            .iter()
+                            .rposition(|e| matches!(e, Entry::Hyp(x, _) if x == h))
+                        else {
+                            return self.err(format!("仮定 `{h}` が文脈にない"));
+                        };
+                        let Entry::Hyp(_, f) = &ctx.entries[k] else { unreachable!() };
+                        let f2 = self.env.unfold_named(f, names);
+                        if f2 == *f {
+                            return self.err(format!("`{h}` : {f} に {} は現れない", names.join(", ")));
+                        }
+                        ctx.entries[k] = Entry::Hyp(h.clone(), f2);
+                    }
                 }
             }
             StmtKind::Close(j) => {
@@ -1196,6 +1357,19 @@ pub struct Report {
     pub oracles: BTreeSet<String>,
     pub sorries: Vec<(usize, Vec<String>, Formula)>,
     pub steps: Vec<StepTrace>,
+}
+
+/// ファイルの宣言を順に検査する。def はその場で環境に入る。報告は thm・axiom ごと（書かれた順）。
+pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Vec<Report> {
+    let mut reports = Vec::new();
+    for it in &m.items {
+        match it {
+            Item::Def(d) => env.add_def(d),
+            Item::Decl(d) => reports.extend(check_decls(env, std::slice::from_ref(d), trace, core)),
+            Item::Notation { .. } | Item::Import { .. } => {}
+        }
+    }
+    reports
 }
 
 pub fn check_decls(env: &mut Env, decls: &[Decl], trace: bool, core: bool) -> Vec<Report> {

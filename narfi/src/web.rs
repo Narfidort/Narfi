@@ -2,15 +2,16 @@
 //! 外部クレートを使わず `std::net::TcpListener` のみで動作し、
 //! リアルタイム検証・日本語証明生成・LaTeX出力・ファイル保存・AIアシストを提供する。
 
-use crate::check::{Env, Report, check_decls};
-use crate::parser::{self, Decl};
+use crate::check::Report;
+use crate::module::load_and_check;
+use crate::parser::Decl;
+use crate::syntax::with_syntax;
 use crate::prose;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PRELUDE: &str = include_str!("prelude.narfi");
 const WEB_UI_HTML: &str = include_str!("web_ui.html");
 
 pub fn serve(port: u16, open_browser: bool) -> std::io::Result<()> {
@@ -91,7 +92,8 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
         ("POST", "/api/check") => {
             let src = json_get_str(&body, "src").unwrap_or_default();
             let cursor_line = json_get_usize(&body, "cursor_line");
-            let res = api_check(&src, cursor_line);
+            let path = json_get_str(&body, "path").filter(|p| !p.is_empty());
+            let res = api_check(&src, cursor_line, path.as_deref());
             send_response(
                 &mut stream,
                 200,
@@ -303,40 +305,32 @@ fn extract_notes(src: &str) -> Vec<NoteBlock> {
     notes
 }
 
-fn make_base_env() -> Env {
-    let mut env = Env::default();
-    let prelude = parser::parse_file(PRELUDE).expect("prelude のパースに失敗");
-    let _ = check_decls(&mut env, &prelude, false, true);
-    env
-}
-
-pub fn api_check(src: &str, cursor_line: Option<usize>) -> String {
+pub fn api_check(src: &str, cursor_line: Option<usize>, path: Option<&str>) -> String {
     let notes = extract_notes(src);
-    let mut env = make_base_env();
+    // 相対 import の起点：開いているファイル（未保存ならワークスペース直下）
+    let file = path
+        .and_then(safe_resolve_path)
+        .unwrap_or_else(|| workspace_root().join("untitled.narfi"));
 
     // まずそのままパースを試みる。もし編集中（空行や入力途中）でパースエラーになった場合、
     // カーソル行を sorry に置き換えたフォールバックも試して Goal 表示を維持する。
-    let (decls, parse_err) = match parser::parse_file(src) {
-        Ok(d) => (d, None),
+    // 試すたびに環境と記法の表を作り直す（load_and_check）。
+    let (decls, reports, parse_err) = match load_and_check(src, Some(&file)) {
+        Ok((_, m, r)) => (m.decls().cloned().collect::<Vec<Decl>>(), r, None),
         Err(e) => {
-            let mut recovered = Vec::new();
-            if let Some(cline) = cursor_line {
-                let patched = patch_line_with_sorry(src, cline);
-                if let Ok(d) = parser::parse_file(&patched) {
-                    recovered = d;
-                }
+            let mut lines = vec![];
+            lines.extend(cursor_line);
+            lines.push(e.line);
+            let recovered = lines
+                .into_iter()
+                .filter_map(|l| load_and_check(&patch_line_with_sorry(src, l), Some(&file)).ok())
+                .find(|(_, m, _)| m.decls().next().is_some());
+            match recovered {
+                Some((_, m, r)) => (m.decls().cloned().collect(), r, Some(e)),
+                None => (vec![], vec![], Some(e)),
             }
-            if recovered.is_empty() {
-                let patched = patch_line_with_sorry(src, e.line);
-                if let Ok(d) = parser::parse_file(&patched) {
-                    recovered = d;
-                }
-            }
-            (recovered, Some(e))
         }
     };
-
-    let reports = check_decls(&mut env, &decls, false, false);
 
     let mut decls_json = Vec::new();
     for (d, r) in decls.iter().zip(reports.iter()) {
@@ -360,12 +354,28 @@ pub fn api_check(src: &str, cursor_line: Option<usize>) -> String {
         None => "null".to_string(),
     };
 
+    // エディタの補完候補に出す notation（import 先のものも含む）
+    let notations_json: Vec<String> = with_syntax(|t| {
+        t.notations
+            .iter()
+            .map(|n| {
+                format!(
+                    "{{\"sym\":{},\"pred\":{},\"latex\":{}}}",
+                    json_str(&n.sym),
+                    json_str(&n.pred),
+                    json_str(&n.latex)
+                )
+            })
+            .collect()
+    });
+
     format!(
-        "{{\"ok\":{},\"parse_error\":{},\"decls\":[{}],\"notes\":[{}]}}",
+        "{{\"ok\":{},\"parse_error\":{},\"decls\":[{}],\"notes\":[{}],\"notations\":[{}]}}",
         perr_json == "null" && reports.iter().all(|r| r.err.is_none()),
         perr_json,
         decls_json.join(","),
-        notes_json.join(",")
+        notes_json.join(","),
+        notations_json.join(",")
     )
 }
 

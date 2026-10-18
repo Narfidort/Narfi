@@ -1,0 +1,3 @@
+-- 循環 import の検出のテスト（b → a → b）
+
+import a

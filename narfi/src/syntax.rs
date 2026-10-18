@@ -1,6 +1,7 @@
 //! 項・論理式の AST と、表示・代入・自由変数。
 
-use std::collections::BTreeSet;
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 
 /// 項。演算子も関数適用として表す（"+", "-", "·", "/", "^", "neg", "abs"）。
@@ -40,6 +41,139 @@ pub fn types_compatible(a: &str, b: &str) -> bool {
     a == b || a == "?" || b == "?"
 }
 
+// ---------------------------------------------------------------- 記法・定義の表
+//
+// notation は字句解析・構文解析・表示（Display / LaTeX）のすべてに効くので、
+// スレッドごとの表に置く。読み込みの最初に reset_syntax() で空にする。
+
+/// `notation a "⟶" α := is_lim(a, α)`。式 `t ⟶ u` は Atom(pred, [t, u]) として持つ。
+#[derive(Clone, Debug)]
+pub struct Notation {
+    pub sym: String,
+    pub pred: String,
+    /// 述語の引数の順が (右辺, 左辺) のとき true
+    pub swap: bool,
+    pub latex: String,
+}
+
+impl Notation {
+    pub fn atom(&self, lhs: Term, rhs: Term) -> Formula {
+        let args = if self.swap { vec![rhs, lhs] } else { vec![lhs, rhs] };
+        Formula::Atom(self.pred.clone(), args)
+    }
+    fn sides<'t>(&self, ts: &'t [Term]) -> (&'t Term, &'t Term) {
+        if self.swap { (&ts[1], &ts[0]) } else { (&ts[0], &ts[1]) }
+    }
+}
+
+#[derive(Default)]
+pub struct SyntaxTable {
+    pub notations: Vec<Notation>,
+    /// def で定義した述語の名前 → 引数の数
+    pub defs: HashMap<String, usize>,
+    /// 定義の本体に現れた述語（あとから同じ名前を def して循環させないため）
+    pub def_preds: BTreeSet<String>,
+}
+
+thread_local! {
+    static SYNTAX: RefCell<SyntaxTable> = RefCell::new(SyntaxTable::default());
+}
+
+pub fn reset_syntax() {
+    SYNTAX.with(|t| *t.borrow_mut() = SyntaxTable::default());
+}
+
+pub fn with_syntax<R>(f: impl FnOnce(&mut SyntaxTable) -> R) -> R {
+    SYNTAX.with(|t| f(&mut t.borrow_mut()))
+}
+
+pub fn notation_for_sym(sym: &str) -> Option<Notation> {
+    with_syntax(|t| t.notations.iter().find(|n| n.sym == sym).cloned())
+}
+
+/// 表示に使う記法（同じ述語に複数あるときは最初に宣言したもの）
+pub fn notation_for_pred(pred: &str) -> Option<Notation> {
+    with_syntax(|t| t.notations.iter().find(|n| n.pred == pred).cloned())
+}
+
+// ---------------------------------------------------------------- 定義の展開
+//
+// def の本体では、引数 a が関数の位置に現れる（`a(n)`）。これを `@(a, n)` の形で持ち、
+// 代入のあとで apply_term によって普通の項に戻す。数列の和 `a + b` を渡したときは
+// `(a + b)(n) = a(n) + b(n)` と各点ごとに読む。
+
+const POINTWISE: [&str; 6] = ["+", "-", "·", "/", "neg", "abs"];
+
+/// 項 h を引数 args に適用する（h(args)）
+pub fn apply_term(h: &Term, args: &[Term]) -> Term {
+    match h {
+        Term::Var(f) => Term::App(f.clone(), args.to_vec()),
+        Term::Num(_) => h.clone(),
+        Term::App(op, xs) if POINTWISE.contains(&op.as_str()) => {
+            Term::App(op.clone(), xs.iter().map(|x| apply_term(x, args)).collect())
+        }
+        Term::App(op, xs) if op == "^" && xs.len() == 2 => {
+            Term::App(op.clone(), vec![apply_term(&xs[0], args), xs[1].clone()])
+        }
+        _ => {
+            let mut v = vec![h.clone()];
+            v.extend(args.iter().cloned());
+            Term::App("@".into(), v)
+        }
+    }
+}
+
+/// 本体の中で、引数 params が関数の位置に現れる `p(t…)` を `@(p, t…)` に書き換える
+pub fn to_apply_form(f: &Formula, params: &[String]) -> Formula {
+    fn t_go(t: &Term, ps: &[&String]) -> Term {
+        match t {
+            Term::App(h, xs) => {
+                let xs: Vec<Term> = xs.iter().map(|x| t_go(x, ps)).collect();
+                if ps.iter().any(|p| *p == h) {
+                    let mut v = vec![Term::Var(h.clone())];
+                    v.extend(xs);
+                    Term::App("@".into(), v)
+                } else {
+                    Term::App(h.clone(), xs)
+                }
+            }
+            _ => t.clone(),
+        }
+    }
+    fn f_go(f: &Formula, ps: &[&String]) -> Formula {
+        match f {
+            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(|t| t_go(t, ps)).collect()),
+            Formula::Imp(a, b) => Formula::Imp(Box::new(f_go(a, ps)), Box::new(f_go(b, ps))),
+            Formula::And(a, b) => Formula::And(Box::new(f_go(a, ps)), Box::new(f_go(b, ps))),
+            Formula::Or(a, b) => Formula::Or(Box::new(f_go(a, ps)), Box::new(f_go(b, ps))),
+            Formula::Forall(x, ty, b) | Formula::Exists(x, ty, b) => {
+                let inner: Vec<&String> = ps.iter().copied().filter(|p| *p != x).collect();
+                let b = Box::new(f_go(b, &inner));
+                if matches!(f, Formula::Forall(..)) {
+                    Formula::Forall(x.clone(), ty.clone(), b)
+                } else {
+                    Formula::Exists(x.clone(), ty.clone(), b)
+                }
+            }
+            Formula::Bot => Formula::Bot,
+        }
+    }
+    f_go(f, &params.iter().collect::<Vec<_>>())
+}
+
+/// 定義の本体 body（`@` 形）の引数 params に args を同時に代入し、`@` を簡約する
+pub fn instantiate(params: &[String], body: &Formula, args: &[Term]) -> Formula {
+    // 同時代入にするため、まず引数名をソースに現れない名前に置き換える
+    let mut f = body.clone();
+    for (i, p) in params.iter().enumerate() {
+        f = f.subst(p, &Term::Var(format!("%{i}")));
+    }
+    for (i, a) in args.iter().enumerate() {
+        f = f.subst(&format!("%{i}"), a);
+    }
+    f.beta()
+}
+
 // ---------------------------------------------------------------- 自由変数
 
 impl Term {
@@ -77,6 +211,20 @@ impl Term {
     }
     pub fn to_latex(&self) -> String {
         show_term_latex(self, 0)
+    }
+    /// `@(h, t…)` を、h が決まっていれば h(t…) に簡約する
+    pub fn beta(&self) -> Term {
+        match self {
+            Term::App(f, args) => {
+                let args: Vec<Term> = args.iter().map(|a| a.beta()).collect();
+                if f == "@" && !args.is_empty() && !matches!(args[0], Term::Meta(_)) {
+                    apply_term(&args[0], &args[1..])
+                } else {
+                    Term::App(f.clone(), args)
+                }
+            }
+            _ => self.clone(),
+        }
     }
 }
 
@@ -154,25 +302,39 @@ impl Formula {
         }
     }
 
-    /// A ∧ (B ∧ C) を [A, B, C] に（最大 n 個）
-    pub fn split_and(&self, n: usize) -> Option<Vec<Formula>> {
-        let mut out = Vec::new();
-        let mut cur = self.clone();
-        while out.len() + 1 < n {
-            match cur {
-                Formula::And(a, b) => {
-                    out.push(*a);
-                    cur = *b;
-                }
-                _ => return None,
-            }
-        }
-        out.push(cur);
-        Some(out)
-    }
-
     pub fn to_latex(&self) -> String {
         show_formula_latex(self, 0)
+    }
+
+    pub fn map_terms(&self, g: &impl Fn(&Term) -> Term) -> Formula {
+        match self {
+            Formula::Atom(p, ts) => Formula::Atom(p.clone(), ts.iter().map(g).collect()),
+            Formula::Imp(a, b) => Formula::Imp(Box::new(a.map_terms(g)), Box::new(b.map_terms(g))),
+            Formula::And(a, b) => Formula::And(Box::new(a.map_terms(g)), Box::new(b.map_terms(g))),
+            Formula::Or(a, b) => Formula::Or(Box::new(a.map_terms(g)), Box::new(b.map_terms(g))),
+            Formula::Forall(x, t, b) => Formula::Forall(x.clone(), t.clone(), Box::new(b.map_terms(g))),
+            Formula::Exists(x, t, b) => Formula::Exists(x.clone(), t.clone(), Box::new(b.map_terms(g))),
+            Formula::Bot => Formula::Bot,
+        }
+    }
+
+    pub fn beta(&self) -> Formula {
+        self.map_terms(&|t| t.beta())
+    }
+
+    /// 現れる述語の名前
+    pub fn preds(&self, out: &mut BTreeSet<String>) {
+        match self {
+            Formula::Atom(p, _) => {
+                out.insert(p.clone());
+            }
+            Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => {
+                a.preds(out);
+                b.preds(out);
+            }
+            Formula::Forall(_, _, b) | Formula::Exists(_, _, b) => b.preds(out),
+            Formula::Bot => {}
+        }
     }
 }
 
@@ -194,6 +356,10 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                 ("^", [a, Term::Num(2)]) => (format!("{}²", show_term(a, 5)), 4),
                 ("^", [a, b]) => (format!("{}^{}", show_term(a, 5), show_term(b, 5)), 4),
                 ("abs", [a]) => (format!("|{}|", show_term(a, 0)), 5),
+                ("@", [h, rest @ ..]) => {
+                    let a: Vec<String> = rest.iter().map(|a| show_term(a, 0)).collect();
+                    (format!("{}({})", show_term(h, 5), a.join(", ")), 5)
+                }
                 _ => {
                     let a: Vec<String> = args.iter().map(|a| show_term(a, 0)).collect();
                     (format!("{}({})", f, a.join(", ")), 5)
@@ -240,6 +406,11 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
             5,
         ),
         Formula::Atom(p, ts) if ts.is_empty() => (p.clone(), 5),
+        Formula::Atom(p, ts) if ts.len() == 2 && notation_for_pred(p).is_some() => {
+            let n = notation_for_pred(p).unwrap();
+            let (l, r) = n.sides(ts);
+            (format!("{} {} {}", show_term(l, 0), n.sym, show_term(r, 0)), 5)
+        }
         Formula::Atom(p, ts) => {
             let a: Vec<String> = ts.iter().map(|t| show_term(t, 0)).collect();
             (format!("{}({})", p, a.join(", ")), 5)
@@ -586,6 +757,10 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     ),
                     3,
                 ),
+                ("@", [h, rest @ ..]) => {
+                    let a: Vec<String> = rest.iter().map(|a| show_term_latex(a, 0)).collect();
+                    (format!("{}({})", show_term_latex(h, 5), a.join(", ")), 5)
+                }
                 ("lim", [sub, body]) => (
                     format!(
                         "\\lim_{{{}}} {}",
@@ -630,6 +805,14 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             5,
         ),
         Formula::Atom(p, ts) if ts.is_empty() => (ident_to_latex(p), 5),
+        Formula::Atom(p, ts) if ts.len() == 2 && notation_for_pred(p).is_some() => {
+            let n = notation_for_pred(p).unwrap();
+            let (l, r) = n.sides(ts);
+            (
+                format!("{} {} {}", show_term_latex(l, 0), n.latex, show_term_latex(r, 0)),
+                5,
+            )
+        }
         Formula::Atom(p, ts) => {
             let a: Vec<String> = ts.iter().map(|t| show_term_latex(t, 0)).collect();
             (format!("{}({})", ident_to_latex(p), a.join(", ")), 5)

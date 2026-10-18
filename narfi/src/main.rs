@@ -1,14 +1,15 @@
 mod arith;
 mod check;
+mod module;
 mod parser;
 mod prose;
 mod syntax;
 mod web;
 
-use check::{Env, Report, check_decls};
+use check::{Report, check_module};
+use module::Loader;
+use std::path::Path;
 use std::process::ExitCode;
-
-const PRELUDE: &str = include_str!("prelude.narfi");
 
 fn usage() -> ExitCode {
     eprintln!("使い方:");
@@ -63,17 +64,16 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
-            let decls = match parser::parse_file(&src) {
-                Ok(d) => d,
+            let (mut ld, mut env) = Loader::new();
+            let m = match ld.parse_file(&mut env, &src, Path::new(path)) {
+                Ok(m) => m,
                 Err(e) => {
                     eprintln!("構文エラー {path}:{}: {}", e.line, e.msg);
                     return ExitCode::FAILURE;
                 }
             };
-            let mut env = Env::default();
-            let prelude = parser::parse_file(PRELUDE).expect("prelude のパースに失敗");
-            let _ = check_decls(&mut env, &prelude, false, true);
-            let reports = check_decls(&mut env, &decls, false, false);
+            let reports = check_module(&mut env, &m, false, false);
+            let decls: Vec<&parser::Decl> = m.decls().collect();
 
             if mode == "prose" {
                 for (d, r) in decls.iter().zip(reports.iter()) {
@@ -120,11 +120,7 @@ fn main() -> ExitCode {
         return usage();
     }
 
-    let mut env = Env::default();
-    let prelude = parser::parse_file(PRELUDE).expect("prelude のパースに失敗");
-    for r in check_decls(&mut env, &prelude, false, true) {
-        assert!(r.err.is_none(), "prelude の定理 {} が通らない", r.name);
-    }
+    let (mut ld, mut env) = Loader::new();
 
     let mut failed = 0;
     let mut unfinished = 0;
@@ -140,8 +136,8 @@ fn main() -> ExitCode {
         if !diag {
             println!("{path}");
         }
-        let decls = match parser::parse_file(&src) {
-            Ok(d) => d,
+        let m = match ld.parse_file(&mut env, &src, Path::new(path)) {
+            Ok(m) => m,
             Err(e) => {
                 if diag {
                     println!("ERROR\t{}\t構文エラー: {}", e.line, esc(&e.msg));
@@ -152,7 +148,7 @@ fn main() -> ExitCode {
                 continue;
             }
         };
-        for r in check_decls(&mut env, &decls, trace, false) {
+        for r in check_module(&mut env, &m, trace, false) {
             if !r.is_axiom {
                 total += 1;
             }
