@@ -501,7 +501,7 @@ pub fn show_term(t: &Term, prec: u8) -> String {
         Term::Var(x) => x.clone(),
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
-        Term::Lam(ps, b) => format!("({} ↦ {})", binder_names(ps), show_term(b, 0)),
+        Term::Lam(ps, b) => format!("({} ↦ {})", binder_typed(ps), show_term(b, 0)),
         Term::Set(ps, phi) => format!("{{{} | {}}}", binder_typed(ps), show_formula(phi, 0)),
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
@@ -547,6 +547,11 @@ pub fn bounded(x: &str, guard: &Formula) -> Option<(String, Term)> {
 /// 表示しない型：書かれていない型（?）・ソート変数（'a）・推論途中の型（?σ1）
 fn hidden_sort(ty: &str) -> bool {
     ty == "?" || ty.starts_with('\'') || ty.starts_with("?σ")
+}
+
+/// `x` か `x:ℝ`（書かれた型は表示に残す。ソースに書き戻しても同じ型になるように）
+fn typed_name(x: &str, ty: &str) -> String {
+    if hidden_sort(ty) { x.to_string() } else { format!("{x}:{ty}") }
 }
 
 fn binder(q: &str, x: &str, ty: &str) -> String {
@@ -596,7 +601,7 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
         Formula::Forall(x, ty, b) => {
             if let Formula::Imp(g, body) = &**b {
                 if let Some((r, t)) = bounded(x, g) {
-                    let s = format!("∀{}{}{}. {}", x, r, show_term(&t, 0), show_formula(body, 0));
+                    let s = format!("∀{}{}{}. {}", typed_name(x, ty), r, show_term(&t, 0), show_formula(body, 0));
                     return if prec > 0 { format!("({s})") } else { s };
                 }
             }
@@ -605,7 +610,7 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
         Formula::Exists(x, ty, b) => {
             if let Formula::And(g, body) = &**b {
                 if let Some((r, t)) = bounded(x, g) {
-                    let s = format!("∃{}{}{}. {}", x, r, show_term(&t, 0), show_formula(body, 0));
+                    let s = format!("∃{}{}{}. {}", typed_name(x, ty), r, show_term(&t, 0), show_formula(body, 0));
                     return if prec > 0 { format!("({s})") } else { s };
                 }
             }

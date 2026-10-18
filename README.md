@@ -11,6 +11,20 @@ cargo run -- check examples/analysis.narfi
 cargo run -- web
 ```
 
+## v2（現在）
+
+v2 では、小さな核（kernel）がすべての証明を推論規則どおりに検算する構成に作り直しました。
+論理の土台は単純型理論（HOL）で、関数・集合を値として扱えます。仕様・設計・学習ノートは
+[`narfi/docs/v2/`](narfi/docs/v2/README.md) にあります。
+
+v1 から書き方が変わった点（v1 のファイルはそのままでは通らないことがあります）：
+
+- 型が決まらない変数には型を書く：`x : ℝ, h : x > 0 ⊢ x/2 > 0`、`∀ε:ℝ>0. …`
+- 数列などの関数は型を宣言する：`a : ℕ → ℝ`。数列の和は λ で `(n ↦ a(n) + b(n))`
+- 集合は述語として書く：`A : ℕ → Prop`、`{n : ℕ | n > 1}`
+
+v1 は `v1.0` タグにあります（`git checkout v1.0`）。`仕様書v0_*.md`・`ガイドブック.md` は v1 時点の文書です。
+
 Narfi is a natural-deduction proof language and its accompanying structured math editor, designed and implemented by Narfidort.
 
 ## License
