@@ -355,6 +355,15 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
             return report;
         }
     };
+    if d.typedef.is_some() && !st.vars.is_empty() {
+        env.failed.insert(d.name.clone());
+        let vs: Vec<&str> = st.vars.iter().map(|(x, _)| x.as_str()).collect();
+        report.err = Some(simple_err(
+            d.line,
+            format!("typedef の集合に、束縛されていない変数 {} がある（{{x : σ | φ}} の φ は x だけを使う）", vs.join(", ")),
+        ));
+        return report;
+    }
     if d.is_axiom {
         if let Err(e) = env.kernel.add_statement(&st, None) {
             env.failed.insert(d.name.clone());
@@ -377,7 +386,20 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
             return report;
         }
     };
-    match env.kernel.add_statement(&st, Some(&proof)) {
+    let added = match &d.typedef {
+        // typedef：空でないことの証明を渡して、型と定数を作る
+        Some(td) => match &st.concl {
+            Formula::Exists(x, carrier, phi) if st.vars.is_empty() => {
+                env.kernel.add_typedef(&td.name, x, carrier, phi, &proof)
+            }
+            _ => Err(crate::kernel::env::KError {
+                line: None,
+                msg: "typedef の集合に、束縛されていない変数がある（{x : σ | φ} の φ は x だけを使う）".into(),
+            }),
+        },
+        None => env.kernel.add_statement(&st, Some(&proof)),
+    };
+    match added {
         Ok(deps) => {
             report.axioms = deps.axioms;
             report.oracles = deps.arith;

@@ -20,6 +20,7 @@ fn usage() -> ExitCode {
     eprintln!("  narfi web [--port 3000] [--no-open]         Mathcha風 Web エディタを起動");
     eprintln!("  narfi prose <ファイル.narfi>                自然な日本語の証明文(Markdown)を出力");
     eprintln!("  narfi latex <ファイル.narfi>                提出用 LaTeX ソースを出力");
+    eprintln!("  narfi convert --jp|--std <ファイル.narfi>   日本語シュガー／標準の ASCII に変換");
     ExitCode::from(2)
 }
 
@@ -53,6 +54,26 @@ fn main() -> ExitCode {
                 eprintln!("Webサーバーの起動に失敗しました: {e}");
                 return ExitCode::FAILURE;
             }
+            return ExitCode::SUCCESS;
+        }
+        // ソースの変換（JP Sugar View・ASCII 正規化と同じもの）
+        "convert" => {
+            let (Some(mode), Some(path)) = (args.get(1), args.get(2)) else {
+                return usage();
+            };
+            let src = match std::fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{path}: 読めない: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            let out = match mode.as_str() {
+                "--jp" => prose::convert_source_to_japanese_sugar(&src),
+                "--std" => prose::convert_source_to_standard_narfi(&src),
+                _ => return usage(),
+            };
+            print!("{out}");
             return ExitCode::SUCCESS;
         }
         "prose" | "latex" => {

@@ -1,0 +1,33 @@
+-- v2.1 の健全性のバグ（同時代入の仮の変数名が混ざる）を突いて ⊥ を出す証明。
+-- 修正前は k.bug と boom が ✓ になっていた。k.bug・boom は ✗ でなければならない。
+def k(a : ℕ) : ℕ := some({b : ℕ | b > a})
+
+thm exists.gt :
+  ⊢ ∀a:ℕ. ∃x:ℕ. x > a
+
+Fix a
+  choose a + 1
+  linarith
+
+-- k(a) は a より大きい（選択公理）
+thm k.gt :
+  ⊢ ∀a:ℕ. k(a) > a
+
+Fix a
+  choice({b : ℕ | b > a}, exists.gt(a))
+
+-- バグがあると、引数の名前が b のとき k(b) が some({y | y > y}) と同じに見える
+thm k.bug :
+  ⊢ ∀b:ℕ. k(b) = some({y : ℕ | y > y})
+
+Fix b
+  refl
+
+thm boom :
+  ⊢ ⊥
+
+have h1 : k(some({y : ℕ | y > y})) > some({y : ℕ | y > y}) := k.gt(some({y : ℕ | y > y}))
+have h2 : k(some({y : ℕ | y > y})) = some({y : ℕ | y > y}) := k.bug(some({y : ℕ | y > y}))
+have bad : 0 > 0 := linarith
+have ok : ¬(0 > 0) := decide
+contradiction bad ok

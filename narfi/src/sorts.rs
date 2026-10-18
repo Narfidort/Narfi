@@ -288,6 +288,18 @@ impl<'a> Infer<'a> {
                         self.constrain_num(&n, 0, "累乗")?;
                         Ok(n)
                     }
+                    // 一般の適用 @(f, s…)：f は関数を値とする項
+                    ("@", [h, rest @ ..]) => {
+                        let fty = self.term(h)?;
+                        let mut ns = Vec::new();
+                        for a in rest {
+                            ns.push(self.term(a)?);
+                        }
+                        let res = self.hole(false, None);
+                        self.unify(&fty, &IT::Fun(ns, Box::new(res.clone())))
+                            .map_err(|e| format!("`{t}` の適用：{e}"))?;
+                        Ok(res)
+                    }
                     ("some", [p]) => {
                         let np = self.term(p)?;
                         let a = self.hole(false, None);
@@ -371,6 +383,14 @@ impl<'a> Infer<'a> {
             }
             Formula::Atom(r, _) if RELS.contains(&r.as_str()) => {
                 Err(format!("関係 `{r}` はこの形では使えない（集合は x ∈ A・{{x | φ}} で書く）"))
+            }
+            Formula::Atom(p, ts) if p == "@" && !ts.is_empty() => {
+                let pty = self.term(&ts[0])?;
+                let mut ns = Vec::new();
+                for t in &ts[1..] {
+                    ns.push(self.term(t)?);
+                }
+                self.unify(&pty, &IT::Fun(ns, Box::new(IT::Prop))).map_err(|e| format!("`{f}`：{e}"))
             }
             Formula::Atom(p, ts) => {
                 let pty = match self.kenv.defs.get(p) {

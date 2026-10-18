@@ -16,7 +16,7 @@ pub mod proof;
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::Formula;
+use crate::syntax::{Formula, Term};
 use env::{DefBody, Deps, KCtx, KDef, KEnv, KResult, Schema, kerr, num_rank};
 use proof::Proof;
 
@@ -81,6 +81,65 @@ impl KEnv {
                 deps: deps.clone(),
             },
         );
+        Ok(deps)
+    }
+
+    /// 型の定義 `typedef T := {x : σ | φ}`（仕様 §8.3）。
+    /// proof が ∃x:σ. φ を示せば、型 T・定数 T.abs : σ → T・T.rep : T → σ と、
+    /// T と {x : σ | φ} が1対1に対応することを表す3つの公理を置く。
+    pub fn add_typedef(&mut self, name: &str, x: &str, carrier: &str, phi: &Formula, proof: &Proof) -> KResult<Deps> {
+        if num_rank(name).is_some() || self.types.contains(name) || name == "Prop" {
+            return kerr(format!("型の名前 `{name}` はすでに使われている"));
+        }
+        let (abs, rep) = (format!("{name}.abs"), format!("{name}.rep"));
+        let names = [abs.clone(), rep.clone(), format!("{name}.rep_prop"), format!("{name}.abs_rep"), format!("{name}.rep_abs")];
+        for n in &names {
+            self.name_free(n)?;
+        }
+        let nonempty = Formula::Exists(x.to_string(), carrier.to_string(), Box::new(phi.clone()));
+        let deps = {
+            let mut ctx = KCtx::new(self, &[]);
+            if !ctx.valid_sort(carrier) {
+                return kerr(format!("typedef の元の型 `{carrier}` が正しくない"));
+            }
+            // 述語は閉じていなければならない（x 以外の自由変数を持たない）
+            ctx.check_f(&nonempty)?;
+            check::check_theorem_proof(&mut ctx, proof, &nonempty)?
+        };
+        let ty = crate::types::Ty::Base(name.to_string());
+        let car = crate::types::Ty::parse(carrier).ok_or_else(|| env::KError { line: None, msg: format!("型 `{carrier}` が読めない") })?;
+        self.types.insert(name.to_string());
+        self.consts.insert(abs.clone(), crate::types::Ty::fun(vec![car.clone()], ty.clone()).show());
+        self.consts.insert(rep.clone(), crate::types::Ty::fun(vec![ty], car).show());
+        let t = Term::Var("t".into());
+        let rep_t = Term::App(rep.clone(), vec![t.clone()]);
+        let xv = Term::Var(x.to_string());
+        let eq = |a: Term, b: Term| Formula::Atom("=".into(), vec![a, b]);
+        let all = |v: &str, s: &str, f: Formula| Formula::Forall(v.into(), s.into(), Box::new(f));
+        let axioms = [
+            // rep(t) は φ を満たす
+            (names[2].clone(), all("t", name, phi.subst(x, &rep_t))),
+            // abs(rep(t)) = t
+            (names[3].clone(), all("t", name, eq(Term::App(abs.clone(), vec![rep_t.clone()]), t.clone()))),
+            // φ(x) なら rep(abs(x)) = x
+            (
+                names[4].clone(),
+                all(
+                    x,
+                    carrier,
+                    Formula::Imp(
+                        Box::new(phi.clone()),
+                        Box::new(eq(Term::App(rep.clone(), vec![Term::App(abs.clone(), vec![xv.clone()])]), xv)),
+                    ),
+                ),
+            ),
+        ];
+        for (n, f) in axioms {
+            self.thms.insert(
+                n,
+                Schema { type_params: vec![], params: vec![], formula: f, is_axiom: true, core: true, deps: deps.clone() },
+            );
+        }
         Ok(deps)
     }
 

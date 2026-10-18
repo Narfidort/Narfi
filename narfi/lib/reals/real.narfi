@@ -1,0 +1,69 @@
+-- 実数 = コーシー列の同値類（商）
+
+import reals.cauchy
+
+-- a と同値な列は、a と同値なものと同値（同値類の包含）
+thm seq_eq.class :
+  a : CauSeq, b : CauSeq,
+  h : a ~ b
+  ⊢ ∀x:CauSeq. b ~ x → a ~ x
+
+Fix x
+  assume hb
+    seq_eq.trans(h, hb)
+
+-- 同値類全体の型（定数列 0 の同値類があるので空でない）
+typedef RealC := {c : CauSeq → Prop | ∃a:CauSeq. c = {b : CauSeq | a ~ b}}
+  choose {b : CauSeq | CauSeq.abs((n:ℕ ↦ 0)) ~ b}
+  choose CauSeq.abs((n:ℕ ↦ 0))
+  refl
+
+-- a の同値類
+def cls(a : CauSeq) : RealC := RealC.abs({b : CauSeq | a ~ b})
+
+-- {x | a ~ x} は同値類である
+thm cls.in :
+  ⊢ ∀a:CauSeq. ∃a':CauSeq. {x : CauSeq | a ~ x} = {b : CauSeq | a' ~ b}
+
+Fix a
+  choose a
+  refl
+
+-- 商の性質 1（sound）：同値な列は同じ実数を表す
+thm cls.sound :
+  a : CauSeq, b : CauSeq,
+  h : a ~ b
+  ⊢ cls(a) = cls(b)
+
+have i1 : ∀x:CauSeq. b ~ x → a ~ x := seq_eq.class(h)
+have i2 : ∀x:CauSeq. a ~ x → b ~ x := seq_eq.class(seq_eq.symm(h))
+have hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} := setext(i2, i1)
+cls(a)
+  = RealC.abs({x : CauSeq | a ~ x})   by refl
+  = RealC.abs({x : CauSeq | b ~ x})   by EQ2(hs, refl)
+  = cls(b)                              by refl
+
+-- 商の性質 2（exact）：同じ実数を表す列は同値
+thm cls.exact :
+  a : CauSeq, b : CauSeq,
+  h : cls(a) = cls(b)
+  ⊢ a ~ b
+
+have ra : RealC.rep(cls(a)) = {x : CauSeq | a ~ x} := RealC.rep_abs({x : CauSeq | a ~ x}, cls.in(a))
+have rb : RealC.rep(cls(b)) = {x : CauSeq | b ~ x} := RealC.rep_abs({x : CauSeq | b ~ x}, cls.in(b))
+have hr : RealC.rep(cls(a)) = RealC.rep(cls(b)) := EQ2(h, refl)
+have hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} := eq.trans(eq.symm(ra), eq.trans(hr, rb))
+have mem : b ~ a := set.eq_sub(hs, a, seq_eq.refl(a))
+seq_eq.symm(mem)
+
+-- 商の性質 3（surjective）：どの実数も、ある列の同値類
+thm cls.surj :
+  ⊢ ∀r:RealC. ∃a:CauSeq. r = cls(a)
+
+Fix r
+  Obtain a, ha : RealC.rep_prop(r)
+  choose a
+  r
+    = RealC.abs(RealC.rep(r))           by eq.symm(RealC.abs_rep(r))
+    = RealC.abs({b : CauSeq | a ~ b})   by EQ2(ha, refl)
+    = cls(a)                             by refl

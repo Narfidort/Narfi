@@ -1,0 +1,67 @@
+-- コーシー列と、その型 CauSeq
+
+import reals.rat
+
+def cauchy(a : ℕ → ℚ) := ∀ε:ℚ>0. ∃N:ℕ. ∀m≥N. ∀n≥N. |a(m) - a(n)| < ε
+
+-- 定数列はコーシー列
+thm cauchy.const :
+  ⊢ ∀q:ℚ. cauchy((n:ℕ ↦ q))
+
+Fix q
+  Fix ε | hε
+    choose 0
+    Fix m | hm
+      Fix n | hn
+        have z : |0| = 0 := abs.zero
+        linarith
+
+-- コーシー列全体の型（定数列 0 があるので空でない）
+typedef CauSeq := {a : ℕ → ℚ | cauchy(a)}
+  choose (n:ℕ ↦ 0)
+  cauchy.const(0)
+
+
+-- 同値関係：差が 0 に収束する
+def seq_eq(a : CauSeq, b : CauSeq) := ∀ε:ℚ>0. ∃N:ℕ. ∀n≥N. |CauSeq.rep(a)(n) - CauSeq.rep(b)(n)| < ε
+notation a "~" b := seq_eq(a, b)
+
+thm seq_eq.refl :
+  ⊢ ∀a:CauSeq. a ~ a
+
+Fix a
+  Fix ε | hε
+    choose 0
+    Fix n | hn
+      have z : |0| = 0 := abs.zero
+      linarith
+
+thm seq_eq.symm :
+  a : CauSeq, b : CauSeq,
+  h : a ~ b
+  ⊢ b ~ a
+
+Fix ε | hε
+  Obtain N, hN : h(ε, hε)
+  choose N
+  Fix n | hn
+    |CauSeq.rep(b)(n) - CauSeq.rep(a)(n)|
+      = |CauSeq.rep(a)(n) - CauSeq.rep(b)(n)|   by abs.sub_comm(CauSeq.rep(b)(n), CauSeq.rep(a)(n))
+      < ε                                         by hN(n, hn)
+
+thm seq_eq.trans :
+  a : CauSeq, b : CauSeq, c : CauSeq,
+  h1 : a ~ b, h2 : b ~ c
+  ⊢ a ~ c
+
+Fix ε | hε
+  Obtain N₁, hN₁ : h1(ε/2, half_pos(hε))
+  Obtain N₂, hN₂ : h2(ε/2, half_pos(hε))
+  let N := max(N₁, N₂)
+  choose N
+  Fix n | hn
+    |CauSeq.rep(a)(n) - CauSeq.rep(c)(n)|
+      = |(CauSeq.rep(a)(n) - CauSeq.rep(b)(n)) + (CauSeq.rep(b)(n) - CauSeq.rep(c)(n))|   by ring
+      ≤ |CauSeq.rep(a)(n) - CauSeq.rep(b)(n)| + |CauSeq.rep(b)(n) - CauSeq.rep(c)(n)|     by abs.triangle(CauSeq.rep(a)(n) - CauSeq.rep(b)(n), CauSeq.rep(b)(n) - CauSeq.rep(c)(n))
+      < ε/2 + ε/2                                                                            by hN₁(n, ge.max.left(hn)), hN₂(n, ge.max.right(hn))
+      = ε                                                                                    by ring

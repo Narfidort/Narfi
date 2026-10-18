@@ -81,6 +81,7 @@ impl<'a> Checker<'a> {
                 let a: Vec<Term> = a.iter().map(|x| self.zonk_t(x)).collect();
                 match self.fn_binding(f) {
                     Some(b) => self.zonk_t(&apply_term(&self.zonk_t(&b), &a)),
+                    None if f == "@" && !a.is_empty() => apply_term(&a[0], &a[1..]),
                     None => Term::App(f.clone(), a),
                 }
             }
@@ -100,6 +101,7 @@ impl<'a> Checker<'a> {
                 let ts: Vec<Term> = ts.iter().map(|t| self.zonk_t(t)).collect();
                 match self.fn_binding(p) {
                     Some(b) => self.zonk_f(&holds(&self.zonk_t(&b), &ts)),
+                    None if p == "@" && !ts.is_empty() => holds(&ts[0], &ts[1..]),
                     None => Formula::Atom(p.clone(), ts),
                 }
             }
@@ -434,10 +436,14 @@ impl<'a> Checker<'a> {
                 let (f, xs, u) = (f.clone(), xs.clone(), u.clone());
                 self.solve_app(&f, &xs, &u)
             }
-            (Term::Var(x), Term::Var(y)) => x == y,
             (Term::Num(x), Term::Num(y)) => x == y,
-            (Term::App(f, xs), Term::App(g, ys)) => {
-                f == g && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.ut(x, y))
+            (Term::App(f, xs), Term::App(g, ys)) if f == g && xs.len() == ys.len() => {
+                let save = self.save();
+                if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
+                    return true;
+                }
+                self.restore(save);
+                self.ut_unfold(&a, &b)
             }
             (Term::Lam(p1, b1), Term::Lam(p2, b2)) if p1.len() == p2.len() => {
                 if !p1.iter().zip(p2).all(|((_, s), (_, t))| self.unify_sort(s, t)) {
@@ -457,8 +463,35 @@ impl<'a> Checker<'a> {
                 let s2: Vec<(String, Term)> = p2.iter().map(|(p, _)| p.clone()).zip(vs.iter().cloned()).collect();
                 self.uf(&f1.subst_many(&s1), &f2.subst_many(&s2))
             }
-            _ => false,
+            (Term::Var(x), Term::Var(y)) if x == y => true,
+            _ => self.ut_unfold(&a, &b),
         }
+    }
+
+    /// 項の定義を1段展開して比べ直す（δ）
+    fn ut_unfold(&mut self, a: &Term, b: &Term) -> bool {
+        let one = |c: &Self, t: &Term| -> Option<Term> {
+            use crate::kernel::env::{DefBody, KDef};
+            let (f, args) = match t {
+                Term::App(f, args) => (f, args.clone()),
+                Term::Var(f) => (f, vec![]),
+                _ => return None,
+            };
+            match c.env.kernel.defs.get(f) {
+                Some(KDef { params, body: DefBody::Term(_, body) }) if params.len() == args.len() => {
+                    let subs: Vec<(String, Term)> = params.iter().map(|(p, _)| p.clone()).zip(args).collect();
+                    Some(body.subst_many(&subs))
+                }
+                _ => None,
+            }
+        };
+        if let Some(x) = one(self, a) {
+            return self.ut(&x, b);
+        }
+        if let Some(y) = one(self, b) {
+            return self.ut(a, &y);
+        }
+        false
     }
 
     /// パターンの引数（相異なる変数）なら、そのパラメータの名前と型を返す

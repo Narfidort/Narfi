@@ -35,6 +35,14 @@ thm congr.S :
 EQ2(h, refl)
 
 
+-- 自然数は 0 以上（項に使えるように定理にしておく）
+thm nat.nonneg :
+  ⊢ ∀n:ℕ. n ≥ 0
+
+Fix n
+  linarith
+
+
 -- 単純型理論（HOL）の公理：外延性と選択（仕様 §8）
 
 -- 関数は、すべての点で値が等しければ等しい
@@ -48,3 +56,13 @@ axiom setext : ∀A. ∀B. (∀x. A(x) → B(x)) → (∀x. B(x) → A(x)) → A
 
 -- 選択：P を満たすものがあれば、some(P) は P を満たす（Hilbert の ε）
 axiom choice : ∀P. (∃x. P(x)) → P(some(P))
+
+
+-- 集合が等しければ、一方の元は他方の元（等号による書き換え）
+thm set.eq_sub :
+  h : A = B
+  ⊢ ∀x. A(x) → B(x)
+
+Fix x
+  assume hx
+    EQ2(h, hx)

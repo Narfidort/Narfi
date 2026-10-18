@@ -1,0 +1,26 @@
+-- v2.2：typedef の間違い。1本も ✓ になってはいけない。
+
+-- 空でないことの証明が間違っている（0 は 0 より大きくない）
+typedef Bad := {n : ℕ | n > 0}
+  choose 0
+  decide
+
+
+-- 集合に、束縛されていない変数がある
+typedef Open := {n : ℕ | n > k}
+  choose k + 1
+  linarith
+
+
+-- 空の集合の typedef を sorry で通すと矛盾が出る。sorry に頼るので ✓ にはならない（△ 未完成）
+typedef Empty := {n : ℕ | n < 0}
+  sorry
+
+thm from.empty :
+  ⊢ ⊥
+
+have h : Empty.rep(some({t : Empty | t = t})) < 0 := Empty.rep_prop(some({t : Empty | t = t}))
+have h0 : Empty.rep(some({t : Empty | t = t})) ≥ 0 := nat.nonneg(Empty.rep(some({t : Empty | t = t})))
+have bad : 0 < 0 := linarith
+have ok : ¬(0 < 0) := decide
+contradiction bad ok

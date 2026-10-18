@@ -139,8 +139,8 @@ impl<'a> Checker<'a> {
                 match self.whnf(&f) {
                     Formula::Forall(x, s, body) => {
                         if self.is_proof(ctx, arg) {
-                            // 証拠が来たら、∀ の変数は単一化で決める
-                            let m = self.new_meta();
+                            // 証拠が来たら、∀ の変数は単一化で決める（関数型・述語型なら関数の穴）
+                            let m = if is_higher(&self.zonk_sort(&s)) { Term::Var(self.new_fn_meta(&s)) } else { self.new_meta() };
                             f = body.subst(&x, &m);
                             pf = Proof::AllE(pf.b(), m);
                             continue;

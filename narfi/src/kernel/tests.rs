@@ -289,3 +289,83 @@ fn choice_needs_existence() {
     let r = env2.add_statement(&st("P(some(P))"), Some(&inst())).map(|_| ()).map_err(|e| e.msg);
     rejected(r, "定理の結論");
 }
+
+/// 同時代入の仮の変数名が混ざるバグ（v2.1）の回帰テスト。
+/// k(a) := some({b | b > a}) に a := b を入れた結果が some({b' | b' > b'}) になっていたため、
+/// 「k(b) = some({y | y > y})」が反射律で通り、選択公理と合わせて ⊥ が証明できた。
+#[test]
+fn simultaneous_substitution_does_not_mix_placeholders() {
+    let mut env = KEnv::default();
+    let body = DefBody::Term("ℕ".into(), t("some({b : ℕ | b > a})"));
+    env.add_def("k", &[("a".into(), "ℕ".into())], &body).unwrap();
+    let st = |concl: &str| Statement {
+        name: "t".into(),
+        type_params: vec![],
+        vars: vec![("b".into(), "ℕ".into())],
+        hyps: vec![],
+        concl: f(concl),
+        is_axiom: false,
+        core: false,
+    };
+    let refl = Proof::Refl(t("k(b)"));
+    // 正しい展開：k(b) ≡ some({x | x > b})
+    assert!(env.add_statement(&st("k(b) = some({x : ℕ | x > b})"), Some(&refl)).is_ok());
+    // 間違った展開は通らない
+    let mut env2 = KEnv::default();
+    env2.add_def("k", &[("a".into(), "ℕ".into())], &body).unwrap();
+    let r = env2.add_statement(&st("k(b) = some({y : ℕ | y > y})"), Some(&refl)).map(|_| ()).map_err(|e| e.msg);
+    rejected(r, "定理の結論");
+}
+
+// ---------------------------------------------------------------- v2.2：typedef
+
+fn exists_proof(witness: &str, p: Proof) -> Proof {
+    Proof::ExI { target: f("∃n:ℕ. n > 0"), witness: t(witness), p: b(p) }
+}
+
+#[test]
+fn typedef_requires_nonempty_proof() {
+    let phi = f("n > 0");
+    // 正しい証人
+    let mut env = KEnv::default();
+    let ok = exists_proof("1", Proof::Decide(f("1 > 0")));
+    assert!(env.add_typedef("Pos", "n", "ℕ", &phi, &ok).is_ok());
+    assert!(env.types.contains("Pos"));
+    assert_eq!(env.consts.get("Pos.abs").map(|s| s.as_str()), Some("ℕ → Pos"));
+    // 間違った証人（0 > 0 は偽）
+    let mut env = KEnv::default();
+    let bad = exists_proof("0", Proof::Decide(f("0 > 0")));
+    assert!(env.add_typedef("Pos", "n", "ℕ", &phi, &bad).is_err());
+    // 集合に自由変数がある（k が文脈にない）
+    let mut env = KEnv::default();
+    let open = Proof::Sorry(f("∃n:ℕ. n > k"));
+    assert!(env.add_typedef("Open", "n", "ℕ", &f("n > k"), &open).is_err());
+    // 同じ名前の型は2回作れない
+    let mut env = KEnv::default();
+    env.add_typedef("Pos", "n", "ℕ", &phi, &ok).unwrap();
+    assert!(env.add_typedef("Pos", "n", "ℕ", &phi, &ok).is_err());
+}
+
+/// typedef の公理：rep は集合に入り、abs と rep は互いに逆
+#[test]
+fn typedef_axioms() {
+    let mut env = KEnv::default();
+    let ok = exists_proof("1", Proof::Decide(f("1 > 0")));
+    env.add_typedef("Pos", "n", "ℕ", &f("n > 0"), &ok).unwrap();
+    let st = |concl: &str| Statement {
+        name: "t".into(),
+        type_params: vec![],
+        vars: vec![("p".into(), "Pos".into())],
+        hyps: vec![],
+        concl: f(concl),
+        is_axiom: false,
+        core: false,
+    };
+    let rep_prop = Proof::AllE(b(Proof::Thm { name: "Pos.rep_prop".into(), sorts: vec![], args: vec![] }), t("p"));
+    assert!(env.add_statement(&st("Pos.rep(p) > 0"), Some(&rep_prop)).is_ok());
+    // rep(p) > 1 は出ない
+    let mut env = KEnv::default();
+    env.add_typedef("Pos", "n", "ℕ", &f("n > 0"), &ok).unwrap();
+    let r = env.add_statement(&st("Pos.rep(p) > 1"), Some(&rep_prop)).map(|_| ()).map_err(|e| e.msg);
+    rejected(r, "定理の結論");
+}

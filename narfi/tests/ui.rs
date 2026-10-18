@@ -4,7 +4,10 @@
 use std::path::Path;
 use std::process::Command;
 
-const FILES: [&str; 11] = [
+const FILES: [&str; 14] = [
+    "lib/reals/rat.narfi",
+    "lib/reals/cauchy.narfi",
+    "lib/reals/real.narfi",
     "examples/hol.narfi",
     "tests/unsound_hol.narfi",
     "examples/basics.narfi",
@@ -82,4 +85,35 @@ fn editor_operations() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
+}
+
+/// ソースの変換（日本語シュガー・標準 ASCII）で検査結果が変わらないこと。
+/// 変換したものをさらにエディタの往復にかけても変わらないこと。
+#[test]
+fn source_conversion_preserves_proofs() {
+    let node = Command::new("node").arg("--version").output().is_ok();
+    let mut files: Vec<&str> = FILES.to_vec();
+    files.extend(["tests/unsound_typedef.narfi", "tests/regress/subst_placeholder.narfi"]);
+    for f in files {
+        let f = Path::new(f);
+        for mode in ["--jp", "--std"] {
+            let out = Command::new(env!("CARGO_BIN_EXE_narfi")).args(["convert", mode]).arg(f).output().unwrap();
+            let converted = String::from_utf8(out.stdout).unwrap();
+            let tmp = f.with_file_name(format!(".convert-{}{}.narfi", std::process::id(), mode));
+            std::fs::write(&tmp, &converted).unwrap();
+            let got = statuses(&tmp);
+            let via_ui = if node {
+                let rt = roundtrip(&tmp);
+                std::fs::write(&tmp, &rt).unwrap();
+                Some(statuses(&tmp))
+            } else {
+                None
+            };
+            std::fs::remove_file(&tmp).unwrap();
+            assert_eq!(statuses(f), got, "{} {mode}: 変換すると検査結果が変わる\n{converted}", f.display());
+            if let Some(v) = via_ui {
+                assert_eq!(statuses(f), v, "{} {mode}: 変換してエディタを通すと検査結果が変わる", f.display());
+            }
+        }
+    }
 }

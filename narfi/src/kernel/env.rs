@@ -211,7 +211,16 @@ impl<'a> KCtx<'a> {
                         TSort::Known(Ty::Fun(a, r)) if a.len() == 1 && *r == Ty::Prop => Ok(TSort::Known(a[0].clone())),
                         other => kerr(format!("some の引数は述語（σ → Prop）でなければならない（{other:?}）")),
                     },
-                    ("@", _) => kerr(format!("`{t}` は適用できない形をしている")),
+                    // 一般の適用 @(f, s…)：f の型が σ₁ × … → τ（τ ≠ Prop）
+                    ("@", [h, rest @ ..]) => match self.infer_t(h)? {
+                        TSort::Known(Ty::Fun(ps, r)) if *r != Ty::Prop && ps.len() == rest.len() => {
+                            for (a, s) in rest.iter().zip(&ps) {
+                                self.check_t(a, s)?;
+                            }
+                            Ok(TSort::Known(*r))
+                        }
+                        _ => kerr(format!("`{t}` は適用できない形をしている")),
+                    },
                     _ => {
                         let fty = if let Some(s) = self.var_sort(f) {
                             parse_ty(&s)?
@@ -374,6 +383,15 @@ impl<'a> KCtx<'a> {
             Formula::Atom(r, ts) if r == "=" || ORDER_RELS.contains(&r.as_str()) => match ts.as_slice() {
                 [a, b] => self.rel_sort(r, a, b).map(|_| ()),
                 _ => kerr(format!("`{r}` の引数は2つ")),
+            },
+            Formula::Atom(p, ts) if p == "@" && !ts.is_empty() => match self.infer_t(&ts[0])? {
+                TSort::Known(Ty::Fun(ps, r)) if *r == Ty::Prop && ps.len() + 1 == ts.len() => {
+                    for (t, s) in ts[1..].iter().zip(&ps) {
+                        self.check_t(t, s)?;
+                    }
+                    Ok(())
+                }
+                _ => kerr(format!("`{f}` は述語の適用になっていない")),
             },
             Formula::Atom(p, ts) => {
                 if let Some(d) = self.env.defs.get(p) {

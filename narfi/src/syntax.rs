@@ -122,6 +122,20 @@ fn is_builtin_rel(p: &str) -> bool {
     RELS.contains(&p)
 }
 
+// 同時代入の仮の変数名（%1, %2, …）。呼び出しのたびに新しい名前を使う。
+// 使い回すと、代入の途中で束縛変数の付け替えのために内側でもう一度同時代入をしたとき、
+// 外側の仮の変数と内側の仮の変数が混ざってしまう（v2.1 で実際にあった健全性のバグ）。
+thread_local! {
+    static PLACEHOLDER: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn placeholder() -> String {
+    PLACEHOLDER.with(|c| {
+        c.set(c.get() + 1);
+        format!("%{}", c.get())
+    })
+}
+
 // β 簡約が止まらない（型の合わない項を代入した）ときに、無限ループではなく止めるための深さ
 thread_local! {
     static BETA_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
@@ -251,7 +265,14 @@ impl Term {
             Term::Var(y) if y == x => u.clone(),
             Term::App(f, args) => {
                 let args: Vec<Term> = args.iter().map(|a| a.subst(x, u)).collect();
-                if f == x { apply_term(u, &args) } else { Term::App(f.clone(), args) }
+                if f == x {
+                    apply_term(u, &args)
+                } else if f == "@" && !args.is_empty() {
+                    // 一般の適用 @(t, s…)：t が名前・λ になったら普通の適用・β 簡約に戻す
+                    apply_term(&args[0], &args[1..])
+                } else {
+                    Term::App(f.clone(), args)
+                }
             }
             Term::Lam(ps, body) => {
                 if ps.iter().any(|(p, _)| p == x) {
@@ -278,12 +299,13 @@ impl Term {
 
     /// 同時代入
     pub fn subst_many(&self, subs: &[(String, Term)]) -> Term {
+        let tmp: Vec<String> = subs.iter().map(|_| placeholder()).collect();
         let mut t = self.clone();
-        for (i, (x, _)) in subs.iter().enumerate() {
-            t = t.subst(x, &Term::Var(format!("%{i}")));
+        for ((x, _), p) in subs.iter().zip(&tmp) {
+            t = t.subst(x, &Term::Var(p.clone()));
         }
-        for (i, (_, u)) in subs.iter().enumerate() {
-            t = t.subst(&format!("%{i}"), u);
+        for ((_, u), p) in subs.iter().zip(&tmp) {
+            t = t.subst(p, u);
         }
         t
     }
@@ -378,7 +400,13 @@ impl Formula {
         match self {
             Formula::Atom(p, ts) => {
                 let ts: Vec<Term> = ts.iter().map(|s| s.subst(x, t)).collect();
-                if p == x { holds(t, &ts) } else { Formula::Atom(p.clone(), ts) }
+                if p == x {
+                    holds(t, &ts)
+                } else if p == "@" && !ts.is_empty() {
+                    holds(&ts[0], &ts[1..])
+                } else {
+                    Formula::Atom(p.clone(), ts)
+                }
             }
             Formula::Imp(a, b) => Formula::Imp(Box::new(a.subst(x, t)), Box::new(b.subst(x, t))),
             Formula::And(a, b) => Formula::And(Box::new(a.subst(x, t)), Box::new(b.subst(x, t))),
@@ -431,12 +459,13 @@ impl Formula {
 
     /// 同時代入 φ[x₁ := t₁, …]（tᵢ の中の変数が xⱼ と同じ名前でも混ざらない）
     pub fn subst_many(&self, subs: &[(String, Term)]) -> Formula {
+        let tmp: Vec<String> = subs.iter().map(|_| placeholder()).collect();
         let mut f = self.clone();
-        for (i, (x, _)) in subs.iter().enumerate() {
-            f = f.subst(x, &Term::Var(format!("%{i}")));
+        for ((x, _), p) in subs.iter().zip(&tmp) {
+            f = f.subst(x, &Term::Var(p.clone()));
         }
-        for (i, (_, t)) in subs.iter().enumerate() {
-            f = f.subst(&format!("%{i}"), t);
+        for ((_, t), p) in subs.iter().zip(&tmp) {
+            f = f.subst(p, t);
         }
         f
     }
@@ -502,6 +531,10 @@ pub fn show_term(t: &Term, prec: u8) -> String {
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
         Term::Lam(ps, b) => format!("({} ↦ {})", binder_typed(ps), show_term(b, 0)),
+        Term::App(f, args) if f == "@" && !args.is_empty() => {
+            let a: Vec<String> = args[1..].iter().map(|a| show_term(a, 0)).collect();
+            format!("{}({})", show_term(&args[0], 5), a.join(", "))
+        }
         Term::Set(ps, phi) => format!("{{{} | {}}}", binder_typed(ps), show_formula(phi, 0)),
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
@@ -570,6 +603,10 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
             5,
         ),
         Formula::Atom(p, ts) if ts.is_empty() => (p.clone(), 5),
+        Formula::Atom(p, ts) if p == "@" => {
+            let a: Vec<String> = ts[1..].iter().map(|t| show_term(t, 0)).collect();
+            (format!("{}({})", show_term(&ts[0], 5), a.join(", ")), 5)
+        }
         Formula::Atom(p, ts) if ts.len() == 2 && notation_for_pred(p).is_some() => {
             let n = notation_for_pred(p).unwrap();
             let (l, r) = n.sides(ts);
@@ -839,6 +876,10 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
         Term::Lam(ps, b) => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
+        Term::App(f, args) if f == "@" && !args.is_empty() => {
+            let a: Vec<String> = args[1..].iter().map(|a| show_term_latex(a, 0)).collect();
+            format!("{}({})", show_term_latex(&args[0], 5), a.join(", "))
+        }
         Term::Set(ps, phi) => format!(
             "\\left\\{{ {} \\mid {} \\right\\}}",
             binder_latex_list(ps, true),
@@ -999,6 +1040,10 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             5,
         ),
         Formula::Atom(p, ts) if ts.is_empty() => (ident_to_latex(p), 5),
+        Formula::Atom(p, ts) if p == "@" => {
+            let a: Vec<String> = ts[1..].iter().map(|t| show_term_latex(t, 0)).collect();
+            (format!("{}({})", show_term_latex(&ts[0], 5), a.join(", ")), 5)
+        }
         Formula::Atom(p, ts) if ts.len() == 2 && notation_for_pred(p).is_some() => {
             let n = notation_for_pred(p).unwrap();
             let (l, r) = n.sides(ts);

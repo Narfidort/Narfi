@@ -12,7 +12,8 @@ fn correct_proofs_pass() {
     let out = run(&["examples/basics.narfi", "examples/analysis.narfi"])
         + &run(&["tests/exercises_answers.narfi"])
         + &run(&["examples/limits.narfi"])
-        + &run(&["examples/hol.narfi"]);
+        + &run(&["examples/hol.narfi"])
+        + &run(&["lib/reals/rat.narfi", "lib/reals/cauchy.narfi", "lib/reals/real.narfi"]);
     assert!(!out.contains('✗'), "{out}");
     assert!(out.contains("すべて検証しました"), "{out}");
 }
@@ -25,6 +26,7 @@ fn wrong_proofs_fail() {
         "tests/unsound_defs.narfi",
         "tests/unsound_sorts.narfi",
         "tests/unsound_hol.narfi",
+        "tests/unsound_typedef.narfi",
     ] {
         let out = run(&[f]);
         let passed: Vec<&str> = out.lines().filter(|l| l.trim_start().starts_with('✓')).collect();
@@ -57,4 +59,13 @@ fn bad_definitions_are_rejected() {
         let out = run(&[f.to_str().unwrap()]);
         assert!(out.contains("構文エラー") && out.contains(msg), "{src}\n{out}");
     }
+}
+
+/// v2.1 の健全性のバグの回帰テスト：⊥ の証明が通ってはいけない
+#[test]
+fn regression_subst_placeholder() {
+    let out = run(&["tests/regress/subst_placeholder.narfi"]);
+    assert!(out.contains("✗ k.bug"), "{out}");
+    assert!(out.contains("✗ boom"), "{out}");
+    assert!(!out.lines().any(|l| l.trim_start().starts_with("✓ boom")), "{out}");
 }

@@ -1,0 +1,35 @@
+-- 有理数 ℚ についての基本的な事実。
+-- ℚ は kernel の算術に組み込まれた順序体（仕様 §7）。絶対値と max の性質はまだ
+-- 順序体の公理から導いていないので、ここでは公理として置く（利用者の公理として報告される）。
+
+axiom abs.sub_comm : ∀x:ℚ. ∀y:ℚ. |x - y| = |y - x|
+axiom abs.triangle : ∀x:ℚ. ∀y:ℚ. |x + y| ≤ |x| + |y|
+axiom le_max_left  : ∀a:ℕ. ∀b:ℕ. max(a, b) ≥ a
+axiom le_max_right : ∀a:ℕ. ∀b:ℕ. max(a, b) ≥ b
+
+thm abs.zero :
+  ⊢ |0| = 0
+
+decide
+
+thm half_pos :
+  x : ℚ, h : x > 0
+  ⊢ x/2 > 0
+
+linarith
+
+thm ge.max.left :
+  n : ℕ, h : n ≥ max(a, b)
+  ⊢ n ≥ a
+
+n
+  ≥ max(a, b)   by h
+  ≥ a           by le_max_left(a, b)
+
+thm ge.max.right :
+  n : ℕ, h : n ≥ max(a, b)
+  ⊢ n ≥ b
+
+n
+  ≥ max(a, b)   by h
+  ≥ b           by le_max_right(a, b)

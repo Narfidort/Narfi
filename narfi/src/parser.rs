@@ -24,6 +24,14 @@ pub struct Decl {
     pub ctx: Vec<CtxItem>,
     pub concl: Formula,
     pub body: Vec<Stmt>,
+    /// `typedef T := {x : σ | φ}` なら Some。concl は ∃x:σ. φ（空でないことの証明が body）
+    pub typedef: Option<TypeDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeDef {
+    /// 作る型の名前
+    pub name: String,
 }
 
 /// `def name(params) := body`。body は引数が関数の位置に現れる所を `@` 形にしたもの。
@@ -1088,6 +1096,7 @@ impl P {
             return Ok(n.atom(t, u));
         }
         let (p, args) = match t {
+            Term::App(p, args) if p == "@" => return Ok(Formula::Atom(p, args)),
             Term::Var(p) => (p, vec![]),
             Term::App(p, args) if p.chars().next().is_some_and(is_ident_start) => (p, args),
             _ => return self.err(format!("論理式が必要（{} の位置）", self.here())),
@@ -1105,8 +1114,8 @@ impl P {
     /// t ∈ A：A が名前なら述語 A の適用、集合 {x | φ} なら φ[x := t]
     fn mem(&self, t: &Term, a: &Term) -> PResult<Formula> {
         match a {
-            Term::Var(_) | Term::Set(..) => Ok(holds(a, std::slice::from_ref(t))),
-            _ => self.err(format!("`∈` の右には集合の名前か {{x | φ}} を書く（`{a}`）")),
+            Term::Num(_) => self.err(format!("`∈` の右には集合を書く（`{a}`）")),
+            _ => Ok(holds(a, std::slice::from_ref(t))),
         }
     }
 
@@ -1188,7 +1197,27 @@ impl P {
         }
         Ok(a)
     }
+    /// 項の後ろに続く適用 t(s…)(u…)：関数を返す項を、さらに適用する
     fn term_atom(&mut self) -> PResult<Term> {
+        let mut t = self.term_atom0()?;
+        while self.is_sym("(") && !matches!(t, Term::Num(_)) {
+            self.pos += 1;
+            let mut args = Vec::new();
+            if !self.eat_sym(")") {
+                loop {
+                    args.push(self.term()?);
+                    if self.eat_sym(")") {
+                        break;
+                    }
+                    self.expect_sym(",")?;
+                }
+            }
+            t = crate::syntax::apply_term(&t, &args);
+        }
+        Ok(t)
+    }
+
+    fn term_atom0(&mut self) -> PResult<Term> {
         match self.peek().cloned() {
             Some(Tok::Num(n)) => {
                 self.pos += 1;
@@ -1312,7 +1341,7 @@ fn decl_keyword(text: &str) -> String {
 fn starts_decl(text: &str) -> bool {
     matches!(
         decl_keyword(text).as_str(),
-        "thm" | "axiom" | "def" | "notation" | "import"
+        "thm" | "axiom" | "def" | "notation" | "import" | "typedef"
     )
 }
 
@@ -1393,9 +1422,12 @@ pub fn parse_module(
             _ => {}
         }
         let is_axiom = is_axiom_decl(&l.text);
-        // 見出し：thm は ⊢ を含む行まで、axiom は字下げされた続きの行まで
+        let is_typedef = decl_keyword(&l.text) == "typedef";
+        // 見出し：thm は ⊢ を含む行まで、axiom は字下げされた続きの行まで、typedef は1行
         let mut header = vec![i];
-        if is_axiom {
+        if is_typedef {
+            // 1行だけ
+        } else if is_axiom {
             while i + 1 < lines.len() && lines[i + 1].indent > 0 {
                 i += 1;
                 header.push(i);
@@ -1417,7 +1449,11 @@ pub fn parse_module(
         }
         i += 1;
         let htext: Vec<&str> = header.iter().map(|&k| lines[k].text.as_str()).collect();
-        let mut decl = parse_header(&htext.join(" "), l.no, is_axiom)?;
+        let mut decl = if is_typedef {
+            parse_typedef(&htext.join(" "), l.no)?
+        } else {
+            parse_header(&htext.join(" "), l.no, is_axiom)?
+        };
         if !is_axiom {
             let st = i;
             while i < lines.len() && !(lines[i].indent == 0 && starts_decl(&lines[i].text)) {
@@ -1531,6 +1567,7 @@ fn notation_latex(raw: &str, sym: &str) -> String {
         "≼" => Some("\\preceq"),
         "≽" => Some("\\succeq"),
         "⊥⊥" => Some("\\perp\\!\\!\\!\\perp"),
+        "~" => Some("\\sim"),
         _ => None,
     };
     match known {
@@ -1624,6 +1661,42 @@ fn register_def(d: &Def) -> PResult<()> {
     })
 }
 
+/// `typedef T := {x : σ | φ}`。型 T・定数 T.abs・T.rep をこの場で登録する（後ろの行で使えるように）
+fn parse_typedef(text: &str, line: usize) -> PResult<Decl> {
+    let mut p = P::new(lex(text, line)?, line, vec![]);
+    p.ident()?; // typedef
+    let name = p.ident()?;
+    p.expect_sym(":=")?;
+    let set = p.term()?;
+    p.expect_end()?;
+    let Term::Set(ps, phi) = set else {
+        return p.err("typedef の右辺は {x : σ | φ} の形にする");
+    };
+    let [(x, ty)] = ps.as_slice() else {
+        return p.err("typedef の集合の変数は1つ（{x : σ | φ}）");
+    };
+    if ty == "?" {
+        return p.err(format!("typedef では元の型を書く（{{{x} : σ | …}}）"));
+    }
+    if TYPE_NAMES.contains(&name.as_str()) || name.contains('.') {
+        return p.err(format!("`{name}` は型の名前に使えない"));
+    }
+    with_syntax(|t| {
+        t.types.insert(name.clone());
+        t.consts.insert(format!("{name}.abs"));
+        t.consts.insert(format!("{name}.rep"));
+    });
+    Ok(Decl {
+        is_axiom: false,
+        name: name.clone(),
+        line,
+        ctx: vec![],
+        concl: Formula::Exists(x.clone(), ty.clone(), phi),
+        body: vec![],
+        typedef: Some(TypeDef { name }),
+    })
+}
+
 /// 型として読めるもの（数の型・Prop・typedef で作った型からなる）
 fn known_type(t: &Ty) -> bool {
     !t.any(&|u| match u {
@@ -1677,6 +1750,7 @@ fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
         ctx,
         concl,
         body: vec![],
+        typedef: None,
     })
 }
 

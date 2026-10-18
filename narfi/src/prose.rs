@@ -2,7 +2,7 @@
 
 use crate::elab::StepTrace;
 use crate::parser::{Choice, CtxItem, Decl, Item, Just, Stmt, StmtKind};
-use crate::syntax::{Term, ident_to_latex, rel_to_latex};
+use crate::syntax::{Formula, Term, ident_to_latex, rel_to_latex};
 
 #[derive(Debug, Clone)]
 pub struct ProseBlock {
@@ -476,6 +476,16 @@ pub fn convert_source_to_japanese_sugar(src: &str) -> String {
         let Some(d) = emit_non_decl(it, &mut out) else {
             continue;
         };
+        // typedef T := {x : σ | φ}（文は ∃x:σ. φ として持っている）
+        if let (Some(td), Formula::Exists(x, ty, phi)) = (&d.typedef, &d.concl) {
+            let set = Term::Set(vec![(x.clone(), ty.clone())], phi.clone());
+            out.push_str(&format!("typedef {} := {set}\n", td.name));
+            for st in &d.body {
+                stmt_to_japanese_sugar(st, 1, &mut out);
+            }
+            out.push('\n');
+            continue;
+        }
         if d.is_axiom {
             out.push_str(&format!("公理 {} : ", d.name));
         } else {
@@ -666,6 +676,16 @@ pub fn convert_source_to_standard_narfi(src: &str) -> String {
         let Some(d) = emit_non_decl(it, &mut out) else {
             continue;
         };
+        // typedef T := {x : σ | φ}（文は ∃x:σ. φ として持っている）
+        if let (Some(td), Formula::Exists(x, ty, phi)) = (&d.typedef, &d.concl) {
+            let set = Term::Set(vec![(x.clone(), ty.clone())], phi.clone());
+            out.push_str(&format!("typedef {} := {set}\n", td.name));
+            for st in &d.body {
+                stmt_to_standard(st, 1, &mut out);
+            }
+            out.push('\n');
+            continue;
+        }
         if d.is_axiom {
             out.push_str(&format!("axiom {} : ", d.name));
         } else {
