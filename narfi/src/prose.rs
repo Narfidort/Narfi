@@ -2,7 +2,7 @@
 
 use crate::check::StepTrace;
 use crate::parser::{Choice, CtxItem, Decl, Just, Stmt, StmtKind};
-use crate::syntax::{Term, ident_to_latex, rel_to_latex};
+use crate::syntax::{bounded, show_term_latex, Formula, Term, ident_to_latex, rel_to_latex};
 
 #[derive(Debug, Clone)]
 pub struct ProseBlock {
@@ -46,6 +46,46 @@ fn find_hyp_formula_latex(
     None
 }
 
+/// ε-N 収束パターン ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε を検知する。
+/// 検出成功時、(数列の項 LaTeX, 極限値 LaTeX) を返す。
+pub fn detect_convergence(f: &Formula) -> Option<(String, String)> {
+    if let Formula::Forall(eps, _, b1) = f {
+        if let Formula::Imp(g1, b2) = &**b1 {
+            if let Some((r1, t1)) = bounded(eps, g1) {
+                if r1 == ">" && t1 == Term::Num(0) {
+                    if let Formula::Exists(n_cap, _, b3) = &**b2 {
+                        if let Formula::Forall(n, _, b4) = &**b3 {
+                            if let Formula::Imp(g2, b5) = &**b4 {
+                                if let Some((r2, t2)) = bounded(n, g2) {
+                                    if (r2 == "≥" || r2 == ">=") && t2 == Term::Var(n_cap.clone()) {
+                                        if let Formula::Atom(r3, ts) = &**b5 {
+                                            if (r3 == "<") && ts.len() == 2 && ts[1] == Term::Var(eps.clone()) {
+                                                if let Term::App(op_abs, args) = &ts[0] {
+                                                    if op_abs == "abs" && args.len() == 1 {
+                                                        if let Term::App(op_sub, sub_args) = &args[0] {
+                                                            if op_sub == "-" && sub_args.len() == 2 {
+                                                                return Some((
+                                                                    show_term_latex(&sub_args[0], 0),
+                                                                    show_term_latex(&sub_args[1], 0),
+                                                                ));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn decl_header_latex(d: &Decl) -> String {
     let mut parts = Vec::new();
     for c in &d.ctx {
@@ -58,12 +98,19 @@ pub fn decl_header_latex(d: &Decl) -> String {
     }
     if parts.is_empty() {
         format!("\\vdash {}", d.concl.to_latex())
+    } else if parts.len() == 1 {
+        format!("{} \\;\\vdash\\; {}", parts[0], d.concl.to_latex())
     } else {
-        format!(
-            "{} \\;\\vdash\\; {}",
-            parts.join(",\\; "),
-            d.concl.to_latex()
-        )
+        let mut lines = Vec::new();
+        for (i, p) in parts.iter().enumerate() {
+            if i + 1 == parts.len() {
+                lines.push(format!("&{}", p));
+            } else {
+                lines.push(format!("&{},", p));
+            }
+        }
+        lines.push(format!("&\\quad\\vdash {}", d.concl.to_latex()));
+        format!("\\begin{{aligned}}\n{}\n\\end{{aligned}}", lines.join(" \\\\\n"))
     }
 }
 
@@ -78,35 +125,74 @@ pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> 
     }
 
     // 前提条件の説明
-    let mut hyps = Vec::new();
+    let mut hyp_items = Vec::new();
     for c in &d.ctx {
         match c {
-            CtxItem::Var(x, t) => hyps.push(format!(
-                "${} \\in {}$",
-                ident_to_latex(x),
-                ident_to_latex(t)
-            )),
-            CtxItem::Hyp(h, f) => hyps.push(format!(
-                "${}$ （仮定 ${}$）",
-                f.to_latex(),
-                ident_to_latex(h)
-            )),
+            CtxItem::Var(x, t) => {
+                hyp_items.push(format!("変数 ${} \\in {}$", ident_to_latex(x), ident_to_latex(t)));
+            }
+            CtxItem::Hyp(h, f) => {
+                if let Some((seq_lat, lim_lat)) = detect_convergence(f) {
+                    hyp_items.push(format!(
+                        "仮定 ${}$：数列 ${}$ は ${}$ に収束する（${} \\to {}$）<br>&emsp;&emsp;${}$",
+                        ident_to_latex(h),
+                        seq_lat,
+                        lim_lat,
+                        seq_lat,
+                        lim_lat,
+                        f.to_latex()
+                    ));
+                } else {
+                    hyp_items.push(format!(
+                        "仮定 ${}$：${}$",
+                        ident_to_latex(h),
+                        f.to_latex()
+                    ));
+                }
+            }
         }
     }
-    if !hyps.is_empty() {
+
+    if !hyp_items.is_empty() {
         out.push(ProseBlock {
             depth: 0,
-            text: format!(
-                "【前提】 {} とする。このとき、${}$ を示す。",
-                hyps.join("、"),
-                d.concl.to_latex()
-            ),
+            text: "**【前提】**".to_string(),
         });
+        for item in hyp_items {
+            out.push(ProseBlock {
+                depth: 1,
+                text: item,
+            });
+        }
+        if let Some((c_seq, c_lim)) = detect_convergence(&d.concl) {
+            out.push(ProseBlock {
+                depth: 0,
+                text: format!(
+                    "**【目標】** 数列 ${}$ が ${}$ に収束すること（${} \\to {}$）を示す：<br>&emsp;&emsp;${}$",
+                    c_seq, c_lim, c_seq, c_lim, d.concl.to_latex()
+                ),
+            });
+        } else {
+            out.push(ProseBlock {
+                depth: 0,
+                text: format!("**【目標】** ${}$ を示す。", d.concl.to_latex()),
+            });
+        }
     } else {
-        out.push(ProseBlock {
-            depth: 0,
-            text: format!("【目標】 ${}$ を示す。", d.concl.to_latex()),
-        });
+        if let Some((c_seq, c_lim)) = detect_convergence(&d.concl) {
+            out.push(ProseBlock {
+                depth: 0,
+                text: format!(
+                    "**【目標】** 数列 ${}$ が ${}$ に収束すること（${} \\to {}$）を示す：<br>&emsp;&emsp;${}$",
+                    c_seq, c_lim, c_seq, c_lim, d.concl.to_latex()
+                ),
+            });
+        } else {
+            out.push(ProseBlock {
+                depth: 0,
+                text: format!("**【目標】** ${}$ を示す。", d.concl.to_latex()),
+            });
+        }
     }
 
     stmts_to_prose(&d.body, steps, 0, &mut out);
@@ -201,13 +287,13 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                 let mut h_descs = Vec::new();
                 for h in hyps {
                     if let Some(fl) = find_hyp_formula_latex(steps, s.line + 1, h) {
-                        h_descs.push(format!("${}$ （${}$）", fl, ident_to_latex(h)));
+                        h_descs.push(format!("${}$（仮定 ${}$）", fl, ident_to_latex(h)));
                     } else {
-                        h_descs.push(format!("${}$", ident_to_latex(h)));
+                        h_descs.push(format!("仮定 ${}$", ident_to_latex(h)));
                     }
                 }
                 let text = format!(
-                    "${}$ より、{} を満たす{} ${}$ が存在する。",
+                    "${}$ より、{} を満たす{} ${}$ をとる。",
                     just_to_latex(just),
                     h_descs.join(" かつ "),
                     dep_note,

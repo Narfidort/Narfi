@@ -363,6 +363,52 @@ pub fn ident_to_latex(s: &str) -> String {
         "ker" => "\\ker".to_string(),
         _ => {
             let cs: Vec<char> = s.chars().collect();
+            // ギリシャ文字1文字
+            if cs.len() == 1 {
+                if let Some(gl) = greek_char_to_latex(cs[0]) {
+                    return gl.to_string();
+                }
+                return s.to_string();
+            }
+            // 1文字英字 + 数字添字 (例: N₁, a₂, x₀)
+            if cs.len() == 2 && cs[0].is_ascii_alphabetic() && ('₀'..='₉').contains(&cs[1]) {
+                let d = (cs[1] as u32 - '₀' as u32) as u8 + b'0';
+                return format!("{}_{{{}}}", cs[0], d as char);
+            }
+            // h + ギリシャ文字 (例: hε)
+            if cs.len() == 2 && cs[0] == 'h' {
+                if let Some(gl) = greek_char_to_latex(cs[1]) {
+                    return format!("h_{{{gl}}}");
+                }
+                if cs[1].is_ascii_alphabetic() {
+                    return format!("h_{{{}}}", cs[1]);
+                }
+            }
+            // hN₁ -> h_{N_1}
+            if cs.len() == 3 && s.starts_with("hN") && ('₀'..='₉').contains(&cs[2]) {
+                let d = (cs[2] as u32 - '₀' as u32) as u8 + b'0';
+                return format!("h_{{N_{}}}", d as char);
+            }
+            // ドットを含む識別子 (例: ge.max.left)
+            if s.contains('.') {
+                return format!("\\mathrm{{{}}}", s);
+            }
+            // アンダースコアを含む識別子 (例: conv_a -> \mathrm{conv}_{a}, pos_half -> \mathrm{pos\_half})
+            if let Some((p, rest)) = s.split_once('_') {
+                if p.len() > 1 && p.chars().all(|c| c.is_ascii_alphabetic()) {
+                    if rest.len() == 1 {
+                        return format!("\\mathrm{{{}}}_{{{}}}", p, rest);
+                    } else {
+                        return format!("\\mathrm{{{}}}", s.replace('_', "\\_"));
+                    }
+                }
+                return format!("\\mathrm{{{}}}", s.replace('_', "\\_"));
+            }
+            // 2文字以上の英単語 (例: triangle, pos, etc.)
+            if s.len() > 1 && s.chars().all(|c| c.is_ascii_alphabetic()) {
+                return format!("\\mathrm{{{}}}", s);
+            }
+
             let mut out = String::new();
             let mut in_sub = false;
             for (idx, &c) in cs.iter().enumerate() {
