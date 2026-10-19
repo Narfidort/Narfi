@@ -26,6 +26,8 @@ pub struct Decl {
     pub body: Vec<Stmt>,
     /// `typedef T := {x : σ | φ}` なら Some。concl は ∃x:σ. φ（空でないことの証明が body）
     pub typedef: Option<TypeDef>,
+    /// `rec` の定義から自動で作った定理（f.zero・f.succ）。ソースの変換では書き戻さない
+    pub generated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1515,7 +1517,7 @@ fn decl_keyword(text: &str) -> String {
 fn starts_decl(text: &str) -> bool {
     matches!(
         decl_keyword(text).as_str(),
-        "thm" | "axiom" | "def" | "notation" | "import" | "typedef"
+        "thm" | "axiom" | "def" | "rec" | "notation" | "import" | "typedef"
     )
 }
 
@@ -1526,9 +1528,40 @@ fn is_axiom_decl(text: &str) -> bool {
 
 /// ファイルを読む。`import` に出会うとその場で on_import を呼ぶ（読み込み側が
 /// 先のファイルを検査し、notation を登録する）。notation は宣言した行より後ろで使える。
+/// 論理式の中の束縛変数とその型（量化子・λ・集合）
+fn binders_f(f: &Formula, out: &mut Vec<(String, String)>) {
+    match f {
+        Formula::Atom(_, ts) => ts.iter().for_each(|t| binders_t(t, out)),
+        Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => {
+            binders_f(a, out);
+            binders_f(b, out);
+        }
+        Formula::Forall(x, s, b) | Formula::Exists(x, s, b) => {
+            out.push((x.clone(), s.clone()));
+            binders_f(b, out);
+        }
+        Formula::Bot => {}
+    }
+}
+
+fn binders_t(t: &Term, out: &mut Vec<(String, String)>) {
+    match t {
+        Term::App(_, args) => args.iter().for_each(|a| binders_t(a, out)),
+        Term::Lam(ps, b) => {
+            out.extend(ps.iter().cloned());
+            binders_t(b, out);
+        }
+        Term::Set(ps, phi) => {
+            out.extend(ps.iter().cloned());
+            binders_f(phi, out);
+        }
+        _ => {}
+    }
+}
+
 /// 数列の添字（a_n）を適用（a(n)）に読み替える
 fn subscript_apps(decl: &mut Decl) {
-    let vars: Vec<(String, String)> = decl
+    let mut vars: Vec<(String, String)> = decl
         .ctx
         .iter()
         .filter_map(|c| match c {
@@ -1536,6 +1569,19 @@ fn subscript_apps(decl: &mut Decl) {
             _ => None,
         })
         .collect();
+    // ∀a:ℕ → ℝ. … のように量化子・λ・集合で束縛された数列も（その宣言の中では）数列として扱う
+    let mut bound = Vec::new();
+    for c in &decl.ctx {
+        if let CtxItem::Hyp(_, f) = c {
+            binders_f(f, &mut bound);
+        }
+    }
+    binders_f(&decl.concl, &mut bound);
+    for (x, t) in bound {
+        if !vars.iter().any(|(y, _)| *y == x) {
+            vars.push((x, t));
+        }
+    }
     let sc = SubScope::new(&vars);
     if sc.seqs.is_empty() {
         return;
@@ -1599,6 +1645,38 @@ pub fn parse_module(
                     src: l.text.clone(),
                 });
                 i += 1;
+                continue;
+            }
+            "rec" => {
+                // 原始再帰の定義：見出しの行と、字下げした 2 つの等式
+                let no = l.no;
+                let mut text = vec![l.text.clone()];
+                while i + 1 < lines.len() && lines[i + 1].indent > 0 {
+                    i += 1;
+                    text.push(lines[i].text.clone());
+                }
+                i += 1;
+                let generated = expand_rec(&text, no)?;
+                // 行番号が rec の行に合うよう、前を空行で埋めて読む
+                let padded = format!("{}{}", "\n".repeat(no.saturating_sub(1)), generated);
+                let sub = parse_module(&padded, &mut |_, line| {
+                    Err(ParseError { line, msg: "rec の中では import は使えない".into() })
+                })?;
+                let src = format!("{}\n{}", text[0], text[1..].iter().map(|t| format!("  {t}")).collect::<Vec<_>>().join("\n"));
+                for it in sub.items {
+                    match it {
+                        Item::Def(mut d) => {
+                            d.src = src.clone();
+                            items.push(Item::Def(d));
+                        }
+                        Item::Decl(mut d) => {
+                            d.generated = true;
+                            d.line = no;
+                            items.push(Item::Decl(d));
+                        }
+                        other => items.push(other),
+                    }
+                }
                 continue;
             }
             "def" => {
@@ -1900,6 +1978,173 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
     Ok(Def { name, line, params, body, term, src: text.to_string() })
 }
 
+// ================================================================ 原始再帰の定義（rec）
+//
+//   rec sum(a : ℕ → ℝ, n : ℕ) : ℝ
+//     sum(a, 0) = 0
+//     sum(a, n + 1) = sum(a, n) + a_n
+//
+// を、選択（some）による def と、2 つの等式の定理 sum.zero・sum.succ に展開する。
+// 定理の証明は prelude の rec.exists（再帰定理）と choice で、kernel が普通に検算する。
+
+fn contains_app(t: &Term, f: &str) -> bool {
+    match t {
+        Term::App(g, args) => g == f || args.iter().any(|a| contains_app(a, f)),
+        Term::Var(x) => x == f,
+        Term::Lam(_, b) => contains_app(b, f),
+        Term::Set(_, phi) => {
+            let mut v = BTreeSet::new();
+            phi.preds(&mut v);
+            v.contains(f) || phi.free_vars().contains(f)
+        }
+        _ => false,
+    }
+}
+
+/// t の中の app（f(…, m)）を y に置き換える
+fn replace_app(t: &Term, app: &Term, y: &Term) -> Term {
+    if t == app {
+        return y.clone();
+    }
+    match t {
+        Term::App(g, args) => Term::App(g.clone(), args.iter().map(|a| replace_app(a, app, y)).collect()),
+        Term::Lam(ps, b) => Term::Lam(ps.clone(), Box::new(replace_app(b, app, y))),
+        _ => t.clone(),
+    }
+}
+
+fn expand_rec(text: &[String], line: usize) -> PResult<String> {
+    let err = |msg: String| Err(ParseError { line, msg });
+    let mut p = P::new(lex(&text[0], line)?, line, vec![]);
+    p.ident()?; // rec
+    let name = p.ident()?;
+    let mut params: Vec<(String, String)> = Vec::new();
+    p.expect_sym("(")?;
+    loop {
+        let x = p.ident()?;
+        p.expect_sym(":")?;
+        let ty = p.ty()?;
+        params.push((x, ty));
+        if p.eat_sym(")") {
+            break;
+        }
+        p.expect_sym(",")?;
+    }
+    p.expect_sym(":")?;
+    let res = p.ty()?;
+    p.expect_end()?;
+    if res.contains('→') {
+        return err(format!("rec の値の型 {res} が関数の型（いまは数・命題などの型だけ）"));
+    }
+    if text.len() != 3 {
+        return err("rec の下には、0 のときと n + 1 のときの 2 つの等式を字下げして書く".into());
+    }
+    let eq = |k: usize| -> PResult<(Vec<Term>, Term)> {
+        let mut q = P::new(lex(&text[k], line + k)?, line + k, vec![]);
+        let f = q.formula()?;
+        q.expect_end()?;
+        match f {
+            Formula::Atom(r, ts) if r == "=" => match &ts[0] {
+                Term::App(g, args) if *g == name && args.len() == params.len() => Ok((args.clone(), ts[1].clone())),
+                _ => Err(ParseError { line: line + k, msg: format!("左辺は {name}(…) の形にする") }),
+            },
+            _ => Err(ParseError { line: line + k, msg: "等式（左辺 = 右辺）を書く".into() }),
+        }
+    };
+    let (args0, base) = eq(1)?;
+    let (args1, step) = eq(2)?;
+    // 数列の添字（a_n）を先に a(n) にしておく（n の名前を置き換えるため）
+    let sc = SubScope::new(&params);
+    let (base, step) = (sc.term(&base), sc.term(&step));
+    let Some(r) = args0.iter().position(|a| *a == Term::Num(0)) else {
+        return err(format!("1 つ目の等式は、再帰する引数を 0 にした {name}(…, 0, …) = … にする"));
+    };
+    if params[r].1 != "ℕ" {
+        return err(format!("再帰する引数 `{}` の型は ℕ にする", params[r].0));
+    }
+    let (m, plus_one) = match &args1[r] {
+        Term::App(op, xs) if op == "+" && xs.len() == 2 && xs[1] == Term::Num(1) => match &xs[0] {
+            Term::Var(m) => (m.clone(), true),
+            _ => return err("2 つ目の等式は n + 1 の形にする".into()),
+        },
+        Term::App(op, xs) if op == "S" && xs.len() == 1 => match &xs[0] {
+            Term::Var(m) => (m.clone(), false),
+            _ => return err("2 つ目の等式は S(n) の形にする".into()),
+        },
+        _ => return err("2 つ目の等式は、再帰する引数を n + 1（または S(n)）にする".into()),
+    };
+    for (j, (x, _)) in params.iter().enumerate() {
+        if j != r && (args0[j] != Term::Var(x.clone()) || args1[j] != Term::Var(x.clone())) {
+            return err(format!("再帰しない引数は、見出しと同じ名前 `{x}` のまま書く"));
+        }
+    }
+    if contains_app(&base, &name) {
+        return err(format!("0 のときの右辺に {name} は使えない"));
+    }
+    // 1 つ前の値 f(…, n) を y に置き換えると、f が残らないこと（原始再帰）
+    let fresh = |base: &str| {
+        let mut x = base.to_string();
+        while params.iter().any(|(p, _)| *p == x) || x == m {
+            x.push('_');
+        }
+        x
+    };
+    let (fv, kv, yv) = (fresh("rec_F"), fresh("rec_k"), fresh("rec_y"));
+    let prev = Term::App(name.clone(), params.iter().enumerate().map(|(j, (x, _))| if j == r { Term::Var(m.clone()) } else { Term::Var(x.clone()) }).collect());
+    let g0 = replace_app(&step, &prev, &Term::Var(yv.clone()));
+    if contains_app(&g0, &name) {
+        return err(format!("n + 1 のときの右辺では、{name} は 1 つ前の値 {prev} としてだけ使える（原始再帰）"));
+    }
+    let g_lam = g0.subst(&m, &Term::Var(kv.clone()));
+    let g_set = g_lam.subst(&yv, &Term::App(fv.clone(), vec![Term::Var(kv.clone())]));
+    let set = format!("{{{fv} : ℕ → {res} | {fv}(0) = {base} ∧ ∀{kv}:ℕ. {fv}(S({kv})) = {g_set}}}");
+    let lam = format!("(({kv}, {yv}) : ℕ × {res} ↦ {g_lam})");
+    let rn = &params[r].0;
+    let ps: Vec<String> = params.iter().map(|(x, t)| format!("{x} : {t}")).collect();
+    let others: Vec<&(String, String)> = params.iter().enumerate().filter(|(j, _)| *j != r).map(|(_, p)| p).collect();
+    let call = |at: &str| -> String {
+        let a: Vec<String> = params.iter().enumerate().map(|(j, (x, _))| if j == r { at.to_string() } else { x.clone() }).collect();
+        format!("{name}({})", a.join(", "))
+    };
+    let foralls = |extra: Option<&str>| -> String {
+        let mut s: String = others.iter().map(|(x, t)| format!("∀{x}:{t}. ")).collect();
+        if let Some(m) = extra {
+            s.push_str(&format!("∀{m}:ℕ. "));
+        }
+        s
+    };
+    let fixes = |extra: Option<&str>| -> Vec<String> {
+        let mut v: Vec<String> = others.iter().map(|(x, _)| x.clone()).collect();
+        if let Some(m) = extra {
+            v.push(m.to_string());
+        }
+        v
+    };
+    let ex = format!("choice({set}, rec.exists({base}, {lam}))");
+    let mut out = format!("def {name}({}) : {res} := some({set})({rn})\n\n", ps.join(", "));
+    // name.zero
+    out.push_str(&format!("thm {name}.zero :\n  ⊢ {}{} = {base}\n\n", foralls(None), call("0")));
+    let fx = fixes(None);
+    if fx.is_empty() {
+        out.push_str(&format!("and.left({ex})\n\n"));
+    } else {
+        out.push_str(&format!("Fix {}\n  and.left({ex})\n\n", fx.join(", ")));
+    }
+    // name.succ
+    let lhs = if plus_one { call(&format!("{m} + 1")) } else { call(&format!("S({m})")) };
+    out.push_str(&format!("thm {name}.succ :\n  ⊢ {}{lhs} = {step}\n\n", foralls(Some(&m))));
+    out.push_str(&format!("Fix {}\n", fixes(Some(&m)).join(", ")));
+    let core = format!("all.elim(and.right({ex}), {m})");
+    if plus_one {
+        out.push_str(&format!("  have rec_h : {} = {step} := {core}\n", call(&format!("S({m})"))));
+        out.push_str(&format!("  have rec_e : S({m}) = {m} + 1 := ring\n"));
+        out.push_str("  EQ2(rec_e, rec_h)\n");
+    } else {
+        out.push_str(&format!("  {core}\n"));
+    }
+    Ok(out)
+}
+
 /// 定義の名前を表に登録する。再帰的な定義（展開が止まらなくなる）はここで止める。
 fn register_def(d: &Def) -> PResult<()> {
     let mut preds = BTreeSet::new();
@@ -1963,6 +2208,7 @@ fn parse_typedef(text: &str, line: usize) -> PResult<Decl> {
         concl: Formula::Exists(x.clone(), ty.clone(), phi),
         body: vec![],
         typedef: Some(TypeDef { name }),
+        generated: false,
     })
 }
 
@@ -2020,6 +2266,7 @@ fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
         concl,
         body: vec![],
         typedef: None,
+        generated: false,
     })
 }
 

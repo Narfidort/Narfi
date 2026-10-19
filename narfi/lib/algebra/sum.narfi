@@ -1,0 +1,45 @@
+-- 有限和 Σ_{k<n} a_k（原始再帰による定義）と基本的な性質
+
+rec sum(a : ℕ → ℝ, n : ℕ) : ℝ
+  sum(a, 0) = 0
+  sum(a, n + 1) = sum(a, n) + a_n
+
+-- 和の線形性：Σ (a_k + b_k) = Σ a_k + Σ b_k
+thm sum.add :
+  ⊢ ∀a:ℕ → ℝ. ∀b:ℕ → ℝ. ∀n:ℕ. sum((k : ℕ ↦ a_k + b_k), n) = sum(a, n) + sum(b, n)
+
+Fix a, b, n
+  induction n
+    Case zero
+      sum((k : ℕ ↦ a_k + b_k), 0)
+        = 0                       by sum.zero((k : ℕ ↦ a_k + b_k))
+        = sum(a, 0) + sum(b, 0)   by sum.zero(a), sum.zero(b)
+    Case succ m, IH : sum((k : ℕ ↦ a_k + b_k), m) = sum(a, m) + sum(b, m)
+      have e : S(m) = m + 1 := ring
+      sum((k : ℕ ↦ a_k + b_k), S(m))
+        = sum((k : ℕ ↦ a_k + b_k), m + 1)              by EQ2(e, refl)
+        = sum((k : ℕ ↦ a_k + b_k), m) + (a_m + b_m)    by sum.succ((k : ℕ ↦ a_k + b_k), m)
+        = sum(a, m) + sum(b, m) + (a_m + b_m)          by IH
+        = sum(a, m + 1) + sum(b, m + 1)                by sum.succ(a, m), sum.succ(b, m)
+        = sum(a, S(m)) + sum(b, S(m))                  by EQ2(e, refl)
+
+-- 定数倍：Σ c·a_k = c · Σ a_k
+thm sum.smul :
+  ⊢ ∀c:ℝ. ∀a:ℕ → ℝ. ∀n:ℕ. sum((k : ℕ ↦ c * a_k), n) = c * sum(a, n)
+
+Fix c, a, n
+  induction n
+    Case zero
+      sum((k : ℕ ↦ c * a_k), 0)
+        = 0                 by sum.zero((k : ℕ ↦ c * a_k))
+        = c * 0             by ring
+        = c * sum(a, 0)     by EQ2(eq.symm(sum.zero(a)), refl)
+    Case succ m, IH : sum((k : ℕ ↦ c * a_k), m) = c * sum(a, m)
+      have e : S(m) = m + 1 := ring
+      sum((k : ℕ ↦ c * a_k), S(m))
+        = sum((k : ℕ ↦ c * a_k), m + 1)          by EQ2(e, refl)
+        = sum((k : ℕ ↦ c * a_k), m) + c * a_m    by sum.succ((k : ℕ ↦ c * a_k), m)
+        = c * sum(a, m) + c * a_m                by IH
+        = c * (sum(a, m) + a_m)                  by ring
+        = c * sum(a, m + 1)                      by EQ2(eq.symm(sum.succ(a, m)), refl)
+        = c * sum(a, S(m))                       by EQ2(e, refl)

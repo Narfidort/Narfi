@@ -93,6 +93,13 @@ pub fn decl_header_latex(d: &Decl) -> String {
 
 pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> {
     let mut out = Vec::new();
+    if d.generated {
+        out.push(ProseBlock {
+            depth: 0,
+            text: format!("**定義の等式 `{}`**: ${}$（再帰による定義から、再帰定理で示される）", d.name, d.concl.to_latex()),
+        });
+        return out;
+    }
     if d.is_axiom {
         out.push(ProseBlock {
             depth: 0,
@@ -483,6 +490,8 @@ pub fn decl_to_latex_env(d: &Decl, steps: &[StepTrace]) -> String {
 /// def・notation・import はそのまま書き戻す。thm・axiom なら返す。
 fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
     match it {
+        // rec から自動で作った定理は書き戻さない（rec の行から作り直される）
+        Item::Decl(d) if d.generated => return None,
         Item::Decl(d) => return Some(d),
         Item::Def(d) => out.push_str(&d.src),
         Item::Notation { src, .. } => out.push_str(src),

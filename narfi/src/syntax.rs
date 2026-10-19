@@ -942,6 +942,14 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     4,
                 ),
                 ("abs", [a]) => (format!("\\left| {} \\right|", show_term_latex(a, 0)), 5),
+                // 有限和 sum(a, n)（lib/algebra/sum）は Σ_{k<n} a_k と書く
+                ("sum", [a, n]) => {
+                    let (k, body) = match a {
+                        Term::Lam(ps, b) if ps.len() == 1 => (ps[0].0.clone(), show_term_latex(b, 2)),
+                        _ => ("k".to_string(), format!("{}_{{k}}", show_term_latex(a, 6))),
+                    };
+                    (format!("\\sum_{{{} < {}}} {}", ident_to_latex(&k), show_term_latex(n, 0), body), 2)
+                }
                 ("norm", [a]) => (format!("\\left\\| {} \\right\\|", show_term_latex(a, 0)), 5),
                 ("floor", [a]) => (
                     format!("\\left\\lfloor {} \\right\\rfloor", show_term_latex(a, 0)),

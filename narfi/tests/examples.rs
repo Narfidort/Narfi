@@ -108,3 +108,25 @@ fn rule_names() {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }
+
+/// 原始再帰の定義（rec）：等式の定理ができ、原始再帰でないものは拒否する
+#[test]
+fn primitive_recursion() {
+    let out = run(&["tests/rec.narfi"]);
+    for n in ["sum.zero", "sum.succ", "fact.zero", "fact.succ", "sum2", "fact1"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+    let dir = std::env::temp_dir().join(format!("narfi-rec-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cases = [
+        ("rec f(n : ℕ) : ℕ\n  f(0) = 0\n  f(n + 1) = f(n + 1)\n", "原始再帰"),
+        ("rec f(n : ℕ) : ℕ\n  f(0) = f(0)\n  f(n + 1) = f(n)\n", "0 のときの右辺"),
+        ("rec f(n : ℕ) : ℕ\n  f(0) = 0\n", "2 つの等式"),
+    ];
+    for (i, (src, msg)) in cases.iter().enumerate() {
+        let f = dir.join(format!("rec{i}.narfi"));
+        std::fs::write(&f, src).unwrap();
+        let out = run(&[f.to_str().unwrap()]);
+        assert!(out.contains("構文エラー") && out.contains(msg), "{src}\n{out}");
+    }
+}

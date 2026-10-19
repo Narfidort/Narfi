@@ -1259,7 +1259,7 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "sorry", preview: "sorry", desc: "placeholder goal" }
 ];
 
-const DECL_KWS = new Set(["thm", "axiom", "def", "notation", "import"]);
+const DECL_KWS = new Set(["thm", "axiom", "def", "rec", "notation", "import", "typedef"]);
 const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "have", "suffices", "choose", "contradiction", "cases", "Case", "induction", "let", "unfold", "at", "by"]);
 const JUST_KWS = new Set(["ring", "linarith", "refl", "decide", "sorry", "left", "right", "zero", "succ", "EQ1", "EQ2"]);
 const UPRIGHT_FNS = new Set(["max", "min", "sup", "inf", "sin", "cos", "tan", "exp", "log", "ln", "gcd", "lcm", "det", "dim", "ker", "im", "deg", "sgn", "mod", "Prop"]);
@@ -1404,7 +1404,12 @@ function parseAsciiToItems(str) {
     const ch = str[i];
 
     // 1. Structured Function Calls: abs(...), sqrt(...), norm(...), floor(...), ceil(...), set(...), inner(...), binom(n,k), vec/hat/bar/tilde(...), sum/prod/int(...)
-    const fnMatch = str.slice(i).match(/^(abs|sqrt|norm|floor|ceil|set|inner|binom|vec|hat|bar|tilde|sum|prod|int)\(/);
+    let fnMatch = str.slice(i).match(/^(abs|sqrt|norm|floor|ceil|set|inner|binom|vec|hat|bar|tilde|sum|prod|int)\(/);
+    // sum(…)・prod(…)・int(…) は引数が 3 つのときだけ Σ の入力欄にする（sum(a, n) は lib/algebra/sum の関数）
+    if (fnMatch && ["sum", "prod", "int"].includes(fnMatch[1]) && (i > 0 && /[A-Za-z0-9_.]/.test(str[i - 1]) ||
+        splitTopLevelCommaArgs(str.substring(i + fnMatch[1].length + 1, Math.max(i + fnMatch[1].length + 1, findMatchingClose(str, i + fnMatch[1].length, "(", ")")))).length !== 3)) {
+      fnMatch = null;
+    }
     if (fnMatch) {
       const fnName = fnMatch[1];
       const openIdx = i + fnName.length;

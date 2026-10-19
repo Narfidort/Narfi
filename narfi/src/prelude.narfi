@@ -66,3 +66,8 @@ thm set.eq_sub :
 Fix x
   assume hx : A(x)
     EQ2(h, hx)
+
+
+-- 再帰定理：0 での値 c と、1 つ前の値から次の値を作る規則 g から、関数がただ 1 つ決まる。
+-- rec（原始再帰の定義）はこれと選択で定義される。HOL と帰納法から証明できる定理だが、いまは公理として置く。
+axiom rec.exists : ∀c. ∀g. ∃F. F(0) = c ∧ ∀k:ℕ. F(S(k)) = g(k, F(k))
