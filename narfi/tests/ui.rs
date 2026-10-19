@@ -151,7 +151,8 @@ fn tutorial_answers_check() {
     let script = r#"
         global.window = {};
         require(process.argv[1]);
-        process.stdout.write(JSON.stringify(window.NARFI_TUTORIAL.filter(l => l.exercise)));
+        require(process.argv[1].replace("tutorial.js", "course.js"));
+        process.stdout.write(JSON.stringify([...window.NARFI_TUTORIAL, ...window.NARFI_COURSE].filter(l => l.exercise)));
     "#;
     let out = Command::new("node").args(["-e", script, "./src/tutorial.js"]).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
@@ -189,17 +190,21 @@ fn tutorial_answers_check() {
     let exercises = field(&json, "exercise");
     let answers = field(&json, "answer");
     assert_eq!(exercises.len(), answers.len());
-    assert!(answers.len() >= 7);
+    assert!(answers.len() >= 12);
     let dir = std::env::temp_dir().join(format!("narfi-tut-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     for (k, (ex, ans)) in exercises.iter().zip(&answers).enumerate() {
         let fa = dir.join(format!("ans{k}.narfi"));
         std::fs::write(&fa, ans).unwrap();
         let st = statuses(&fa);
-        assert!(!st.is_empty() && st.iter().all(|s| s.starts_with('✓')), "答え {k} が通らない: {st:?}\n{ans}");
+        assert!(st.iter().any(|s| s.starts_with('✓')) && st.iter().all(|s| s.starts_with('✓') || s.starts_with("公理")), "答え {k} が通らない: {st:?}\n{ans}");
         let fe = dir.join(format!("ex{k}.narfi"));
         std::fs::write(&fe, ex).unwrap();
         let st = statuses(&fe);
-        assert!(!st.is_empty() && st.iter().all(|s| s.starts_with('△')), "練習 {k} が △ にならない: {st:?}\n{ex}");
+        // 練習は sorry が残る（△）。コースでは、すでに証明してある補題は ✓ のままでよい
+        assert!(
+            st.iter().any(|s| s.starts_with('△')) && st.iter().all(|s| s.starts_with('△') || s.starts_with('✓') || s.starts_with("公理")),
+            "練習 {k} が △ にならない: {st:?}\n{ex}"
+        );
     }
 }

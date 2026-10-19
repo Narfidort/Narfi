@@ -101,6 +101,12 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             let html = WEB_UI_HTML.replacen("<!--NARFI_LOCAL-->", "<script>window.NARFI_LOCAL = true;</script>", 1);
             send_response(&mut stream, 200, "text/html; charset=utf-8", html.as_bytes())
         }
+        ("GET", "/course.js") => send_response(
+            &mut stream,
+            200,
+            "application/javascript; charset=utf-8",
+            include_str!("course.js").as_bytes(),
+        ),
         ("GET", "/tutorial.js") => send_response(
             &mut stream,
             200,

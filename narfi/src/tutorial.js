@@ -20,7 +20,7 @@ window.NARFI_TUTORIAL = [
     blocks: [
       { p: "$P \\to Q$ を示すには、`assume h : P` で $P$ を仮定し、その下（字下げした所）で $Q$ を示します。仮定の中身 `: P` は省略できません（書かないと、入れるべき式がエラーに出て、行末で Tab を押すと入ります）。" },
       { p: "$P \\land Q$ の仮定 $h$ からは `h.left` で $P$、`h.right` で $Q$ が取り出せます。これは自然演繹の ∧除去の規則で、規則の名前で `and.left(h)`・`and.right(h)` とも書けます。$P \\land Q$ を示すには、根拠を 2 つカンマで並べます（∧導入。`and.intro(p, q)` とも書けます）。" },
-      { p: "Goal タブの下の Derivation に、証明が自然演繹の木（Gentzen 式・Fitch 式）として出ます。" },
+      { p: "証明の中で右クリックして「証明木を見る」を選ぶと、その行の証明が自然演繹の木（Gentzen 式・Fitch 式）として見られます。" },
       { code: "assume h : P and Q\n  h.right, h.left" },
       { p: "何を示したのかを書いておきたいときは、命題を書いて `by` の後に根拠を書けます：`Q and P by h.right, h.left`。書いた命題が Goal と違えばエラーになります。" },
       { p: "記号は英単語でも打てます：`->`（→）、`and`（∧）、`or`（∨）、`not`（¬）。" }

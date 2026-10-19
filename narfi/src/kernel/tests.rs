@@ -369,3 +369,29 @@ fn typedef_axioms() {
     let r = env.add_statement(&st("Pos.rep(p) > 1"), Some(&rep_prop)).map(|_| ()).map_err(|e| e.msg);
     rejected(r, "定理の結論");
 }
+
+/// 数字だけの等式で、ℝ の式の中を書き換えられる（v2.5.8。以前は ℚ に決め打ちで拒否していた）
+#[test]
+fn subst_numeral_equation_into_real_context() {
+    let p = Proof::Subst {
+        eq: b(hyp("e")),
+        z: "z".into(),
+        motive: f("a · z = a · 0"),
+        p: b(Proof::Refl(t("a · 0"))),
+    };
+    // e : 0 = 0 + 0 で、a·0 = a·0 から a·(0 + 0) = a·0
+    assert_eq!(thm(&[("a", "ℝ")], &[("e", "0 = 0 + 0")], "a · (0 + 0) = a · 0", p), Ok(()));
+}
+
+/// ℤ が要る等式（1 - 1 = 0）は、ℕ の式の中では使えない
+#[test]
+fn subst_numeral_equation_respects_rank() {
+    let p = Proof::Subst {
+        eq: b(hyp("e")),
+        z: "z".into(),
+        motive: f("n + z = n + 0"),
+        p: b(Proof::Refl(t("n + 0"))),
+    };
+    let r = thm(&[("n", "ℕ")], &[("e", "0 = 1 - 1")], "n + (1 - 1) = n + 0", p);
+    assert!(r.is_err(), "ℕ の中で 1 - 1 を使えてしまった");
+}

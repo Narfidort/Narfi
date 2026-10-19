@@ -219,7 +219,24 @@ impl<'a, 'c> Checker<'a, 'c> {
                     Some(("=", s, t)) => (s.clone(), t.clone()),
                     _ => return kerr(format!("書き換え：「{e}」は等式ではない")),
                 };
-                let sort = self.term_sort(&s)?;
+                // 数字だけの等式（0 + 0 = 0）は、どの数の型でも同じ真偽（埋め込みで保たれる。§3.2）。
+                // 書き換え先の式に合う型を、両辺がその型で読めるものから選ぶ
+                let sort = match self.ctx.sort_of(&s)?.or(self.ctx.sort_of(&t)?) {
+                    Some(k) => k.show(),
+                    None => {
+                        let mut found = None;
+                        for cand in ["ℕ", "ℤ", "ℚ", "ℝ"] {
+                            let ok = self.ctx.check_sort(&s, cand).is_ok()
+                                && self.ctx.check_sort(&t, cand).is_ok()
+                                && self.with_var(z, cand, |c| c.ctx.check_f(motive)).is_ok();
+                            if ok {
+                                found = Some(cand.to_string());
+                                break;
+                            }
+                        }
+                        found.unwrap_or_else(|| "ℚ".into())
+                    }
+                };
                 self.with_var(z, &sort, |c| c.ctx.check_f(motive))?;
                 let have = self.infer(p)?;
                 self.want_conv(&have, &motive.subst(z, &s), "書き換えの前提")?;
@@ -310,14 +327,6 @@ impl<'a, 'c> Checker<'a, 'c> {
                 self.deps.sorry = true;
                 Ok(phi.clone())
             }
-        }
-    }
-
-    fn term_sort(&mut self, t: &Term) -> KResult<String> {
-        match self.ctx.sort_of(t)? {
-            Some(s) => Ok(s.show()),
-            // 数字だけの項：§3.2 の規則で ℚ として扱えば十分（埋め込みで真偽は変わらない）
-            None => Ok("ℚ".into()),
         }
     }
 

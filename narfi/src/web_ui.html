@@ -9,6 +9,7 @@
 <!--NARFI_LOCAL-->
 <script src="/narfi-web.js"></script>
 <script src="/tutorial.js"></script>
+<script src="/course.js"></script>
 <style>
 :root[data-theme="dark"] {
   --bg: #0a0a0c;
@@ -846,6 +847,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
   line-height: 1.7;
 }
 /* 証明木 */
+.tree-modal { width: min(1100px, 94vw); max-height: 76vh; overflow: auto; padding: 14px 18px 18px; }
+.tree-head { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--text-dim); margin-bottom: 10px; gap: 12px; }
 .tree-style { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 10px; padding: 1px 6px; margin-left: 4px; cursor: pointer; font-family: inherit; letter-spacing: 0; text-transform: none; }
 .tree-style.active { color: var(--accent); border-color: var(--accent); }
 .pt-wrap { overflow-x: auto; padding: 10px 3em 12px 4px; font-size: 0.92em; text-align: center; }
@@ -868,6 +871,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .fitch .fj { color: var(--text-dim); font-size: 0.85em; }
 .err-banner .katex { color: var(--text); font-size: 1.08em; margin: 0 0.15em; }
 /* Learn（チュートリアル） */
+.deps { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: "JetBrains Mono", monospace; }
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
 .learn-nav select { flex: 1; min-width: 0; }
 .learn-body { font-size: 13.5px; line-height: 1.85; color: var(--text); }
@@ -1067,6 +1071,9 @@ html:not(.web) [data-only="web"] { display: none !important; }
   </div>
 </div>
 <div id="toast" class="toast" hidden></div>
+<div id="treeBack" class="modal-back" hidden onmousedown="if (event.target === this) hideDerivation()">
+  <div class="modal tree-modal" id="treeBody"></div>
+</div>
 <div class="statusbar">
   <div class="sbar-left">
     <button id="btnFiles" class="icon-btn active" onclick="toggleSidebar()" title="ファイル一覧の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M6 2.5v11" stroke="currentColor"/></svg></button>
@@ -2573,8 +2580,26 @@ editorSurface.addEventListener("mousedown", (e) => {
     return;
   }
   setCursor(p.seqId, p.offset, p.lineIdx ?? null);
-  dragStart = { seqId: p.seqId, offset: p.offset };
+  if (e.button === 0) dragStart = { seqId: p.seqId, offset: p.offset };
 });
+
+// 右クリック：その行の証明木など
+editorSurface.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const line = cursor.lineIdx + 1;
+  const decl = declAtLine(line);
+  const items = [];
+  if (decl && decl.tree) items.push({ label: "証明木を見る（自然演繹）", run: () => showDerivation(decl, line) });
+  if (decl && !decl.is_axiom && decl.latex_env) items.push({ label: "この定理を LaTeX でコピー", run: () => { navigator.clipboard.writeText(decl.latex_env); uiToast("コピーしました"); } });
+  if (items.length === 0) items.push({ label: decl && decl.status === "error" ? "証明が通ると、証明木が見られます" : "定理の中で右クリックすると、証明木が見られます", run: () => {} });
+  showCtxMenu(e.clientX, e.clientY, items);
+});
+
+function declAtLine(line) {
+  let d = null;
+  for (const x of (lastCheckData && lastCheckData.decls) || []) if (x.line <= line) d = x;
+  return d;
+}
 window.addEventListener("mousemove", (e) => {
   if (!dragStart) return;
   if (!(e.buttons & 1)) { dragStart = null; return; }
@@ -3346,7 +3371,6 @@ function renderGoalInspector() {
         </div>`;
       }
     }
-    if (activeDecl.tree) html += derivationHtml(activeDecl, curLine);
     goalViewArea.innerHTML = html;
   }
 
@@ -3361,6 +3385,7 @@ function renderGoalInspector() {
       <div>
         <span style="font-family:monospace;font-size:11px;color:${col};margin-right:8px;">${st}</span>
         <span style="font-weight:600;">${escHtml(d.name)}</span>
+        ${depsHtml(d)}
       </div>
       <div style="font-size:12.5px;max-width:58%;overflow-x:auto;">${renderKatex(d.concl_latex, false)}</div>
     </div>`;
@@ -3371,10 +3396,24 @@ function renderGoalInspector() {
 
 let treeStyle = localStorage.getItem("narfi.tree.style") || "gentzen";
 
+let treeShown = null;
+
 function setTreeStyle(st) {
   treeStyle = st;
   localStorage.setItem("narfi.tree.style", st);
-  renderGoalInspector();
+  if (treeShown) showDerivation(treeShown.decl, treeShown.line);
+}
+
+function showDerivation(decl, line) {
+  treeShown = { decl, line };
+  document.getElementById("treeBody").innerHTML = derivationHtml(decl, line);
+  document.getElementById("treeBack").hidden = false;
+}
+
+function hideDerivation() {
+  treeShown = null;
+  document.getElementById("treeBack").hidden = true;
+  editorSurface.focus();
 }
 
 function findTreeAt(n, line) {
@@ -3392,7 +3431,7 @@ function derivationHtml(decl, curLine) {
   const tabs = ["gentzen", "fitch"].map((st) =>
     `<button class="tree-style${treeStyle === st ? " active" : ""}" onclick="setTreeStyle('${st}')">${st === "gentzen" ? "Gentzen" : "Fitch"}</button>`).join("");
   const body = treeStyle === "fitch" ? fitchHtml(node) : `<div class="pt-wrap">${gentzenHtml(node)}</div>`;
-  return `<div class="sec-label" style="margin-top:22px;"><span>Derivation（${whole ? "定理全体" : `Ln ${curLine} の部分`}）</span><span>${tabs}</span></div>${body}`;
+  return `<div class="tree-head"><span>${escHtml(decl.name)}：${whole ? "定理全体" : `${curLine} 行目の部分`}の証明木</span><span>${tabs}<button class="tree-style" onclick="hideDerivation()">閉じる</button></span></div>${body}`;
 }
 
 function hypLabel(h) {
@@ -3456,6 +3495,18 @@ function fitchHtml(root) {
     const just = l.raw ? l.just : escHtml(l.just) + (l.label ? ` <span class="pt-hyp">${escHtml(l.label)}</span>` : "");
     return `<tr><td class="fn">${i + 1}</td><td class="ff">${bars}<span class="fformula">${renderKatex(l.f, false)}</span></td><td class="fj">${just}</td></tr>`;
   }).join("")}</table>`;
+}
+
+// その定理が頼っている公理と自動証明（kernel が数えたもの）
+function depsHtml(d) {
+  if (d.is_axiom) return "";
+  const ax = d.axioms || [];
+  const or = (d.oracles || []).filter((o) => o !== "sorry");
+  if (!ax.length && !or.length) return "";
+  const parts = [];
+  if (ax.length) parts.push(`公理: ${ax.map(escHtml).join(", ")}`);
+  if (or.length) parts.push(`算術: ${or.map(escHtml).join(", ")}`);
+  return `<div class="deps">${parts.join(" ／ ")}</div>`;
 }
 
 function jumpToLine(idx) {
@@ -3536,13 +3587,23 @@ function inlineMd(text) {
   }).join("");
 }
 
+// チュートリアル（src/tutorial.js）のあとに、コース「公理へ」（src/course.js）を続ける
+function allLessons() {
+  return [...(window.NARFI_TUTORIAL || []), ...(window.NARFI_COURSE || [])];
+}
+
 function showLesson(i) {
-  const lessons = window.NARFI_TUTORIAL || [];
+  const lessons = allLessons();
   if (!lessons.length) return;
   learnIndex = Math.max(0, Math.min(lessons.length - 1, i));
   localStorage.setItem("narfi.learn.index", String(learnIndex));
   const sel = document.getElementById("learnSelect");
-  if (!sel.options.length) sel.innerHTML = lessons.map((l, k) => `<option value="${k}">${escHtml(l.title)}</option>`).join("");
+  if (!sel.options.length) {
+    const nt = (window.NARFI_TUTORIAL || []).length;
+    const opt = (l, k) => `<option value="${k}">${escHtml(l.title)}</option>`;
+    sel.innerHTML = `<optgroup label="チュートリアル">${lessons.slice(0, nt).map((l, k) => opt(l, k)).join("")}</optgroup>` +
+      `<optgroup label="コース：公理へ">${lessons.slice(nt).map((l, k) => opt(l, nt + k)).join("")}</optgroup>`;
+  }
   sel.value = String(learnIndex);
   const l = lessons[learnIndex];
   let html = `<h3>${escHtml(l.title)}</h3>`;
@@ -3551,7 +3612,12 @@ function showLesson(i) {
     if (b.code) html += `<pre>${escHtml(b.code)}</pre>`;
     if (b.keys) html += `<table>${b.keys.map(([k, d]) => `<tr><td>${escHtml(k)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
   }
-  if (l.exercise) {
+  if (l.file) {
+    html += `<div class="learn-actions">
+      <button class="ctrl-btn primary" onclick="openCourseFile()">コースのファイルを開く</button>
+      <button class="ctrl-btn" onclick="toggleAnswer()">答えを見る</button>
+    </div><pre id="learnAnswer" hidden>${escHtml(l.answer)}</pre>`;
+  } else if (l.exercise) {
     html += `<div class="learn-actions">
       <button class="ctrl-btn primary" onclick="openExercise()">練習を開く</button>
       <button class="ctrl-btn" onclick="toggleAnswer()">答えを見る</button>
@@ -3563,8 +3629,21 @@ function showLesson(i) {
   document.getElementById("learnBody").innerHTML = html;
 }
 
+// コースの章：自分のファイル一覧に course/… を作って開く（すでにあれば、そのまま開く）
+async function openCourseFile() {
+  const l = allLessons()[learnIndex];
+  if (!l || !l.file) return;
+  if (!((workspaceInfo && workspaceInfo.files) || []).includes(l.file)) {
+    const d = await fsOp("/api/create", { path: l.file });
+    if (!d.ok) { uiToast(d.error || "作れませんでした"); return; }
+    await fsOp("/api/save", { path: l.file, src: l.exercise });
+    await loadWorkspace();
+  }
+  await openPath(l.file);
+}
+
 function openExercise() {
-  const l = (window.NARFI_TUTORIAL || [])[learnIndex];
+  const l = allLessons()[learnIndex];
   if (!l) return;
   loadSrc(l.exercise, "", { newTab: true, title: `練習${learnIndex + 1}.narfi` });
 }
@@ -3999,7 +4078,12 @@ function hideCtxMenu() {
 }
 
 document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctxMenu")) hideCtxMenu(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCtxMenu(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    hideCtxMenu();
+    if (typeof treeShown !== "undefined" && treeShown) hideDerivation();
+  }
+});
 window.addEventListener("blur", hideCtxMenu);
 
 const sidebarEl = document.getElementById("sidebar");
