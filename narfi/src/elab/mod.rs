@@ -146,6 +146,8 @@ pub struct CheckError {
     pub goal: Option<Formula>,
     pub ctx: Vec<String>,
     pub ctx_latex: Vec<String>,
+    /// 直し方：この行の末尾に足せばよい文字列（エディタの Tab で入る）
+    pub fix: Option<String>,
 }
 
 type CResult<T> = Result<T, CheckError>;
@@ -200,6 +202,7 @@ impl<'a> Checker<'a> {
             goal: self.snapshot.1.clone(),
             ctx: self.snapshot.0.show(),
             ctx_latex: self.snapshot.0.show_latex(),
+            fix: None,
         })
     }
 
@@ -293,7 +296,7 @@ pub struct Report {
 }
 
 fn simple_err(line: usize, msg: String) -> CheckError {
-    CheckError { line, msg, goal: None, ctx: vec![], ctx_latex: vec![] }
+    CheckError { line, msg, goal: None, ctx: vec![], ctx_latex: vec![], fix: None }
 }
 
 /// 定理・公理の文の型を推論して、kernel に渡せる形にする
@@ -458,8 +461,18 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
     for it in &m.items {
         match it {
             Item::Def(d) => {
+                // 通らない定義は報告して先へ進む（それを使う定理は、未定義の記号として通らない）
                 if let Err(msg) = add_def(env, d) {
-                    return Err(ParseError { line: d.line, msg: format!("定義 `{}`：{msg}", d.name) });
+                    reports.push(Report {
+                        name: d.name.clone(),
+                        line: d.line,
+                        is_axiom: false,
+                        err: Some(simple_err(d.line, format!("定義 `{}`：{msg}", d.name))),
+                        axioms: BTreeSet::new(),
+                        oracles: BTreeSet::new(),
+                        sorries: vec![],
+                        steps: vec![],
+                    });
                 }
             }
             Item::Decl(d) => reports.push(check_decl(env, d, trace, core)),

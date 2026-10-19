@@ -17,6 +17,7 @@ cargo test                                           # 正しい証明は通り�
 拡張子は `.narfi`。練習問題は `../練習.narfi`、エディタ拡張は `../editors/vscode/`。
 
 - `sorry`：どんな goal も仮に閉じる。その位置で残っている goal を表示し、定理は「△ 未完成」になる（sorry に頼る定理を使った定理も未完成になる）。
+- 仮定の中身は省略できない（v2.5 から）：`Fix ε | hε : ε > 0`・`assume h : P`・`Case succ k, IH : φ`。書かないとエラーになり、goal から決まる中身を `help:` に示す（エディタでは行末で Tab を押すと入る）。変数の型（`Fix ε` の `: ℝ`）は goal から決まるので省略してよい。
 - `--diag`：エディタ向けの出力（`ERROR` / `SORRY`・行・本文のタブ区切り）。
 
 ## v0.5 に加えたもの
@@ -28,7 +29,7 @@ cargo test                                           # 正しい証明は通り�
 | `∴ φ` | 直前に示したもの（スコープを出た結果・have など）が φ であることを検査する |
 | `suffices ψ := j` | `⇐` の別表記（`⇐` も使える） |
 | `Fix n, m` | 複数の Fix |
-| `Case succ k, IH : φ` | 末尾の `:` は書いても書かなくてもよい。IH の型も省略できる |
+| `Case succ k, IH : φ` | 末尾の `:` は書いても書かなくてもよい。IH の中身 `: φ` は v2.5 から必ず書く |
 | `choose t, j` | 範囲付き ∃ の条件（`t > 0` など）を j で示す |
 | `axiom name : Γ ⊢ φ` | 補題を公理として置く（三角不等式など） |
 | `sorry` | 証明を後回しにする（残っている goal を表示） |
@@ -45,12 +46,45 @@ Cloudflare Pages に自動で置く（`.github/workflows/web.yml`）。
 
 | | ローカル版（`narfi web`） | Web 版 |
 |---|---|---|
-| ファイル | パソコンのフォルダ | ブラウザ内の保存領域（この PC のこのブラウザ）。`Open`・`Import` で読み込み、`Export` で zip に書き出す |
+| ファイル | パソコンのフォルダ | ブラウザ内の保存領域。`Open`・`Import` で読み込み、`Export` で zip に書き出す。GitHub でログインするとクラウドと同期 |
 | 自分用ライブラリ | `~/.narfi/lib` | 保存領域の `lib/`（`lib/mydefs.narfi` は `import mydefs`） |
 | PDF | LaTeX で組版 | `Print` から「PDF として保存」 |
 | AI 補助 | 使える | 使えない |
 
-ブラウザの保存領域は、ブラウザのデータを消すと消える。大事なファイルは `Export` で書き出しておく。
+ブラウザの保存領域は、ブラウザのデータを消すと消える。大事なファイルは `Export` で書き出しておくか、クラウド保存を使う。
+
+### クラウド保存（GitHub でログイン）
+
+右上の `Sign in with GitHub` でログインすると、ファイルがクラウドにも保存され、ほかの PC・ブラウザでも同じファイルが開ける。
+誰でも GitHub のアカウントで使える（1 人あたり 1000 ファイル・20 MB まで）。
+
+- 編集はこれまでどおりブラウザ内の保存領域に保存し、少し後でクラウドに送る（右上に `同期済み`・`未送信あり`・`オフライン`）。
+  ネットにつながっていない間も使え、つながったら送る。ほかの端末の変更は、タブに戻ったときと 30 秒ごとに取ってくる。
+- 2 つの端末で同じファイルを同時に変えたときは、どちらも消さない：そのブラウザの変更をそのまま残し、
+  もう一方を `名前.conflict-日時.narfi` として残す。
+- 保存先は Cloudflare D1（SQLite）。表は `users`（GitHub の ID とログイン名）・`sessions`・`files`（`migrations/`）。
+  GitHub には権限を求めない（公開プロフィールの ID とログイン名だけを使う。GitHub のトークンは保存しない）。
+- メニューの `Log out` でこのブラウザからファイルを消してログアウト、`アカウントを削除…` でクラウドのファイルと記録をすべて消す。
+
+仕組み：`functions/`（Cloudflare Pages Functions。`/auth/login`・`/auth/callback`・`/auth/logout`・`/cloud/me`・`/cloud/files`・`/cloud/file`）、
+`server/common.js`（セッション・CSRF 対策・上限）、`src/web_static.js`（同期）。
+D1 の用意と秘密の登録は CI（`scripts/cloud-setup.sh`）が行う。最初に一度だけ必要な設定：
+
+1. GitHub の Settings → Developer settings → OAuth Apps → New OAuth App
+   - Homepage URL：`https://narfi.pages.dev`
+   - Authorization callback URL：`https://narfi.pages.dev/auth/callback`
+2. できた App の Client ID と、Generate a new client secret で作った秘密を、リポジトリの
+   Settings → Secrets and variables → Actions に `NARFI_GITHUB_CLIENT_ID`・`NARFI_GITHUB_CLIENT_SECRET` として登録する
+3. Cloudflare の API トークン（`CLOUDFLARE_API_TOKEN`）に、Account の「D1: Edit」の権限を足す
+
+手元でログインと同期を確かめる（GitHub には行かず、セッションを手で作る）：
+
+```
+./scripts/build-site.sh
+npx wrangler d1 migrations apply narfi --local
+printf 'GITHUB_CLIENT_ID=dummy\nGITHUB_CLIENT_SECRET=dummy\n' > .dev.vars
+npx wrangler pages dev site --port 8799
+```
 
 手元で組み立てて確かめる：
 

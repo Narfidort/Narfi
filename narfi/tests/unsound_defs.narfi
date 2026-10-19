@@ -29,12 +29,12 @@ thm wrong.eps :
   hc : ∀n:ℕ. c(n) = a(n) + b(n)
   ⊢ c ⟶ α + β
 
-Fix ε | hε
+Fix ε | hε : ε > 0
   Obtain N₁(ε), hN₁ : conv_a(ε, hε)
   Obtain N₂(ε), hN₂ : conv_b(ε, hε)
   let N := max(N₁, N₂)
   choose N
-  Fix n | hn
+  Fix n | hn : n ≥ N
     |c(n) - (α + β)|
       = |(a(n) + b(n)) - (α + β)|  by EQ2(hc(n), refl)
       ≤ |a(n) - α| + |b(n) - β|    by triangle(a(n) - α, b(n) - β)

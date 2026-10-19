@@ -29,7 +29,7 @@ thm subset.refl :
 
 Fix A
   Fix x
-    assume h
+    assume h : A(x)
       h
 
 

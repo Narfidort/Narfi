@@ -268,8 +268,8 @@ kernel のほかに、`src/syntax.rs` の代入・自由変数の計算（`subst
 
 | 表層 | 証明項 |
 |---|---|
-| `Fix x \| h` | `AllI(x, σ, ImpI(h, …))` |
-| `assume h` | `ImpI` |
+| `Fix x \| h : φ` | `AllI(x, σ, ImpI(h, φ, …))` |
+| `assume h : φ` | `ImpI(h, φ, …)` |
 | `by_contra h` | `Raa` |
 | `Obtain x, h₁, h₂ : e` | `ExE(e, x, h, Cut(h₁, …, AndE(…), Cut(h₂, …)))` |
 | `have h : φ := j` | `Cut(h, φ, j, …)` |
@@ -282,6 +282,10 @@ kernel のほかに、`src/syntax.rs` の代入・自由変数の計算（`subst
 | `contradiction h k` | `BotE(φ, ImpE(k, h))` |
 | `unfold …` | なし（§6 の δ で kernel は同一視する） |
 | `∴ φ` | なし（elab が読みやすさのために確かめるだけ） |
+
+仮定を導入する文（`Fix x | h : φ`・`assume h : φ`・`Case succ k, IH : φ`）では、仮定の中身 φ を省略できない（v2.5）。
+φ は goal から一意に決まるので kernel にとっては不要だが、証明を読む人に仮定が見えるようにするため、elab が要求する。
+省略するとエラーになり、goal から決まる φ を help として示す。変数の型（`Fix x` の σ）は省略してよい。
 | `Obtain N(ε)` の依存の注釈 | なし（elab が確かめるだけ） |
 | 連鎖 `a = b by … < c by …` | `Trans`（足りないときは `LinArith`） |
 | `refl` / `ring` / `linarith` / `decide` / `sorry` | `Refl` / `Ring` / `LinArith` / `Decide` / `Sorry` |

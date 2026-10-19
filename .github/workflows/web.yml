@@ -2,6 +2,7 @@
 #   main への push → 本番（https://narfi.pages.dev など）
 #   ほかのブランチ（v2 など）への push → プレビュー（https://<ブランチ>.narfi.pages.dev）
 #   pull request → テストと組み立てだけ（デプロイしない）
+# クラウド保存（functions/・D1）の準備は scripts/cloud-setup.sh
 name: test & deploy
 
 on:
@@ -44,12 +45,24 @@ jobs:
       - name: ブラウザ版の検査器がローカル版と同じ結果を返すか
         run: node tests/wasm_smoke.mjs site/narfi.wasm target/debug/narfi
 
+      - name: Functions（ログインと同期）の構文を確かめる
+        run: for f in server/*.js functions/*/*.js; do node --check "$f"; done
+
+      - name: クラウド保存の準備（D1・GitHub OAuth の秘密）
+        if: github.event_name == 'push'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NARFI_GITHUB_CLIENT_ID: ${{ secrets.NARFI_GITHUB_CLIENT_ID }}
+          NARFI_GITHUB_CLIENT_SECRET: ${{ secrets.NARFI_GITHUB_CLIENT_SECRET }}
+        run: |
+          npx --yes wrangler pages project create narfi --production-branch=main || true
+          ./scripts/cloud-setup.sh
+
       - name: Cloudflare Pages にデプロイ
         if: github.event_name == 'push'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # プロジェクトがまだなければ作る（あればエラーになるので無視する）
-          npx --yes wrangler pages project create narfi --production-branch=main || true
           npx --yes wrangler pages deploy site --project-name=narfi --branch="${GITHUB_REF_NAME}" --commit-dirty=true

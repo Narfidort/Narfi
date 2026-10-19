@@ -6,6 +6,8 @@
 // - 検査器：narfi.wasm（src/wasm.rs）。要求・応答は JSON で、/api/check・/api/convert と同じ形
 // - ファイル：localStorage の "narfi.fs.v1"（パス → 中身）。この PC のこのブラウザの中だけに残る
 // - 読み込み：Open（.narfi ファイル）・Folder（フォルダごと）、書き出し：Finder（全ファイルを zip）
+// - クラウド保存：GitHub でログインすると、保存領域を Cloudflare D1 と同期する（functions/・server/common.js）。
+//   手元の保存領域がいつも本体で、変更は後からクラウドへ送る（つながらない間も使える）
 
 (function () {
   if (window.NARFI_LOCAL) return;
@@ -128,6 +130,288 @@
     return new Blob([...parts, ...central, end], { type: "application/zip" });
   }
 
+  // ---------------------------------------------------------------- クラウド保存（GitHub でログイン）
+  //
+  // 同期の記録（"narfi.sync.v1"）：
+  //   user  … 同期している GitHub のアカウントの ID
+  //   base  … パス → 最後に同期したときのクラウドの version
+  //   dirty … クラウドにまだ送っていない、手元で変えたパス
+  // 手元とクラウドの両方で変わっていたら、手元のものをそのパスに残し、クラウドのものは「名前.conflict-日時.narfi」として残す。
+
+  const SYNC_KEY = "narfi.sync.v1";
+  const cloud = { configured: false, user: null, state: "off", busy: null, again: false, timer: null, error: "", conflicts: [] };
+
+  function loadSync() {
+    try {
+      const m = JSON.parse(localStorage.getItem(SYNC_KEY) || "null");
+      if (m && typeof m === "object") return { user: m.user || null, base: m.base || {}, dirty: m.dirty || [] };
+    } catch (_) {}
+    return { user: null, base: {}, dirty: [] };
+  }
+  function saveSync(m) {
+    localStorage.setItem(SYNC_KEY, JSON.stringify(m));
+  }
+
+  async function cloudFetch(path, opts = {}) {
+    const headers = { "X-Narfi-Cloud": "1", ...(opts.body ? { "Content-Type": "application/json" } : {}) };
+    const r = await realFetch(path, { credentials: "same-origin", cache: "no-store", ...opts, headers });
+    let data = {};
+    try { data = await r.json(); } catch (_) { data = { ok: false, error: "応答が JSON でない" }; }
+    data.status = r.status;
+    return data;
+  }
+
+  function cloudNoteLocalChange(path) {
+    if (!cloud.user) return;
+    const m = loadSync();
+    if (!m.dirty.includes(path)) m.dirty.push(path);
+    saveSync(m);
+    scheduleSync(800);
+  }
+
+  function scheduleSync(ms) {
+    if (!cloud.user) return;
+    if (cloud.timer) clearTimeout(cloud.timer);
+    cloud.timer = setTimeout(() => { cloud.timer = null; syncNow(); }, ms);
+  }
+
+  function conflictName(path) {
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+    return path.replace(/\.narfi$/, "") + `.conflict-${stamp}.narfi`;
+  }
+
+  // 手元のファイルを置き換える（クラウドから来たもの）。dirty にはしない
+  function putLocal(path, src) {
+    const fs = loadFs();
+    fs[path] = src;
+    saveFs(fs);
+    call({ op: "put_file", path, src });
+  }
+
+  async function push(m, fs, path) {
+    const src = fs[path];
+    const r = await cloudFetch("/cloud/file", { method: "PUT", body: JSON.stringify({ path, src, base: m.base[path] || 0 }) });
+    if (r.ok) {
+      m.base[path] = r.version;
+      if (loadFs()[path] === src) m.dirty = m.dirty.filter((p) => p !== path);
+      return true;
+    }
+    if (r.status === 409) return false;
+    throw new Error(r.error || `保存できなかった（${r.status}）`);
+  }
+
+  // 1 回の同期：クラウドの一覧と手元を比べ、取ってくる・送る
+  async function syncOnce() {
+    const list = await cloudFetch("/cloud/files");
+    if (list.status === 401) { signedOut(); return []; }
+    if (!list.ok) throw new Error(list.error || "一覧が取れなかった");
+    const m = loadSync();
+    const changed = [];
+    const remote = new Map(list.files.map((f) => [f.path, f.version]));
+    let fs = loadFs();
+    const handled = new Set();
+    for (const [path, version] of remote) {
+      const local = fs[path];
+      const base = m.base[path];
+      const dirty = m.dirty.includes(path);
+      if (base === version && !dirty) continue;
+      if (base === version && dirty) {
+        handled.add(path);
+        if (!(await push(m, fs, path))) cloud.again = true;
+        continue;
+      }
+      // クラウドで変わっている（または初めて同期する）
+      const r = await cloudFetch(`/cloud/file?path=${encodeURIComponent(path)}`);
+      if (!r.ok) continue;
+      if (local === undefined || local === r.src || (!dirty && base !== undefined)) {
+        if (local !== r.src) { putLocal(path, r.src); changed.push(path); }
+        m.base[path] = r.version;
+        m.dirty = m.dirty.filter((p) => p !== path);
+      } else {
+        // 両方で変わった：クラウドのものを別の名前で残し、手元のものを送る
+        const other = conflictName(path);
+        putLocal(other, r.src);
+        cloud.conflicts.push([path, other]);
+        m.dirty.push(other);
+        changed.push(other);
+        m.base[path] = r.version;
+        if (!m.dirty.includes(path)) m.dirty.push(path);
+      }
+      fs = loadFs();
+    }
+    // 手元にだけあるもの・手元で変えたもの
+    for (const path of Object.keys(fs)) {
+      if (handled.has(path) || (remote.has(path) && !m.dirty.includes(path))) continue;
+      // クラウドから消えていたら新しく作る
+      if (!remote.has(path)) delete m.base[path];
+      if (!(await push(m, fs, path))) cloud.again = true;
+    }
+    saveSync(m);
+    return changed;
+  }
+
+  async function syncNow() {
+    if (!cloud.user) return;
+    if (cloud.busy) { cloud.again = true; return cloud.busy; }
+    cloud.busy = (async () => {
+      setCloudState("syncing");
+      const changed = [];
+      try {
+        for (let k = 0; k < 3; k++) {
+          cloud.again = false;
+          changed.push(...(await syncOnce()));
+          if (!cloud.again) break;
+        }
+        if (cloud.user) setCloudState(loadSync().dirty.length ? "pending" : "synced");
+      } catch (e) {
+        cloud.error = String(e.message || e);
+        setCloudState(navigator.onLine === false ? "offline" : "error");
+      } finally {
+        cloud.busy = null;
+      }
+      if (changed.length) window.dispatchEvent(new CustomEvent("narfi:files-changed", { detail: { paths: changed } }));
+      if (cloud.conflicts.length) {
+        const list = cloud.conflicts.map(([p, o]) => `${p} → ${o}`).join("\n");
+        cloud.conflicts = [];
+        setTimeout(() => alert(`ほかの端末でも同じファイルが変更されていた。このブラウザの変更をそのまま残し、ほかの端末の版を別の名前で残した:\n${list}`), 0);
+      }
+    })();
+    return cloud.busy;
+  }
+
+  function signedOut() {
+    cloud.user = null;
+    setCloudState("signed-out");
+  }
+
+  async function cloudInit() {
+    const me = await cloudFetch("/cloud/me").catch(() => ({ ok: false }));
+    cloud.configured = !!me.configured;
+    if (!cloud.configured) { setCloudState("off"); return; }
+    if (!me.signed_in) { signedOut(); return; }
+    cloud.user = { login: me.login, id: me.id };
+    const m = loadSync();
+    if (m.user !== me.id) {
+      // 初めてか、別のアカウント：手元のファイルはすべて「まだ送っていない」として扱う（同じ名前で中身が違えば conflict として残る）
+      saveSync({ user: me.id, base: {}, dirty: Object.keys(loadFs()) });
+    }
+    window.dispatchEvent(new CustomEvent("narfi:files-changed", { detail: { paths: [] } }));
+    await syncNow();
+    setInterval(() => { if (document.visibilityState === "visible") syncNow(); }, 30000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncNow(); });
+    window.addEventListener("online", () => syncNow());
+  }
+
+  // ---- 画面：右上のアカウントのボタンとメニュー
+
+  const STATE_TEXT = {
+    syncing: "同期中…",
+    synced: "同期済み",
+    pending: "未送信あり",
+    offline: "オフライン",
+    error: "同期エラー"
+  };
+
+  function setCloudState(st) {
+    cloud.state = st;
+    const b = document.getElementById("btnAccount");
+    if (!b) return;
+    b.style.display = st === "off" ? "none" : "";
+    if (!cloud.user) {
+      b.textContent = "Sign in with GitHub";
+      b.title = "GitHub でログインすると、ファイルがクラウドに保存され、ほかの端末でも開ける";
+      b.classList.remove("active");
+    } else {
+      b.textContent = `${cloud.user.login} · ${STATE_TEXT[st] || ""}`;
+      b.title = st === "error" ? `同期できなかった：${cloud.error}` : "クラウド保存（クリックでメニュー）";
+      b.classList.toggle("active", st === "synced");
+    }
+  }
+
+  async function saveCurrentFirst() {
+    try {
+      if (typeof docDirty !== "undefined" && docDirty && typeof saveFile === "function" && currentFilePath) await saveFile({ silent: true });
+    } catch (_) {}
+  }
+
+  async function signIn() {
+    await saveCurrentFirst();
+    if (typeof docDirty !== "undefined") docDirty = false; // 移動の確認を出さない（下書きは残る）
+    location.href = "/auth/login";
+  }
+
+  async function signOut() {
+    await saveCurrentFirst();
+    await syncNow();
+    const m = loadSync();
+    const msg = m.dirty.length
+      ? `まだクラウドに送れていない変更がある（${m.dirty.join(", ")}）。ログアウトすると、このブラウザから消える。よいですか？`
+      : "ログアウトする。ファイルはクラウドに残り、このブラウザからは消える。よいですか？";
+    if (!confirm(msg)) return;
+    await cloudFetch("/auth/logout", { method: "POST", body: "{}" });
+    localStorage.removeItem(FS_KEY);
+    localStorage.removeItem(SYNC_KEY);
+    localStorage.removeItem("narfi.lastFile");
+    if (typeof docDirty !== "undefined") docDirty = false;
+    location.reload();
+  }
+
+  async function deleteAccount() {
+    const login = cloud.user && cloud.user.login;
+    const typed = prompt(`クラウドのファイルとアカウントの記録をすべて消す（GitHub のアカウントはそのまま）。\n消すなら、ログイン名「${login}」を入力する:`);
+    if (typed !== login) return;
+    const r = await cloudFetch("/cloud/me", { method: "DELETE" });
+    if (!r.ok) { alert(r.error || "消せなかった"); return; }
+    localStorage.removeItem(SYNC_KEY);
+    alert("消した。このブラウザ内のファイルは残っている（ログインしていない状態で使える）。");
+    location.reload();
+  }
+
+  function toggleMenu(anchor) {
+    let menu = document.getElementById("accountMenu");
+    if (menu) { menu.remove(); return; }
+    menu = document.createElement("div");
+    menu.id = "accountMenu";
+    menu.className = "account-menu";
+    const item = (label, fn, title) => {
+      const b = document.createElement("button");
+      b.className = "ctrl-btn";
+      b.textContent = label;
+      if (title) b.title = title;
+      b.addEventListener("click", () => { menu.remove(); fn(); });
+      menu.appendChild(b);
+    };
+    item("今すぐ同期", () => syncNow());
+    item("Log out", signOut, "このブラウザからログアウトする");
+    item("アカウントを削除…", deleteAccount, "クラウドのファイルと記録をすべて消す");
+    const r = anchor.getBoundingClientRect();
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+    document.body.appendChild(menu);
+    setTimeout(() => document.addEventListener("click", function close(e) {
+      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", close); }
+    }), 0);
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const right = document.querySelector(".topbar-right");
+    if (!right) return;
+    const b = document.createElement("button");
+    b.id = "btnAccount";
+    b.className = "ctrl-btn";
+    b.style.display = "none";
+    b.addEventListener("click", () => (cloud.user ? toggleMenu(b) : signIn()));
+    right.insertBefore(b, document.getElementById("statusPill"));
+    const css = document.createElement("style");
+    css.textContent = `.account-menu{position:fixed;z-index:50;display:flex;flex-direction:column;gap:4px;padding:6px;
+      background:var(--bg-elev, var(--bg));border:1px solid var(--border);}
+      .account-menu .ctrl-btn{text-align:left}`;
+    document.head.appendChild(css);
+    ready.then(cloudInit);
+  });
+
   // ---------------------------------------------------------------- /api/… の処理
 
   function workspace() {
@@ -136,8 +420,8 @@
     return {
       ok: true,
       web: true,
-      root: "ブラウザ内の保存領域",
-      name: "このブラウザ",
+      root: cloud.user ? `クラウド（GitHub: ${cloud.user.login}）と同期` : "ブラウザ内の保存領域",
+      name: cloud.user ? `cloud: ${cloud.user.login}` : "このブラウザ",
       files: Object.keys(fs).sort(),
       libs: [{ label: "std", dir: "", files: std }],
       dialogs: true
@@ -149,6 +433,7 @@
     fs[path] = src;
     saveFs(fs);
     call({ op: "put_file", path, src });
+    cloudNoteLocalChange(path);
   }
 
   async function handle(path, query, opts) {

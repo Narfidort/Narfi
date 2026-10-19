@@ -11,7 +11,7 @@ thm ex1.imp_trans :
   h : P → Q, k : Q → R
   ⊢ P → R
 
-assume hp
+assume hp : P
   k(h(hp))
 
 
@@ -32,8 +32,8 @@ thm ex1.contrapositive :
   h : P → Q
   ⊢ ¬Q → ¬P
 
-assume hnq
-  assume hp
+assume hnq : ¬Q
+  assume hp : P
     hnq(h(hp))
 
 
@@ -79,7 +79,7 @@ thm ex3.zero_add :
 induction n
   Case zero
     add.zero(0)
-  Case succ k, IH
+  Case succ k, IH : 0 + k = k
     0 + S(k)
       = S(0 + k)   by add.succ(0, k)
       = S(k)       by congr.S(IH)
@@ -118,6 +118,6 @@ x
 thm ex4.smaller :
   ⊢ ∀ε:ℝ>0. ∃δ:ℝ>0. δ < ε
 
-Fix ε | hε
+Fix ε | hε : ε > 0
   choose ε/2, pos_half(hε)
   linarith

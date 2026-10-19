@@ -185,13 +185,14 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
                 .map(|g| json_str(&g.to_latex()))
                 .unwrap_or_else(|| "null".into());
             format!(
-                "{{\"line\":{},\"msg\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{}}}",
+                "{{\"line\":{},\"msg\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{},\"fix\":{}}}",
                 e.line,
                 json_str(&e.msg),
                 g_str,
                 gl_str,
                 json_str_array(&e.ctx),
-                json_str_array(&e.ctx_latex)
+                json_str_array(&e.ctx_latex),
+                e.fix.as_ref().map(|f| json_str(f)).unwrap_or_else(|| "null".into())
             )
         }
         None => "null".to_string(),

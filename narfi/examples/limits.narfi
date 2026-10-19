@@ -11,12 +11,12 @@ thm conv.add :
   conv_b : b ⟶ β
   ⊢ (n ↦ a(n) + b(n)) ⟶ α + β
 
-Fix ε | hε
+Fix ε | hε : ε > 0
   Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
   Obtain N₂(ε), hN₂ : conv_b(ε/2, pos_half(hε))
   let N := max(N₁, N₂)
   choose N
-  Fix n | hn
+  Fix n | hn : n ≥ N
     |(a(n) + b(n)) - (α + β)|
       ≤ |a(n) - α| + |b(n) - β|   by triangle(a(n) - α, b(n) - β)
       < ε/2 + ε/2                  by hN₁(ge.max.left(hn)), hN₂(ge.max.right(hn))

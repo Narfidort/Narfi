@@ -69,3 +69,24 @@ fn regression_subst_placeholder() {
     assert!(out.contains("✗ boom"), "{out}");
     assert!(!out.lines().any(|l| l.trim_start().starts_with("✓ boom")), "{out}");
 }
+
+/// 仮定の中身を省略するとエラーになり、goal から決まる中身を help に示す（v2.5）
+#[test]
+fn omitted_hypothesis_is_an_error() {
+    let dir = std::env::temp_dir().join(format!("narfi-hyp-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cases = [
+        ("thm t :\n  ⊢ ∀ε:ℝ>0. ε > 0\n\nFix ε | hε\n  hε\n", "`hε : ε > 0` と書く"),
+        ("thm t :\n  P : Prop\n  ⊢ P → P\n\nassume h\n  h\n", "`h : P` と書く"),
+    ];
+    for (i, (src, msg)) in cases.iter().enumerate() {
+        let f = dir.join(format!("case{i}.narfi"));
+        std::fs::write(&f, src).unwrap();
+        let out = run(&[f.to_str().unwrap()]);
+        assert!(out.contains("✗ t") && out.contains("中身が書かれていない") && out.contains(msg), "{src}\n{out}");
+        let fixed = src.replace("| hε\n", "| hε : ε > 0\n").replace("assume h\n", "assume h : P\n");
+        std::fs::write(&f, &fixed).unwrap();
+        let out = run(&[f.to_str().unwrap()]);
+        assert!(out.contains("✓ t"), "{fixed}\n{out}");
+    }
+}

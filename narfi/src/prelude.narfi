@@ -64,5 +64,5 @@ thm set.eq_sub :
   ⊢ ∀x. A(x) → B(x)
 
 Fix x
-  assume hx
+  assume hx : A(x)
     EQ2(h, hx)

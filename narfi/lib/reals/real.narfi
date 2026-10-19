@@ -9,7 +9,7 @@ thm seq_eq.class :
   ⊢ ∀x:CauSeq. b ~ x → a ~ x
 
 Fix x
-  assume hb
+  assume hb : b ~ x
     seq_eq.trans(h, hb)
 
 -- 同値類全体の型（定数列 0 の同値類があるので空でない）

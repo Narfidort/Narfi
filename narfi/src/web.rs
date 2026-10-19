@@ -635,14 +635,14 @@ const NARFI_AI_SYSTEM_PROMPT: &str = r#"あなたは自然演繹ベースの証�
      仮定1 : φ1, 仮定2 : φ2
      ⊢ 結論
 2. 証明ステップ（字下げ 2スペースでブロックを作る）:
-   - ∀導入: `Fix x` または条件付き `Fix ε | hε` （または日本語シュガー: `hε を満たす ε を任意にとって固定する`）
-   - →導入: `assume h : P` （型 `: P` は省略可 `assume h`）
+   - ∀導入: `Fix x` または条件付き `Fix ε | hε : ε > 0` （仮定の中身 `: ε > 0` は必ず書く。日本語シュガー: `hε : ε > 0 を満たす ε を任意にとって固定する`）
+   - →導入: `assume h : P` （仮定の中身 `: P` は必ず書く）
    - 背理法: `by_contra hn` （Goal が `⊥` になる。Goal自体が `¬P` のときは `assume` を使う）
    - ∃除去: `Obtain x, hx : 根拠` または依存関係注釈付き `Obtain N(ε), hN : conv_a(ε/2, pos_half(hε))`
    - ∃導入: `choose 項` または範囲付き `choose 項, 条件の根拠` （例: `choose 1/2, decide`）
    - ∨導入: `choose left` / `choose right`
    - ∨除去: `cases h` の下に字下げして `Case left h1` と `Case right h2`
-   - 帰納法: `induction n` の下に字下げして `Case zero` と `Case succ k, IH`
+   - 帰納法: `induction n` の下に字下げして `Case zero` と `Case succ k, IH : P(k)`（帰納法の仮定の中身も書く）
    - 中間主張: `have h : φ := 根拠`
    - 十分条件: `suffices ψ := 根拠`
    - 局所定義: `let N := max(N₁, N₂)`

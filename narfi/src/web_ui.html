@@ -1517,12 +1517,12 @@ thm conv.add :
   conv_b : forall eps>0. exists N:Nat. forall n>=N. abs(b(n) - beta) < eps
   |- forall eps>0. exists N:Nat. forall n>=N. abs((a(n) + b(n)) - (alpha + beta)) < eps
 
-Fix eps | h_{eps}
+Fix eps | h_{eps} : eps > 0
   Obtain N_1(eps), hN_1 : conv_a(eps/2, pos_half(h_{eps}))
   Obtain N_2(eps), hN_2 : conv_b(eps/2, pos_half(h_{eps}))
   let N := max(N_1, N_2)
   choose N
-  Fix n | h_{n}
+  Fix n | h_{n} : n >= N
     abs((a(n) + b(n)) - (alpha + beta))
       <= abs(a(n) - alpha) + abs(b(n) - beta)   by triangle(a(n) - alpha, b(n) - beta)
       < eps/2 + eps/2                           by hN_1(ge.max.left(h_{n})), hN_2(ge.max.right(h_{n}))
@@ -1777,6 +1777,10 @@ function findSubstrIndexInItems(items, pat, fromIdx = 0) {
 function getInferredFixHypFormula(lineNo, rootSeq) {
   if (!lastCheckData || !lastCheckData.decls) return "";
   const items = rootSeq.items;
+  // 検査器が直し方を出していれば（仮定の中身が書かれていない など）それを使う
+  for (const d of lastCheckData.decls) {
+    if (d.error && d.error.line === lineNo && d.error.fix) return d.error.fix.replace(/^\s*:\s*/, "");
+  }
   if (!matchKeywordPrefix(items, "Fix ")) return "";
   const barIdx = findCharIndexInItems(items, "|", 4);
   if (barIdx < 0) return "";
@@ -2815,7 +2819,12 @@ editorSurface.addEventListener("keydown", (e) => {
     if (!e.shiftKey && pendingHypSuggestion && pendingHypSuggestion.seqId === seq.id && cursor.offset === seq.items.length) {
       const ins = parseAsciiToItems(" : " + pendingHypSuggestion.text);
       for (const it of ins) it.parentSeq = seq;
-      seq.items.push(...ins);
+      // `Case succ k, IH:` のように行末が「:」なら、その前に入れる
+      let at = seq.items.length;
+      while (at > 0 && seq.items[at - 1].kind === "char" && seq.items[at - 1].ch === " ") at--;
+      if (at > 0 && seq.items[at - 1].kind === "char" && seq.items[at - 1].ch === ":") at--;
+      else at = seq.items.length;
+      seq.items.splice(at, 0, ...ins);
       cursor.offset = seq.items.length;
       onDocMutated();
       return;
@@ -3366,6 +3375,17 @@ function renderSidebar() {
 document.getElementById("sidebar").addEventListener("click", (e) => {
   const item = e.target.closest(".sb-item");
   if (item) openPath(item.getAttribute("data-path"));
+});
+
+// Web 版：クラウドから別の端末の変更が届いた（web_static.js）。一覧を更新し、開いているファイルが変わって
+// いて手元に保存していない変更がなければ読み直す
+window.addEventListener("narfi:files-changed", async (e) => {
+  await loadWorkspace();
+  const paths = (e.detail && e.detail.paths) || [];
+  if (currentFilePath && paths.includes(currentFilePath) && !docDirty) {
+    const data = await (await fetch(`/api/file?path=${encodeURIComponent(currentFilePath)}`)).json();
+    if (data.ok && data.src !== serializeDocToAscii()) await loadSrc(data.src, data.path);
+  }
 });
 
 function confirmDiscard() {

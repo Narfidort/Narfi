@@ -58,7 +58,7 @@ cases h
 
 thm u.assume :
   ⊢ P → Q
-assume h
+assume h : P
   h
 
 thm u.contra :
@@ -91,7 +91,7 @@ thm u.induction :
 induction n
   Case zero
     refl
-  Case succ k, IH
+  Case succ k, IH : k = 0
     IH
 
 thm u.byContra.unused :

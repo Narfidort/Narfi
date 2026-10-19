@@ -145,9 +145,20 @@ impl<'a> Checker<'a> {
     }
 
     /// 書かれた仮定の型を、goal から決まるものと照合する（assume・Fix | h・Case succ）
-    fn assumed(&mut self, ctx: &Ctx, written: Option<&Formula>, expected: &Formula) -> CResult<Formula> {
+    /// 仮定 h の中身。書かれていなければエラーにする（読む人に仮定が見えるように。直し方は示す）
+    fn assumed(&mut self, ctx: &Ctx, h: &str, written: Option<&Formula>, expected: &Formula) -> CResult<Formula> {
         match written {
-            None => Ok(expected.clone()),
+            None => {
+                self.snapshot.0 = ctx.clone();
+                let e = self.zonk_f(expected);
+                let mut err = self
+                    .err::<Formula>(format!(
+                        "仮定 {h} の中身が書かれていない\n  help: goal から決まるのは「{e}」。`{h} : {e}` と書く（エディタでは行末で Tab）"
+                    ))
+                    .unwrap_err();
+                err.fix = Some(format!(" : {e}"));
+                Err(err)
+            }
             Some(f) => {
                 let f = self.infer_written(ctx, f)?;
                 if self.unify(ctx, &f, expected) {
@@ -208,7 +219,7 @@ impl<'a> Checker<'a> {
                 if let Some((h, f)) = hyp {
                     match self.whnf(&cur) {
                         Formula::Imp(a, b) => {
-                            let a = self.assumed(&c2, f.as_ref(), &a)?;
+                            let a = self.assumed(&c2, h, f.as_ref(), &a)?;
                             self.fresh_name(&c2, h)?;
                             self.push(&mut c2, Entry::Hyp(h.clone(), a.clone()));
                             cur = *b;
@@ -232,7 +243,7 @@ impl<'a> Checker<'a> {
             StmtKind::Assume { name, ty, body } => match self.whnf(&g) {
                 Formula::Imp(a, b) => {
                     let mut c2 = ctx.clone();
-                    let a = self.assumed(&c2, ty.as_ref(), &a)?;
+                    let a = self.assumed(&c2, name, ty.as_ref(), &a)?;
                     self.fresh_name(&c2, name)?;
                     self.push(&mut c2, Entry::Hyp(name.clone(), a.clone()));
                     let p = self.block(c2, body, *b, line)?;
@@ -316,7 +327,7 @@ impl<'a> Checker<'a> {
                 self.fresh_name(&c2, k)?;
                 self.push(&mut c2, Entry::Var(k.clone(), "ℕ".into(), VarKind::Fixed));
                 let ih_f = pred.subst(&pv, &Term::Var(k.clone()));
-                let ih_f = self.assumed(&c2, ih_ty.as_ref(), &ih_f)?;
+                let ih_f = self.assumed(&c2, ih, ih_ty.as_ref(), &ih_f)?;
                 self.fresh_name(&c2, ih)?;
                 self.push(&mut c2, Entry::Hyp(ih.clone(), ih_f));
                 let sg = pred.subst(&pv, &Term::App("S".into(), vec![Term::Var(k.clone())]));

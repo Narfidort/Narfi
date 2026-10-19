@@ -25,7 +25,7 @@ Fix m, n
       S(m) + 0
         = S(m)          by add.zero(S(m))
         = S(m + 0)      by eq.symm(congr.S(add.zero(m)))
-    Case succ k, IH
+    Case succ k, IH : S(m) + k = S(m + k)
       S(m) + S(k)
         = S(S(m) + k)   by add.succ(S(m), k)
         = S(S(m + k))   by congr.S(IH)
@@ -73,5 +73,5 @@ thm not_not_intro :
   h : P
   ⊢ ¬¬P
 
-assume hn
+assume hn : ¬P
   hn(h)
