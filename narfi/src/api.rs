@@ -112,7 +112,12 @@ pub fn check_json(src: &str, cursor_line: Option<usize>, load: &dyn Fn(&str) -> 
         .collect();
 
     let perr_json = match parse_err {
-        Some(e) => format!("{{\"line\":{},\"msg\":{}}}", e.line, json_str(&e.msg)),
+        Some(e) => format!(
+            "{{\"line\":{},\"msg\":{},\"msg_latex\":{}}}",
+            e.line,
+            json_str(&e.msg),
+            json_str(&crate::parser::msg_latex(&e.msg))
+        ),
         None => "null".to_string(),
     };
 
@@ -185,9 +190,10 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
                 .map(|g| json_str(&g.to_latex()))
                 .unwrap_or_else(|| "null".into());
             format!(
-                "{{\"line\":{},\"msg\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{},\"fix\":{}}}",
+                "{{\"line\":{},\"msg\":{},\"msg_latex\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{},\"fix\":{}}}",
                 e.line,
                 json_str(&e.msg),
+                json_str(&crate::parser::msg_latex(&e.msg)),
                 g_str,
                 gl_str,
                 json_str_array(&e.ctx),

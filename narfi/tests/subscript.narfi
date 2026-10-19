@@ -1,0 +1,30 @@
+-- 数列の添字：a : ℕ → ℝ なら a_n・a_{n+1}・a_1 は a(n)・a(n+1)・a(1)
+
+def incr(a : Nat -> Real) := forall n:Nat. a_n <= a_{n+1}
+
+thm sub.basic :
+  a : Nat -> Real,
+  h : forall n:Nat. a_n <= a_{n+1}
+  |- a_0 <= a_{0+1}
+
+h(0)
+
+thm sub.chain :
+  a : Nat -> Real,
+  h : incr(a)
+  |- a_1 <= a_{2}
+
+have k : a_1 <= a_{1+1} := h(1)
+a_1
+  <= a_{1+1}   by k
+  = a_2        by ring
+
+-- 宣言された名前（N_1）はそのまま名前
+thm sub.name :
+  N_1 : Nat
+  |- N_1 = N_1
+
+refl
+
+-- 絶対値の中のマイナス
+axiom abs.neg : x : Real |- | -x| = |x|

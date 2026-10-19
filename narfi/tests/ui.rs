@@ -4,7 +4,8 @@
 use std::path::Path;
 use std::process::Command;
 
-const FILES: [&str; 14] = [
+const FILES: [&str; 15] = [
+    "tests/subscript.narfi",
     "lib/reals/rat.narfi",
     "lib/reals/cauchy.narfi",
     "lib/reals/real.narfi",
@@ -136,5 +137,68 @@ fn editor_roundtrip_keeps_comments() {
         let src = std::fs::read_to_string(f).unwrap();
         let once = roundtrip(Path::new(f));
         assert_eq!(comment_lines(&src), comment_lines(&once), "{f}: エディタを通すとコメントが変わる");
+    }
+}
+
+/// チュートリアル（src/tutorial.js）の答えがすべて通り、練習は sorry だけが残る（構文エラーにならない）こと
+#[test]
+fn tutorial_answers_check() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("node がないので飛ばす");
+        return;
+    }
+    let script = r#"
+        global.window = {};
+        require(process.argv[1]);
+        process.stdout.write(JSON.stringify(window.NARFI_TUTORIAL.filter(l => l.exercise)));
+    "#;
+    let out = Command::new("node").args(["-e", script, "./src/tutorial.js"]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let json = String::from_utf8(out.stdout).unwrap();
+    // 小さな JSON の取り出し（"exercise" と "answer" の文字列）
+    let field = |obj: &str, key: &str| -> Vec<String> {
+        let mut v = Vec::new();
+        let pat = format!("\"{key}\":\"");
+        let mut rest = obj;
+        while let Some(k) = rest.find(&pat) {
+            let s = &rest[k + pat.len()..];
+            let mut out = String::new();
+            let mut it = s.chars();
+            while let Some(c) = it.next() {
+                match c {
+                    '\\' => match it.next() {
+                        Some('n') => out.push('\n'),
+                        Some('t') => out.push('\t'),
+                        Some('u') => {
+                            let h: String = it.by_ref().take(4).collect();
+                            out.push(char::from_u32(u32::from_str_radix(&h, 16).unwrap()).unwrap());
+                        }
+                        Some(c) => out.push(c),
+                        None => {}
+                    },
+                    '"' => break,
+                    c => out.push(c),
+                }
+            }
+            v.push(out);
+            rest = &s[1..];
+        }
+        v
+    };
+    let exercises = field(&json, "exercise");
+    let answers = field(&json, "answer");
+    assert_eq!(exercises.len(), answers.len());
+    assert!(answers.len() >= 7);
+    let dir = std::env::temp_dir().join(format!("narfi-tut-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (k, (ex, ans)) in exercises.iter().zip(&answers).enumerate() {
+        let fa = dir.join(format!("ans{k}.narfi"));
+        std::fs::write(&fa, ans).unwrap();
+        let st = statuses(&fa);
+        assert!(!st.is_empty() && st.iter().all(|s| s.starts_with('✓')), "答え {k} が通らない: {st:?}\n{ans}");
+        let fe = dir.join(format!("ex{k}.narfi"));
+        std::fs::write(&fe, ex).unwrap();
+        let st = statuses(&fe);
+        assert!(!st.is_empty() && st.iter().all(|s| s.starts_with('△')), "練習 {k} が △ にならない: {st:?}\n{ex}");
     }
 }

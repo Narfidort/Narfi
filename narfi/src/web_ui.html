@@ -8,6 +8,7 @@
 <script src="/assets/katex/katex.min.js"></script>
 <!--NARFI_LOCAL-->
 <script src="/narfi-web.js"></script>
+<script src="/tutorial.js"></script>
 <style>
 :root[data-theme="dark"] {
   --bg: #0a0a0c;
@@ -842,7 +843,21 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-size: 12.5px;
   margin-bottom: 14px;
   white-space: pre-wrap;
+  line-height: 1.7;
 }
+.err-banner .katex { color: var(--text); font-size: 1.08em; margin: 0 0.15em; }
+/* Learn（チュートリアル） */
+.learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
+.learn-nav select { flex: 1; min-width: 0; }
+.learn-body { font-size: 13.5px; line-height: 1.85; color: var(--text); }
+.learn-body h3 { font-size: 15px; margin: 0 0 10px; font-weight: 600; }
+.learn-body p { margin: 0 0 12px; }
+.learn-body code { font-family: "JetBrains Mono", monospace; font-size: 12px; padding: 1px 4px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 2px; }
+.learn-body pre { font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.6; padding: 10px 12px; margin: 0 0 12px; background: var(--bg-elev); border: 1px solid var(--border); overflow-x: auto; }
+.learn-body table { border-collapse: collapse; margin: 0 0 12px; font-size: 12.5px; }
+.learn-body td { padding: 4px 12px 4px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.learn-body td:first-child { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--accent); white-space: nowrap; }
+.learn-actions { display: flex; gap: 8px; margin: 16px 0 12px; }
 .prose-doc {
   line-height: 1.85;
   font-size: 14px;
@@ -935,6 +950,16 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <button class="insp-tab" onclick="switchTab('code', this)">Source</button>
       <button class="insp-tab" onclick="switchTab('latex', this)">LaTeX</button>
       <button class="insp-tab" onclick="switchTab('ai', this)" data-only="local">AI</button>
+      <button id="learnTabBtn" class="insp-tab" onclick="switchTab('learn', this)">Learn</button>
+    </div>
+
+    <div id="tab-learn" class="insp-body">
+      <div class="learn-nav">
+        <select id="learnSelect" class="ctrl-select" onchange="showLesson(+this.value)"></select>
+        <button class="ctrl-btn" onclick="showLesson(learnIndex - 1)" title="前のレッスン">‹</button>
+        <button class="ctrl-btn" onclick="showLesson(learnIndex + 1)" title="次のレッスン">›</button>
+      </div>
+      <div id="learnBody" class="learn-body"></div>
     </div>
 
     <div id="tab-goal" class="insp-body active">
@@ -1085,6 +1110,8 @@ const COMMAND_DICT = [
   { cmd: "lnot", preview: "¬", desc: "not", kind: "sym", ascii: "not", display: "¬", cls: "" },
   { cmd: "vdash", preview: "⊢", desc: "|-", kind: "sym", ascii: "|-", display: "⊢", cls: "" },
   { cmd: "proves", preview: "⊢", desc: "|-", kind: "sym", ascii: "|-", display: "⊢", cls: "" },
+  { cmd: "mapsto", preview: "↦", desc: "|->", kind: "sym", ascii: "|->", display: "↦", cls: "" },
+  { cmd: "turnstile", preview: "⊢", desc: "|-", kind: "sym", ascii: "|-", display: "⊢", cls: "" },
   { cmd: "therefore", preview: "∴", desc: "therefore", kind: "sym", ascii: "therefore", display: "∴", cls: "" },
   { cmd: "tf", preview: "∴", desc: "therefore", kind: "sym", ascii: "therefore", display: "∴", cls: "" },
   { cmd: "bot", preview: "⊥", desc: "bot", kind: "sym", ascii: "bot", display: "⊥", cls: "" },
@@ -1451,6 +1478,8 @@ function parseAsciiToItems(str) {
     if (str.startsWith("<=", i) || str.startsWith("=<", i)) { items.push(makeSym("<=", "≤")); i += 2; continue; }
     if (str.startsWith(">=", i)) { items.push(makeSym(">=", "≥")); i += 2; continue; }
     if (str.startsWith("!=", i)) { items.push(makeSym("!=", "≠")); i += 2; continue; }
+    if (str.startsWith("|->", i)) { items.push(makeSym("|->", "↦")); i += 3; continue; }
+    if (str.startsWith("↦", i)) { items.push(makeSym("|->", "↦")); i += 1; continue; }
     if (str.startsWith("|-", i)) { items.push(makeSym("|-", "⊢")); i += 2; continue; }
     const lto = str.slice(i).match(/^\\(longrightarrow|lto)(?![A-Za-z])\s?/);
     if (lto) { items.push(makeSym("\\longrightarrow", "⟶")); i += lto[0].length; continue; }
@@ -1485,9 +1514,14 @@ function parseAsciiToItems(str) {
         j++;
       }
       const word = str.substring(i, j);
+      // conv_a・a_n のように「_ + 1文字」で終わる名前は添字にする（Prose の表示と同じ）
+      const subm = word.match(/^([A-Za-z]+)_([A-Za-z0-9])$/);
       if (WORD_TO_SYM[word]) {
         const [asc, disp, cls] = WORD_TO_SYM[word];
         items.push(makeSym(asc, disp, cls));
+      } else if (subm && !WORD_TO_SYM[subm[1]]) {
+        for (const c of subm[1]) items.push(makeChar(c));
+        items.push(makeSub([makeChar(subm[2])]));
       } else {
         for (const c of word) items.push(makeChar(c));
       }
@@ -1591,6 +1625,9 @@ function serializeSeqToAscii(seq) {
     const it = items[i];
     if (it.kind === "char") {
       out += it.ch;
+      // 文字の「|」と「-」が続く（|-x| の絶対値）ときは、⊢（|-）と読まれないよう空白を挟む
+      const nx = items[i + 1];
+      if (it.ch === "|" && nx && nx.kind === "char" && nx.ch === "-") out += " ";
     } else if (it.kind === "sym") {
       const wordLike = /^[A-Za-z]+$/.test(it.ascii);
       const prev = items[i - 1];
@@ -1624,7 +1661,9 @@ function serializeSeqToAscii(seq) {
       out += `${nCode}/${dCode}`;
     } else if (it.kind === "sub") {
       const b = serializeSeqToAscii(it.body).trim();
-      if (/^[0-9]$/.test(b)) {
+      const nx = items[i + 1];
+      const nextAlnum = nx && nx.kind === "char" && /[A-Za-z0-9_']/.test(nx.ch);
+      if (/^[0-9]$/.test(b) || (/^[A-Za-z]$/.test(b) && !nextAlnum)) {
         out += `_${b}`;
       } else if (b.length > 0) {
         out += `_{${b}}`;
@@ -1659,7 +1698,7 @@ function serializeSeqToAscii(seq) {
 // ================================================================
 
 const DEFAULT_ASCII_DOC = `-- Narfi へようこそ。証明を書くと、各行が検査され、右上に結果が出ます。
--- \\fr + Tab で分数、_ で添字、| で絶対値、<= で ≤。カーソルの行の文脈と Goal は右側に出ます。
+-- 書き方は右の Learn タブのチュートリアルで。カーソルの行の文脈と Goal は Goal タブに出ます。
 
 axiom triangle    : forall x:Real. forall y:Real. abs(x + y) <= abs(x) + abs(y)
 axiom pos_half    : x : Real, h : x > 0 |- x/2 > 0
@@ -1668,9 +1707,9 @@ axiom ge.max.right : n : Nat, h : n >= max(a, b) |- n >= b
 
 thm conv.add :
   a : Nat -> Real, b : Nat -> Real,
-  conv_a : forall eps>0. exists N:Nat. forall n>=N. abs(a(n) - alpha) < eps,
-  conv_b : forall eps>0. exists N:Nat. forall n>=N. abs(b(n) - beta) < eps
-  |- forall eps>0. exists N:Nat. forall n>=N. abs((a(n) + b(n)) - (alpha + beta)) < eps
+  conv_a : forall eps>0. exists N:Nat. forall n>=N. abs(a_n - alpha) < eps,
+  conv_b : forall eps>0. exists N:Nat. forall n>=N. abs(b_n - beta) < eps
+  |- forall eps>0. exists N:Nat. forall n>=N. abs((a_n + b_n) - (alpha + beta)) < eps
 
 Fix eps | h_{eps} : eps > 0
   Obtain N_1(eps), hN_1 : conv_a(eps/2, pos_half(h_{eps}))
@@ -1678,11 +1717,11 @@ Fix eps | h_{eps} : eps > 0
   let N := max(N_1, N_2)
   choose N
   Fix n | h_{n} : n >= N
-    abs((a(n) + b(n)) - (alpha + beta))
-      <= abs(a(n) - alpha) + abs(b(n) - beta)   by triangle(a(n) - alpha, b(n) - beta)
+    abs((a_n + b_n) - (alpha + beta))
+      <= abs(a_n - alpha) + abs(b_n - beta)   by triangle(a_n - alpha, b_n - beta)
       < eps/2 + eps/2                           by hN_1(ge.max.left(h_{n})), hN_2(ge.max.right(h_{n}))
       = eps                                     by ring
-  therefore forall n>=N. abs((a(n) + b(n)) - (alpha + beta)) < eps
+  therefore forall n>=N. abs((a_n + b_n) - (alpha + beta)) < eps
 `;
 
 let docLines = []; // [{ indent: number, rootSeq: Seq }]
@@ -2040,7 +2079,7 @@ function renderRootSeqWithLens(rootSeq, lineNo) {
   if (matchKeywordPrefix(items, "choose ") && !isCursorInKeywordPrefix(7)) {
     return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
       renderItemsSliceHtml(rootSeq, 7, items.length) +
-      `<span class="mc-kw-jp">をうまく選べばよい</span>` +
+      `<span class="mc-kw-jp">をとればよい</span>` +
       `</span>`;
   }
   if (matchKeywordPrefix(items, "have ") && !isCursorInKeywordPrefix(5)) {
@@ -2746,6 +2785,12 @@ function insertCharAtCursor(ch) {
       seq.items.splice(cursor.offset - 1, 1, makeSym("!=", "≠"));
       onDocMutated(); return;
     }
+    // |-> は ↦（λ）
+    if (cursor.offset >= 2 && seq.items[cursor.offset - 2].kind === "char" && seq.items[cursor.offset - 2].ch === "|" && prev1 === "-" && ch === ">") {
+      seq.items.splice(cursor.offset - 2, 2, makeSym("|->", "↦"));
+      cursor.offset -= 1;
+      onDocMutated(); return;
+    }
     if (prev1 === "-" && ch === ">") {
       seq.items.splice(cursor.offset - 1, 1, makeSym("->", "→"));
       onDocMutated(); return;
@@ -2754,8 +2799,11 @@ function insertCharAtCursor(ch) {
       seq.items.splice(cursor.offset - 1, 1, makeSym("<->", "↔"));
       onDocMutated(); return;
     }
-    if (prev1 === "|" && ch === "-") {
-      seq.items.splice(cursor.offset - 1, 1, makeSym("|-", "⊢"));
+    // ⊢ は `\|-`（または \vdash・\turnstile）で入れる。`|-` は絶対値とマイナス（|-x|）のために変換しない
+    const prev2 = cursor.offset >= 2 && seq.items[cursor.offset - 2].kind === "char" ? seq.items[cursor.offset - 2].ch : "";
+    if (prev2 === "\\" && prev1 === "|" && ch === "-") {
+      seq.items.splice(cursor.offset - 2, 2, makeSym("|-", "⊢"));
+      cursor.offset -= 1;
       onDocMutated(); return;
     }
   }
@@ -3123,6 +3171,13 @@ function refreshAfterEdit() {
   checkDebounce = setTimeout(runCheckApi, 110);
 }
 
+// エラーメッセージ：式の部分（msg_latex の $…$）は数式として描く
+function msgHtml(e) {
+  const src = e.msg_latex || "";
+  if (!src || !window.katex) return escHtml(e.msg);
+  return src.split("$").map((part, k) => (k % 2 ? renderKatex(part, false) : escHtml(part))).join("");
+}
+
 function renderKatex(tex, displayMode = false) {
   if (!window.katex) return `<code>${escHtml(tex)}</code>`;
   try {
@@ -3204,7 +3259,7 @@ function renderGoalInspector() {
   const curLine = cursor.lineIdx + 1;
   const errArea = document.getElementById("errBannerArea");
   if (lastCheckData.parse_error) {
-    errArea.innerHTML = `<div class="err-banner">Ln ${lastCheckData.parse_error.line}: ${escHtml(lastCheckData.parse_error.msg)}</div>`;
+    errArea.innerHTML = `<div class="err-banner">Ln ${lastCheckData.parse_error.line}: ${msgHtml(lastCheckData.parse_error)}</div>`;
   } else {
     errArea.innerHTML = "";
   }
@@ -3233,7 +3288,7 @@ function renderGoalInspector() {
 
     let html = "";
     if (activeDecl.error) {
-      html += `<div class="err-banner">Ln ${activeDecl.error.line}: ${escHtml(activeDecl.error.msg)}</div>`;
+      html += `<div class="err-banner">Ln ${activeDecl.error.line}: ${msgHtml(activeDecl.error)}</div>`;
     }
 
     const ctxL = (bestStep && bestStep.ctx_latex) ? bestStep.ctx_latex : (activeDecl.error && activeDecl.error.ctx_latex ? activeDecl.error.ctx_latex : []);
@@ -3335,7 +3390,58 @@ function toggleTheme() {
   localStorage.setItem("narfi_theme", next);
 }
 
+// ---- Learn（チュートリアル：src/tutorial.js）
+
+let learnIndex = Number(localStorage.getItem("narfi.learn.index") || 0);
+
+function inlineMd(text) {
+  // `code` はコード、$…$ は数式、それ以外は文字
+  return text.split(/(`[^`]*`)/).map((part) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) return `<code>${escHtml(part.slice(1, -1))}</code>`;
+    return part.split("$").map((q, k) => (k % 2 ? renderKatex(q, false) : escHtml(q))).join("");
+  }).join("");
+}
+
+function showLesson(i) {
+  const lessons = window.NARFI_TUTORIAL || [];
+  if (!lessons.length) return;
+  learnIndex = Math.max(0, Math.min(lessons.length - 1, i));
+  localStorage.setItem("narfi.learn.index", String(learnIndex));
+  const sel = document.getElementById("learnSelect");
+  if (!sel.options.length) sel.innerHTML = lessons.map((l, k) => `<option value="${k}">${escHtml(l.title)}</option>`).join("");
+  sel.value = String(learnIndex);
+  const l = lessons[learnIndex];
+  let html = `<h3>${escHtml(l.title)}</h3>`;
+  for (const b of l.blocks) {
+    if (b.p) html += `<p>${inlineMd(b.p)}</p>`;
+    if (b.code) html += `<pre>${escHtml(b.code)}</pre>`;
+    if (b.keys) html += `<table>${b.keys.map(([k, d]) => `<tr><td>${escHtml(k)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
+  }
+  if (l.exercise) {
+    html += `<div class="learn-actions">
+      <button class="ctrl-btn primary" onclick="openExercise()">練習を開く</button>
+      <button class="ctrl-btn" onclick="toggleAnswer()">答えを見る</button>
+    </div><pre id="learnAnswer" hidden>${escHtml(l.answer)}</pre>`;
+  }
+  if (learnIndex + 1 < lessons.length) {
+    html += `<div class="learn-actions"><button class="ctrl-btn" onclick="showLesson(learnIndex + 1)">次へ：${escHtml(lessons[learnIndex + 1].title)}</button></div>`;
+  }
+  document.getElementById("learnBody").innerHTML = html;
+}
+
+function openExercise() {
+  const l = (window.NARFI_TUTORIAL || [])[learnIndex];
+  if (!l) return;
+  loadSrc(l.exercise, "", { newTab: true, title: `練習${learnIndex + 1}.narfi` });
+}
+
+function toggleAnswer() {
+  const a = document.getElementById("learnAnswer");
+  if (a) a.hidden = !a.hidden;
+}
+
 function switchTab(id, btn) {
+  if (id === "learn") showLesson(learnIndex);
   document.querySelectorAll(".insp-tab").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".insp-body").forEach(p => p.classList.remove("active"));
   btn.classList.add("active");
@@ -3442,7 +3548,8 @@ function displayName(path) {
 
 function updateFileLabel() {
   const el = document.getElementById("fileLabel");
-  el.textContent = displayName(currentFilePath);
+  const untitled = !currentFilePath && typeof tabs !== "undefined" && tabs[activeTab] && tabs[activeTab].title;
+  el.textContent = untitled ? `${untitled}（未保存）` : displayName(currentFilePath);
   el.title = currentFilePath ? (workspaceInfo ? `${workspaceInfo.root}/${currentFilePath}` : currentFilePath) : "保存されていない文書";
   el.classList.toggle("dirty", docDirty);
   el.classList.toggle("readonly", currentReadOnly);
@@ -3946,7 +4053,7 @@ function persistTabs() {
 function renderTabs() {
   const strip = document.getElementById("tabStrip");
   strip.innerHTML = tabs.map((t, i) => {
-    const name = t.path ? displayName(t.path).split("/").pop() : "untitled.narfi";
+    const name = t.path ? displayName(t.path).split("/").pop() : (t.title || "untitled.narfi");
     const cls = `tab${i === activeTab ? " active" : ""}${tabDirty(i) ? " dirty" : ""}`;
     const ro = t.path && t.path.startsWith("lib:") ? " ro" : "";
     return `<div class="${cls}" data-tab="${i}" title="${escHtml(t.path ? displayName(t.path) : "保存されていない文書")}">` +
@@ -4049,7 +4156,7 @@ async function loadSrc(src, path, opts = {}) {
   } else {
     stashCurrent();
     const cur = tabs[activeTab];
-    const t = { path: path || "", src, dirty: false };
+    const t = { path: path || "", src, dirty: false, title: opts.title || "" };
     if (cur && !opts.newTab && !cur.path && !docDirty && (cur.example || !serializeDocToAscii().trim())) {
       // 空の untitled・最初の例は置き換える
       i = activeTab;
@@ -4155,7 +4262,7 @@ async function saveFile(opts = {}) {
 
 async function saveAs() {
   const src = serializeDocToAscii();
-  const name = currentFilePath ? currentFilePath.split("/").pop() : "note.narfi";
+  const name = currentFilePath ? currentFilePath.split("/").pop() : ((tabs[activeTab] && tabs[activeTab].title) || "note.narfi");
   let data;
   if (workspaceInfo && !workspaceInfo.dialogs) {
     let p = await uiPrompt("名前を付けて保存", name, "作業フォルダからの相対パス（例：week1/note.narfi）");
@@ -4294,6 +4401,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   const savedTheme = localStorage.getItem("narfi_theme");
   if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
   await startup();
+  // はじめて開いた人には Learn（チュートリアル）を出す
+  if (!localStorage.getItem("narfi.learn.seen")) {
+    localStorage.setItem("narfi.learn.seen", "1");
+    switchTab("learn", document.getElementById("learnTabBtn"));
+  }
   editorSurface.focus();
 });
 </script>

@@ -279,13 +279,13 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                 let text = match (choice, just) {
                     (Choice::Term(t), Some(j)) => {
                         format!(
-                            "存在を示すために ${}$ をうまく選べばよい（条件は ${}$ より従う）。",
+                            "${}$ をとればよい（条件は ${}$ より従う）。",
                             t.to_latex(),
                             just_to_latex(j)
                         )
                     }
                     (Choice::Term(t), None) => {
-                        format!("存在を示すために ${}$ を選べばよい。", t.to_latex())
+                        format!("${}$ をとればよい。", t.to_latex())
                     }
                     (Choice::Left, _) => "選言の左側を示す。".to_string(),
                     (Choice::Right, _) => "選言の右側を示す。".to_string(),
@@ -617,8 +617,8 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Choose { choice, just } => {
             let c_str = match choice {
                 Choice::Term(t) => match just {
-                    Some(j) => format!("{t}, {} をうまく選べばよい", just_str(j)),
-                    None => format!("{t} をうまく選べばよい"),
+                    Some(j) => format!("{t}, {} をとればよい", just_str(j)),
+                    None => format!("{t} をとればよい"),
                 },
                 Choice::Left => "左を選ぶ".to_string(),
                 Choice::Right => "右を選ぶ".to_string(),

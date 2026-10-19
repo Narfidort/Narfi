@@ -546,7 +546,12 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                 ("neg", [a]) => (format!("-{}", show_term(a, 3)), 3),
                 ("^", [a, Term::Num(2)]) => (format!("{}²", show_term(a, 5)), 4),
                 ("^", [a, b]) => (format!("{}^{}", show_term(a, 5), show_term(b, 5)), 4),
-                ("abs", [a]) => (format!("|{}|", show_term(a, 0)), 5),
+                ("abs", [a]) => {
+                    // `|-x|` は `|-`（⊢）と読まれるので、空白を入れて `| -x|` と書く
+                    let inner = show_term(a, 0);
+                    let sep = if inner.starts_with('-') { " " } else { "" };
+                    (format!("|{sep}{inner}|"), 5)
+                }
                 _ => {
                     let a: Vec<String> = args.iter().map(|a| show_term(a, 0)).collect();
                     (format!("{}({})", f, a.join(", ")), 5)

@@ -90,3 +90,12 @@ fn omitted_hypothesis_is_an_error() {
         assert!(out.contains("✓ t"), "{fixed}\n{out}");
     }
 }
+
+/// 数列の添字 a_n（v2.5.4）
+#[test]
+fn sequence_subscripts() {
+    let out = run(&["tests/subscript.narfi"]);
+    for n in ["sub.basic", "sub.chain", "sub.name"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+}

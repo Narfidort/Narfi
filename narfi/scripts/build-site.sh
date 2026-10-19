@@ -12,6 +12,7 @@ mkdir -p site/assets
 cp target/wasm32-unknown-unknown/web/narfi.wasm site/narfi.wasm
 cp src/web_ui.html site/index.html
 cp src/web_static.js site/narfi-web.js
+cp src/tutorial.js site/tutorial.js
 cp -R assets/katex site/assets/katex
 # 404 はトップに戻す・キャッシュの設定（Cloudflare Pages の書式）
 cat > site/_headers <<'HDR'

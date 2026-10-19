@@ -274,8 +274,10 @@ pub fn normalize_japanese_sugar(raw: &str) -> String {
         }
     }
 
-    // Choose: `t をうまく選べばよい` / `t を選べばよい` / `t を選ぶ` / `t と選ぶ`
+    // Choose: `t をとればよい` / `t とすればよい`（古い書き方の `t をうまく選べばよい` / `t を選ぶ` なども読む）
     for suffix in [
+        "をとればよい",
+        "とすればよい",
         "をうまく選べばよい",
         "を選べばよい",
         "をうまく選ぶ",
@@ -599,9 +601,14 @@ pub fn expand_tex_macros(s: &str) -> String {
                     } else if let Some(g) = greek_word_to_char(inner_trimmed) {
                         // h_{eps} -> hε (元の Unicode 識別子 hε と完全一致させる)
                         out.push_str(g);
-                    } else {
+                    } else if is_plain_name(inner_trimmed) {
                         out.push('_');
                         out.push_str(&expand_tex_macros(inner_trimmed));
+                    } else {
+                        // 式の添字 a_{n+1} は a_(n+1) にする（数列の添字なら a(n+1) と読む。subscript_apps）
+                        out.push_str("_(");
+                        out.push_str(&expand_tex_macros(inner_trimmed));
+                        out.push(')');
                     }
                     i = end_k;
                     continue;
@@ -628,6 +635,147 @@ pub fn expand_tex_macros(s: &str) -> String {
         i += 1;
     }
     out
+}
+
+fn is_plain_name(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '\'' || ('₀'..='₉').contains(&c))
+}
+
+// ================================================================ 数列の添字：a_n は a(n)
+//
+// `a : ℕ → σ` と宣言された a について、`a_n`・`a_{n+1}`・`a_1`（a₁）を a(n)・a(n+1)・a(1) と読む。
+// その名前そのもの（a_n など）が宣言されているときは読み替えない。
+
+struct SubScope {
+    seqs: BTreeSet<String>,
+    declared: BTreeSet<String>,
+}
+
+impl SubScope {
+    fn new(vars: &[(String, String)]) -> SubScope {
+        let is_seq = |t: &str| t.strip_prefix("ℕ →").is_some_and(|r| !r.contains('→') && !r.contains('×'));
+        SubScope {
+            seqs: vars.iter().filter(|(_, t)| is_seq(t)).map(|(x, _)| x.clone()).collect(),
+            declared: vars.iter().map(|(x, _)| x.clone()).collect(),
+        }
+    }
+
+    /// x が数列の添字の形なら (数列, 添字)
+    fn split(&self, x: &str) -> Option<(String, Term)> {
+        if self.seqs.is_empty() || self.declared.contains(x) {
+            return None;
+        }
+        if let Some((b, i)) = x.split_once('_') {
+            if self.seqs.contains(b) && !i.is_empty() {
+                let idx = if let Ok(n) = i.parse::<i64>() { Term::Num(n) } else { Term::Var(i.to_string()) };
+                return Some((b.to_string(), idx));
+            }
+        }
+        // a₁₂（a_{12}・a_12 は字句解析で a₁₂ になる）
+        let digits: String = x.chars().rev().take_while(|c| ('₀'..='₉').contains(c)).collect();
+        if !digits.is_empty() {
+            let b: String = x.chars().take(x.chars().count() - digits.chars().count()).collect();
+            if self.seqs.contains(&b) {
+                let n: String = digits.chars().rev().map(|c| char::from_u32(c as u32 - '₀' as u32 + '0' as u32).unwrap()).collect();
+                return Some((b, Term::Num(n.parse().ok()?)));
+            }
+        }
+        None
+    }
+
+    fn term(&self, t: &Term) -> Term {
+        match t {
+            Term::Var(x) => match self.split(x) {
+                Some((b, i)) => Term::App(b, vec![i]),
+                None => t.clone(),
+            },
+            Term::App(f, args) => {
+                let args: Vec<Term> = args.iter().map(|a| self.term(a)).collect();
+                match f.strip_suffix('_') {
+                    Some(b) if self.seqs.contains(b) && !self.declared.contains(f) => Term::App(b.to_string(), args),
+                    _ => Term::App(f.clone(), args),
+                }
+            }
+            Term::Lam(ps, b) => Term::Lam(ps.clone(), Box::new(self.term(b))),
+            Term::Set(ps, phi) => Term::Set(ps.clone(), Box::new(self.formula(phi))),
+            Term::Num(_) | Term::Meta(_) => t.clone(),
+        }
+    }
+
+    fn formula(&self, f: &Formula) -> Formula {
+        let bx = |g: &Formula| Box::new(self.formula(g));
+        match f {
+            Formula::Atom(r, ts) => Formula::Atom(r.clone(), ts.iter().map(|t| self.term(t)).collect()),
+            Formula::Imp(a, b) => Formula::Imp(bx(a), bx(b)),
+            Formula::And(a, b) => Formula::And(bx(a), bx(b)),
+            Formula::Or(a, b) => Formula::Or(bx(a), bx(b)),
+            Formula::Forall(x, s, b) => Formula::Forall(x.clone(), s.clone(), bx(b)),
+            Formula::Exists(x, s, b) => Formula::Exists(x.clone(), s.clone(), bx(b)),
+            Formula::Bot => Formula::Bot,
+        }
+    }
+
+    fn just(&self, j: &Just) -> Just {
+        j.iter().map(|t| self.term(t)).collect()
+    }
+
+    fn stmts(&self, ss: &mut [Stmt]) {
+        for s in ss {
+            self.stmt(&mut s.kind);
+        }
+    }
+
+    fn stmt(&self, k: &mut StmtKind) {
+        match k {
+            StmtKind::Fix { hyp, body, .. } => {
+                if let Some((_, Some(f))) = hyp {
+                    *f = self.formula(f);
+                }
+                self.stmts(body);
+            }
+            StmtKind::Assume { ty, body, .. } => {
+                if let Some(f) = ty {
+                    *f = self.formula(f);
+                }
+                self.stmts(body);
+            }
+            StmtKind::ByContra { body, .. } => self.stmts(body),
+            StmtKind::Obtain { just, .. } | StmtKind::Close(just) => *just = self.just(just),
+            StmtKind::Have { ty, just, .. } | StmtKind::Suffices { ty, just } => {
+                *ty = self.formula(ty);
+                *just = self.just(just);
+            }
+            StmtKind::Choose { choice, just } => {
+                if let Choice::Term(t) = choice {
+                    *t = self.term(t);
+                }
+                if let Some(j) = just {
+                    *j = self.just(j);
+                }
+            }
+            StmtKind::Contradiction(..) | StmtKind::Unfold { .. } => {}
+            StmtKind::Cases { left, right, .. } => {
+                self.stmts(&mut left.1);
+                self.stmts(&mut right.1);
+            }
+            StmtKind::Induction { zero, succ, .. } => {
+                self.stmts(zero);
+                if let Some(f) = &mut succ.2 {
+                    *f = self.formula(f);
+                }
+                self.stmts(&mut succ.3);
+            }
+            StmtKind::Let { term, .. } => *term = self.term(term),
+            StmtKind::Therefore(f) => *f = self.formula(f),
+            StmtKind::Chain { start, steps } => {
+                *start = self.term(start);
+                for st in steps {
+                    st.term = self.term(&st.term);
+                    st.just = self.just(&st.just);
+                }
+            }
+        }
+    }
 }
 
 fn extract_braced(cs: &[char], start: usize) -> Option<(String, usize)> {
@@ -1352,6 +1500,29 @@ fn is_axiom_decl(text: &str) -> bool {
 
 /// ファイルを読む。`import` に出会うとその場で on_import を呼ぶ（読み込み側が
 /// 先のファイルを検査し、notation を登録する）。notation は宣言した行より後ろで使える。
+/// 数列の添字（a_n）を適用（a(n)）に読み替える
+fn subscript_apps(decl: &mut Decl) {
+    let vars: Vec<(String, String)> = decl
+        .ctx
+        .iter()
+        .filter_map(|c| match c {
+            CtxItem::Var(x, t) => Some((x.clone(), t.clone())),
+            _ => None,
+        })
+        .collect();
+    let sc = SubScope::new(&vars);
+    if sc.seqs.is_empty() {
+        return;
+    }
+    for c in &mut decl.ctx {
+        if let CtxItem::Hyp(_, f) = c {
+            *f = sc.formula(f);
+        }
+    }
+    decl.concl = sc.formula(&decl.concl);
+    sc.stmts(&mut decl.body);
+}
+
 pub fn parse_module(
     src: &str,
     on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
@@ -1471,9 +1642,68 @@ pub fn parse_module(
                 .collect();
             decl.body = parse_block(&tree, &tyenv)?;
         }
+        subscript_apps(&mut decl);
         items.push(Item::Decl(decl));
     }
     Ok(Module { items })
+}
+
+/// 論理式か項として読めれば、その LaTeX（エラーメッセージの中の式を数式として表示するため）
+pub fn math_latex(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() || !s.chars().any(|c| !c.is_ascii_alphabetic()) && s.len() > 12 {
+        return None;
+    }
+    let toks = lex(s, 0).ok()?;
+    let mut p = P::new(toks.clone(), 0, vec![]);
+    if let Ok(f) = p.formula() {
+        if p.at_end() {
+            return Some(f.to_latex());
+        }
+    }
+    let mut p = P::new(toks, 0, vec![]);
+    let t = p.term().ok()?;
+    p.at_end().then(|| t.to_latex())
+}
+
+/// メッセージの中の式（「…」・`…`・式だけの行）を $…$ にする
+pub fn msg_latex(msg: &str) -> String {
+    let mut out = Vec::new();
+    for line in msg.lines() {
+        let body = line.trim_start();
+        let indent = &line[..line.len() - body.len()];
+        // 「help:」などの見出しのあとの式だけの行、または式だけの行
+        if !body.chars().any(|c| ('\u{3040}'..='\u{9fff}').contains(&c) || c == '`' || c == '「') {
+            if let Some(l) = math_latex(body) {
+                out.push(format!("{indent}${l}$"));
+                continue;
+            }
+        }
+        let mut res = String::new();
+        let mut rest = body;
+        while let Some(k) = rest.find(['「', '`']) {
+            let (open, close) = if rest[k..].starts_with('「') { ("「", "」") } else { ("`", "`") };
+            res.push_str(&rest[..k]);
+            let after = &rest[k + open.len()..];
+            match after.find(close) {
+                Some(e) => {
+                    let inner = &after[..e];
+                    match math_latex(inner) {
+                        Some(l) => res.push_str(&format!("${l}$")),
+                        None => res.push_str(&format!("{open}{inner}{close}")),
+                    }
+                    rest = &after[e + close.len()..];
+                }
+                None => {
+                    res.push_str(&rest[k..]);
+                    rest = "";
+                }
+            }
+        }
+        res.push_str(rest);
+        out.push(format!("{indent}{res}"));
+    }
+    out.join("\n")
 }
 
 /// import を許さない読み込み（prelude 用）
@@ -1618,6 +1848,19 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
         }
     };
     p.expect_end()?;
+    let sc = SubScope::new(&params);
+    let (body, term, fv) = if sc.seqs.is_empty() {
+        (body, term, fv)
+    } else {
+        let body = sc.formula(&body);
+        let term = term.map(|(r, t)| (r, sc.term(&t)));
+        let mut fv = body.free_vars();
+        if let Some((_, t)) = &term {
+            fv = std::collections::BTreeSet::new();
+            t.vars(&mut fv);
+        }
+        (body, term, fv)
+    };
     if fv.contains(&name) {
         return p.err(format!("`{name}` の定義の中で `{name}` 自身を使っている（再帰的な定義は未対応）"));
     }
