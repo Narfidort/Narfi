@@ -23,7 +23,7 @@ jobs:
       run:
         working-directory: narfi
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust（stable と wasm32）
         run: |
@@ -31,7 +31,7 @@ jobs:
           rustup default stable
           rustup target add wasm32-unknown-unknown
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 

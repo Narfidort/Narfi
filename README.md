@@ -5,10 +5,15 @@ Narfi は、Narfidort が設計・実装した自然演繹ベースの証明言�
 - **証明言語**：`Fix` / `assume` / `Obtain` / `choose` / 等式・不等式の連鎖などで、紙の証明に近い形で書き、検査器（`narfi check`）が各ステップを検証します。仕様は `仕様書v0_*.md`、入門は `ガイドブック.md` を参照してください。
 - **付属エディタ**（`narfi web`）：Mathcha 風の構造化数式エディタです。分数・添字・絶対値などを入力欄つきの数式として直接編集でき、裏のコードは純粋な ASCII の `.narfi` として保存されます。日本語の証明文として読める表示（JP Sugar View）や、各行の文脈・Goal の表示を備えています。
 
+**Web 版（インストール不要）**：<https://narfi.pages.dev> — ブラウザの中で検査器（WebAssembly）が動く。
+ファイルはブラウザ内に保存される（`Export` で zip に書き出せる）。
+
+**ローカル版**（パソコンのフォルダを直接編集・LaTeX で PDF）：
+
 ```bash
 cd narfi
-cargo run -- check examples/analysis.narfi
-cargo run -- web
+cargo install --path .
+narfi web --dir ~/授業/解析
 ```
 
 ## v2（現在）
