@@ -1659,7 +1659,9 @@ function renderSingleItemHtml(seq, it, idx, charCls) {
     return `<span class="${charCls}" data-seq="${seq.id}" data-idx="${idx}">${chDisp}</span>`;
   }
   if (it.kind === "sym") {
-    return `<span class="mc-sym ${it.cls || ''}" data-seq="${seq.id}" data-idx="${idx}">${escHtml(it.display)}</span>`;
+    // 黒板太字は KaTeX と同じく、KaTeX_AMS の英字で描く（ℚ・ℂ などの Unicode 文字は KaTeX_AMS になく、別のフォントになる）
+    const shown = it.cls === "bb" && BB_LATIN[it.display] ? BB_LATIN[it.display] : it.display;
+    return `<span class="mc-sym ${it.cls || ''}" data-seq="${seq.id}" data-idx="${idx}">${escHtml(shown)}</span>`;
   }
   if (it.kind === "frac") {
     return `<span class="mc-frac" data-seq="${seq.id}" data-idx="${idx}">` +
@@ -1749,6 +1751,8 @@ function matchKeywordPrefix(items, kw) {
   }
   return true;
 }
+
+const BB_LATIN = { "ℕ": "N", "ℤ": "Z", "ℚ": "Q", "ℝ": "R", "ℂ": "C" };
 
 function findCharIndexInItems(items, ch, fromIdx = 0) {
   let parenDepth = 0;
