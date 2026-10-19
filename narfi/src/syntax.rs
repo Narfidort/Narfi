@@ -918,10 +918,12 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     ),
                     2,
                 ),
-                ("·", [a, b]) => (
-                    format!("{} \\cdot {}", show_term_latex(a, 2), show_term_latex(b, 3)),
-                    2,
-                ),
+                // 積は記号なしで並べる（2x・ab・b_n β）。右が数で始まるとき（2·3・a·2）だけ · を書く
+                ("·", [a, b]) => {
+                    let (l, r) = (show_term_latex(a, 2), show_term_latex(b, 3));
+                    let dot = r.starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '.');
+                    (if dot { format!("{l} \\cdot {r}") } else { format!("{l} {r}") }, 2)
+                }
                 ("/", [a, b]) => (
                     format!(
                         "\\frac{{{}}}{{{}}}",

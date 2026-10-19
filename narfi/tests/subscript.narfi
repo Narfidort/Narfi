@@ -43,3 +43,18 @@ thm show.then :
 
 P by h.left
 h.right
+
+-- 数のあとの積（2x・2(a + b)）。2 by … の by は積にならない
+thm mul.implicit :
+  x : Real, a : Real, b : Real
+  |- 2x + 2(a + b) = x * 2 + 2a + 2 b
+
+ring
+
+thm mul.by :
+  x : Real, h : x <= 2
+  |- x < 3
+
+x
+  <= 2 by h
+  < 3 by decide

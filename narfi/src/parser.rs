@@ -646,6 +646,10 @@ fn is_plain_name(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '\'' || ('₀'..='₉').contains(&c))
 }
 
+/// 数のあとに来ても積にしない語（2 by ring・1 and … など）
+const IMPLICIT_STOP: [&str; 14] =
+    ["by", "and", "or", "not", "iff", "in", "notin", "then", "because", "since", "with", "at", "to", "mod"];
+
 // ================================================================ 数列の添字：a_n は a(n)
 //
 // `a : ℕ → σ` と宣言された a について、`a_n`・`a_{n+1}`・`a_1`（a₁）を a(n)・a(n+1)・a(1) と読む。
@@ -1318,6 +1322,12 @@ impl P {
     fn term_mul(&mut self) -> PResult<Term> {
         let mut a = self.term_unary()?;
         loop {
+            // 数のあとに項が続けば積：2x・2(a + b)・3a_n（数で始まる名前はないので曖昧にならない）
+            if matches!(a, Term::Num(_)) && self.starts_implicit_factor() {
+                let b = self.term_unary()?;
+                a = Term::App("·".into(), vec![a, b]);
+                continue;
+            }
             let op = if self.is_sym("·") {
                 "·"
             } else if self.is_sym("/") {
@@ -1334,6 +1344,13 @@ impl P {
             a = Term::App(op.into(), vec![a, b]);
         }
         Ok(a)
+    }
+    fn starts_implicit_factor(&self) -> bool {
+        match self.peek() {
+            Some(Tok::Ident(x)) => !IMPLICIT_STOP.contains(&x.as_str()),
+            Some(Tok::Sym(s)) => s == "(",
+            _ => false,
+        }
     }
     fn term_unary(&mut self) -> PResult<Term> {
         if self.eat_sym("-") {
