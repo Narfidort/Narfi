@@ -220,6 +220,27 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
                 ),
             }
         }
+        ("POST", "/api/create") => {
+            let rel = json_get_str(&body, "path").unwrap_or_default();
+            let res = api_create(&rel, false);
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/mkdir") => {
+            let rel = json_get_str(&body, "path").unwrap_or_default();
+            let res = api_create(&rel, true);
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/rename") => {
+            let from = json_get_str(&body, "from").unwrap_or_default();
+            let to = json_get_str(&body, "to").unwrap_or_default();
+            let res = api_rename(&from, &to);
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/delete") => {
+            let rel = json_get_str(&body, "path").unwrap_or_default();
+            let res = api_delete(&rel);
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
         ("GET", "/api/workspace") => {
             let res = api_workspace();
             send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
@@ -395,7 +416,11 @@ fn default_workspace() -> PathBuf {
 }
 
 fn safe_resolve_path(rel: &str) -> Option<PathBuf> {
-    if rel.is_empty() || rel.contains("..") || Path::new(rel).is_absolute() {
+    if rel.is_empty() || Path::new(rel).is_absolute() {
+        return None;
+    }
+    // 作業フォルダの外に出られないように：空・「.」・「..」の部分を含むパスは受け付けない
+    if rel.split(['/', '\\']).any(|s| s.is_empty() || s == "." || s == "..") || rel.contains('\0') {
         return None;
     }
     let root = workspace_root();
@@ -429,9 +454,95 @@ fn json_cancel() -> String {
 
 fn list_narfi(dir: &Path) -> Vec<String> {
     let mut files = Vec::new();
-    collect_narfi_files(dir, dir, &mut files);
+    let mut dirs = Vec::new();
+    collect_tree(dir, dir, &mut files, &mut dirs);
     files.sort();
     files
+}
+
+/// 作業フォルダの .narfi と、一覧に出すフォルダ（.narfi を含むか、空のもの）
+fn list_tree(dir: &Path) -> (Vec<String>, Vec<String>) {
+    let mut files = Vec::new();
+    let mut dirs = Vec::new();
+    collect_tree(dir, dir, &mut files, &mut dirs);
+    files.sort();
+    dirs.sort();
+    (files, dirs)
+}
+
+// ---------------------------------------------------------------- ファイル一覧からの操作（作る・名前を変える・消す）
+
+fn api_create(rel: &str, dir: bool) -> String {
+    let Some(p) = safe_resolve_path(rel) else { return json_err("名前が正しくありません") };
+    if !dir && !rel.ends_with(".narfi") {
+        return json_err("ファイル名は .narfi で終わる名前にしてください");
+    }
+    if p.exists() {
+        return json_err(&format!("「{rel}」はすでにあります"));
+    }
+    let r = if dir {
+        std::fs::create_dir_all(&p)
+    } else {
+        p.parent()
+            .map(std::fs::create_dir_all)
+            .unwrap_or(Ok(()))
+            .and_then(|_| std::fs::OpenOptions::new().write(true).create_new(true).open(&p).map(|_| ()))
+    };
+    match r {
+        Ok(()) => format!("{{\"ok\":true,\"path\":{}}}", json_str(rel)),
+        Err(e) => json_err(&e.to_string()),
+    }
+}
+
+fn api_rename(from: &str, to: &str) -> String {
+    let (Some(a), Some(b)) = (safe_resolve_path(from), safe_resolve_path(to)) else {
+        return json_err("名前が正しくありません");
+    };
+    if !a.exists() {
+        return json_err(&format!("「{from}」が見つかりません"));
+    }
+    if a.is_file() && !to.ends_with(".narfi") {
+        return json_err("ファイル名は .narfi で終わる名前にしてください");
+    }
+    if b.exists() {
+        return json_err(&format!("「{to}」はすでにあります"));
+    }
+    if b.starts_with(&a) {
+        return json_err("フォルダをその中には移せません");
+    }
+    let r = b.parent().map(std::fs::create_dir_all).unwrap_or(Ok(())).and_then(|_| std::fs::rename(&a, &b));
+    match r {
+        Ok(()) => format!("{{\"ok\":true,\"path\":{}}}", json_str(to)),
+        Err(e) => json_err(&e.to_string()),
+    }
+}
+
+/// 消す：すぐには消さず、ゴミ箱（~/.Trash）に移す（Finder から元に戻せる）
+fn api_delete(rel: &str) -> String {
+    let Some(p) = safe_resolve_path(rel) else { return json_err("名前が正しくありません") };
+    if !p.exists() {
+        return json_err(&format!("「{rel}」が見つかりません"));
+    }
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return json_err("ゴミ箱が見つかりません") };
+    let trash = home.join(".Trash");
+    if !trash.is_dir() {
+        return json_err("ゴミ箱が見つかりません");
+    }
+    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut dest = trash.join(&name);
+    let mut k = 2;
+    while dest.exists() {
+        let (stem, ext) = match name.rsplit_once('.') {
+            Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+            _ => (name.clone(), String::new()),
+        };
+        dest = trash.join(format!("{stem} {k}{ext}"));
+        k += 1;
+    }
+    match std::fs::rename(&p, &dest) {
+        Ok(()) => "{\"ok\":true,\"trash\":true}".to_string(),
+        Err(e) => json_err(&format!("ゴミ箱に移せませんでした：{e}")),
+    }
 }
 
 fn api_workspace() -> String {
@@ -451,11 +562,13 @@ fn api_workspace() -> String {
         json_str(&s.to_string_lossy()),
         json_str_array(&list_narfi(&s))
     ));
+    let (files, dirs) = list_tree(&root);
     format!(
-        "{{\"ok\":true,\"root\":{},\"name\":{},\"files\":{},\"libs\":[{}],\"dialogs\":{}}}",
+        "{{\"ok\":true,\"root\":{},\"name\":{},\"files\":{},\"dirs\":{},\"libs\":[{}],\"dialogs\":{}}}",
         json_str(&root.to_string_lossy()),
         json_str(&name),
-        json_str_array(&list_narfi(&root)),
+        json_str_array(&files),
+        json_str_array(&dirs),
         libs.join(","),
         cfg!(target_os = "macos")
     )
@@ -581,29 +694,43 @@ fn api_pdf(src: &str, path: &str) -> Result<Vec<u8>, String> {
 fn api_list_files() -> String {
     let root = workspace_root();
     let mut files = Vec::new();
-    collect_narfi_files(&root, &root, &mut files);
+    collect_tree(&root, &root, &mut files, &mut Vec::new());
     files.sort();
     format!("{{\"files\":{}}}", json_str_array(&files))
 }
 
-fn collect_narfi_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
+/// .narfi を集める。フォルダは、.narfi を含むか空のものだけを dirs に入れる。dir が .narfi を含めば true
+fn collect_tree(root: &Path, dir: &Path, files: &mut Vec<String>, dirs: &mut Vec<String>) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+        return false;
     };
+    let mut has = false;
     for e in entries.flatten() {
         let p = e.path();
         let name = e.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') || name == "target" || name == "node_modules" {
+        if name.starts_with('.') {
+            continue;
+        }
+        if name == "target" || name == "node_modules" {
             continue;
         }
         if p.is_dir() {
-            collect_narfi_files(root, &p, out);
+            let sub = collect_tree(root, &p, files, dirs);
+            let sub_empty = std::fs::read_dir(&p).map(|mut d| d.all(|e| e.map(|e| e.file_name().to_string_lossy().starts_with('.')).unwrap_or(true))).unwrap_or(false);
+            if sub || sub_empty {
+                if let Ok(rel) = p.strip_prefix(root) {
+                    dirs.push(rel.to_string_lossy().to_string());
+                }
+            }
+            has |= sub;
         } else if name.ends_with(".narfi") && name != "prelude.narfi" {
             if let Ok(rel) = p.strip_prefix(root) {
-                out.push(rel.to_string_lossy().to_string());
+                files.push(rel.to_string_lossy().to_string());
             }
+            has = true;
         }
     }
+    has
 }
 
 // ================================================================ AI アシスト連携

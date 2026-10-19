@@ -144,9 +144,9 @@
   function loadSync() {
     try {
       const m = JSON.parse(localStorage.getItem(SYNC_KEY) || "null");
-      if (m && typeof m === "object") return { user: m.user || null, base: m.base || {}, dirty: m.dirty || [] };
+      if (m && typeof m === "object") return { user: m.user || null, base: m.base || {}, dirty: m.dirty || [], deleted: m.deleted || {} };
     } catch (_) {}
-    return { user: null, base: {}, dirty: [] };
+    return { user: null, base: {}, dirty: [], deleted: {} };
   }
   function saveSync(m) {
     localStorage.setItem(SYNC_KEY, JSON.stringify(m));
@@ -167,6 +167,24 @@
     if (!m.dirty.includes(path)) m.dirty.push(path);
     saveSync(m);
     scheduleSync(800);
+  }
+
+  // 手元で消した（名前を変えた）ファイル：クラウドからも消す
+  function cloudNoteDelete(path) {
+    if (!cloud.user) return;
+    const m = loadSync();
+    if (m.base[path] !== undefined) m.deleted[path] = m.base[path];
+    delete m.base[path];
+    m.dirty = m.dirty.filter((p) => p !== path);
+    saveSync(m);
+    scheduleSync(800);
+  }
+
+  function removeLocal(path) {
+    const fs = loadFs();
+    delete fs[path];
+    saveFs(fs);
+    call({ op: "remove_file", path });
   }
 
   function scheduleSync(ms) {
@@ -204,6 +222,14 @@
 
   // 1 回の同期：クラウドの一覧と手元を比べ、取ってくる・送る
   async function syncOnce() {
+    // 手元で消したものを、クラウドからも消す（その間にほかの端末で変えられていたら、消さずに取ってくる）
+    for (const [path, base] of Object.entries(loadSync().deleted)) {
+      const r = await cloudFetch(`/cloud/file?path=${encodeURIComponent(path)}&base=${base}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 409 && r.status !== 400) throw new Error(r.error || `消せなかった（${r.status}）`);
+      const m1 = loadSync();
+      delete m1.deleted[path];
+      saveSync(m1);
+    }
     const list = await cloudFetch("/cloud/files");
     if (list.status === 401) { signedOut(); return []; }
     if (!list.ok) throw new Error(list.error || "一覧が取れなかった");
@@ -244,8 +270,16 @@
     // 手元にだけあるもの・手元で変えたもの
     for (const path of Object.keys(fs)) {
       if (handled.has(path) || (remote.has(path) && !m.dirty.includes(path))) continue;
-      // クラウドから消えていたら新しく作る
-      if (!remote.has(path)) delete m.base[path];
+      if (!remote.has(path)) {
+        // 前に同期したのにクラウドにない：ほかの端末で消された。手元で変えていなければ手元も消す
+        if (m.base[path] !== undefined && !m.dirty.includes(path)) {
+          removeLocal(path);
+          delete m.base[path];
+          changed.push(path);
+          continue;
+        }
+        delete m.base[path];
+      }
       if (!(await push(m, fs, path))) cloud.again = true;
     }
     saveSync(m);
@@ -275,7 +309,7 @@
       if (cloud.conflicts.length) {
         const list = cloud.conflicts.map(([p, o]) => `${p} → ${o}`).join("\n");
         cloud.conflicts = [];
-        setTimeout(() => alert(`ほかの端末でも同じファイルが変更されていた。このブラウザの変更をそのまま残し、ほかの端末の版を別の名前で残した:\n${list}`), 0);
+        setTimeout(() => window.uiToast(`ほかの端末でも同じファイルが変更されていたため、そちらの版を別の名前で残しました：${list.replace(/\n/g, "、")}`), 0);
       }
     })();
     return cloud.busy;
@@ -295,7 +329,7 @@
     const m = loadSync();
     if (m.user !== me.id) {
       // 初めてか、別のアカウント：手元のファイルはすべて「まだ送っていない」として扱う（同じ名前で中身が違えば conflict として残る）
-      saveSync({ user: me.id, base: {}, dirty: Object.keys(loadFs()) });
+      saveSync({ user: me.id, base: {}, dirty: Object.keys(loadFs()), deleted: {} });
     }
     window.dispatchEvent(new CustomEvent("narfi:files-changed", { detail: { paths: [] } }));
     await syncNow();
@@ -309,7 +343,7 @@
   const STATE_TEXT = {
     syncing: "同期中…",
     synced: "同期済み",
-    pending: "未送信あり",
+    pending: "未同期あり",
     offline: "オフライン",
     error: "同期エラー"
   };
@@ -321,11 +355,11 @@
     b.style.display = st === "off" ? "none" : "";
     if (!cloud.user) {
       b.textContent = "Sign in with GitHub";
-      b.title = "GitHub でログインすると、ファイルがクラウドに保存され、ほかの端末でも開ける";
+      b.title = "ログインすると、ファイルがクラウドに保存され、ほかの端末でも開けます";
       b.classList.remove("active");
     } else {
       b.textContent = `${cloud.user.login} · ${STATE_TEXT[st] || ""}`;
-      b.title = st === "error" ? `同期できなかった：${cloud.error}` : "クラウド保存（クリックでメニュー）";
+      b.title = st === "error" ? `同期できませんでした：${cloud.error}` : "アカウント";
       b.classList.toggle("active", st === "synced");
     }
   }
@@ -346,10 +380,10 @@
     await saveCurrentFirst();
     await syncNow();
     const m = loadSync();
-    const msg = m.dirty.length
-      ? `まだクラウドに送れていない変更がある（${m.dirty.join(", ")}）。ログアウトすると、このブラウザから消える。よいですか？`
-      : "ログアウトする。ファイルはクラウドに残り、このブラウザからは消える。よいですか？";
-    if (!confirm(msg)) return;
+    const ok = m.dirty.length
+      ? await window.uiConfirm("まだクラウドに保存されていない変更があります。ログアウトすると失われます。", "ログアウト", { note: m.dirty.join(", "), danger: true })
+      : await window.uiConfirm("ログアウトしますか？", "ログアウト", { note: "ファイルはクラウドに残り、このブラウザからは消えます。" });
+    if (!ok) return;
     await cloudFetch("/auth/logout", { method: "POST", body: "{}" });
     localStorage.removeItem(FS_KEY);
     localStorage.removeItem(SYNC_KEY);
@@ -360,12 +394,12 @@
 
   async function deleteAccount() {
     const login = cloud.user && cloud.user.login;
-    const typed = prompt(`クラウドのファイルとアカウントの記録をすべて消す（GitHub のアカウントはそのまま）。\n消すなら、ログイン名「${login}」を入力する:`);
-    if (typed !== login) return;
+    const typed = await window.uiPrompt("アカウントを削除", "", `クラウドのファイルと記録をすべて削除します（GitHub のアカウントはそのままです）。削除するには、ログイン名「${login}」を入力してください。`);
+    if (typed === null) return;
+    if (typed !== login) { window.uiToast("ログイン名が一致しません"); return; }
     const r = await cloudFetch("/cloud/me", { method: "DELETE" });
-    if (!r.ok) { alert(r.error || "消せなかった"); return; }
+    if (!r.ok) { window.uiToast(r.error || "削除できませんでした"); return; }
     localStorage.removeItem(SYNC_KEY);
-    alert("消した。このブラウザ内のファイルは残っている（ログインしていない状態で使える）。");
     location.reload();
   }
 
@@ -374,22 +408,23 @@
     if (menu) { menu.remove(); return; }
     menu = document.createElement("div");
     menu.id = "accountMenu";
-    menu.className = "account-menu";
+    menu.className = "menu ctx-menu";
     const item = (label, fn, title) => {
       const b = document.createElement("button");
-      b.className = "ctrl-btn";
-      b.textContent = label;
+      b.className = "menu-item";
+      b.innerHTML = '<span class="mi-label"></span>';
+      b.firstChild.textContent = label;
       if (title) b.title = title;
       b.addEventListener("click", () => { menu.remove(); fn(); });
       menu.appendChild(b);
     };
-    item("今すぐ同期", () => syncNow());
-    item("Log out", signOut, "このブラウザからログアウトする");
-    item("アカウントを削除…", deleteAccount, "クラウドのファイルと記録をすべて消す");
+    item("Sync Now", () => syncNow());
+    item("Log Out", signOut);
+    item("Delete Account…", deleteAccount);
     const r = anchor.getBoundingClientRect();
-    menu.style.top = `${r.bottom + 4}px`;
-    menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
     document.body.appendChild(menu);
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, r.right - menu.getBoundingClientRect().width)}px`;
     setTimeout(() => document.addEventListener("click", function close(e) {
       if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", close); }
     }), 0);
@@ -404,11 +439,6 @@
     b.style.display = "none";
     b.addEventListener("click", () => (cloud.user ? toggleMenu(b) : signIn()));
     right.insertBefore(b, document.getElementById("statusPill"));
-    const css = document.createElement("style");
-    css.textContent = `.account-menu{position:fixed;z-index:50;display:flex;flex-direction:column;gap:4px;padding:6px;
-      background:var(--bg-elev, var(--bg));border:1px solid var(--border);}
-      .account-menu .ctrl-btn{text-align:left}`;
-    document.head.appendChild(css);
     ready.then(cloudInit);
   });
 
@@ -420,12 +450,91 @@
     return {
       ok: true,
       web: true,
-      root: cloud.user ? `クラウド（GitHub: ${cloud.user.login}）と同期` : "ブラウザ内の保存領域",
-      name: cloud.user ? `cloud: ${cloud.user.login}` : "このブラウザ",
+      root: cloud.user ? `GitHub（${cloud.user.login}）のアカウントに同期` : "このブラウザに保存（GitHub でログインするとクラウドに同期）",
+      name: "Files",
       files: Object.keys(fs).sort(),
+      dirs: allDirs(fs),
       libs: [{ label: "std", dir: "", files: std }],
       dialogs: true
     };
+  }
+
+  // ---- フォルダ（ファイルのパスから分かるものと、空のまま作ったもの）
+
+  const DIRS_KEY = "narfi.dirs.v1";
+  function loadDirs() {
+    try { return JSON.parse(localStorage.getItem(DIRS_KEY) || "[]"); } catch (_) { return []; }
+  }
+  function saveDirs(d) {
+    localStorage.setItem(DIRS_KEY, JSON.stringify([...new Set(d)].sort()));
+  }
+  function allDirs(fs) {
+    const set = new Set(loadDirs());
+    for (const p of Object.keys(fs)) {
+      const parts = p.split("/");
+      for (let k = 1; k < parts.length; k++) set.add(parts.slice(0, k).join("/"));
+    }
+    return [...set].sort();
+  }
+  function validRel(p) {
+    return typeof p === "string" && p.length > 0 && p.length <= 200 && !p.startsWith("lib:") &&
+      !/[\u0000-\u001f\\]/.test(p) && p.split("/").every((x) => x !== "" && x !== "." && x !== "..");
+  }
+  function exists(p) {
+    const fs = loadFs();
+    return p in fs || allDirs(fs).includes(p);
+  }
+
+  function createFile(path) {
+    if (!validRel(path) || !path.endsWith(".narfi")) return { ok: false, error: "ファイル名は .narfi で終わる名前にしてください" };
+    if (exists(path)) return { ok: false, error: `「${path}」はすでにあります` };
+    storeFile(path, "");
+    return { ok: true, path };
+  }
+
+  function makeDir(path) {
+    if (!validRel(path)) return { ok: false, error: "フォルダ名が正しくありません" };
+    if (exists(path)) return { ok: false, error: `「${path}」はすでにあります` };
+    saveDirs([...loadDirs(), path]);
+    return { ok: true, path };
+  }
+
+  function renamePath(from, to) {
+    if (!validRel(from) || !validRel(to)) return { ok: false, error: "名前が正しくありません" };
+    if (exists(to)) return { ok: false, error: `「${to}」はすでにあります` };
+    const fs = loadFs();
+    if (from in fs) {
+      if (!to.endsWith(".narfi")) return { ok: false, error: "ファイル名は .narfi で終わる名前にしてください" };
+      const src = fs[from];
+      removeLocal(from);
+      cloudNoteDelete(from);
+      storeFile(to, src);
+      return { ok: true, path: to };
+    }
+    if (!allDirs(fs).includes(from)) return { ok: false, error: `「${from}」が見つかりません` };
+    if (to.startsWith(from + "/")) return { ok: false, error: "フォルダをその中には移せません" };
+    for (const p of Object.keys(fs)) {
+      if (!p.startsWith(from + "/")) continue;
+      const src = fs[p];
+      removeLocal(p);
+      cloudNoteDelete(p);
+      storeFile(to + p.slice(from.length), src);
+    }
+    saveDirs(loadDirs().map((d) => (d === from || d.startsWith(from + "/") ? to + d.slice(from.length) : d)));
+    return { ok: true, path: to };
+  }
+
+  function deletePath(path) {
+    if (!validRel(path)) return { ok: false, error: "名前が正しくありません" };
+    const fs = loadFs();
+    const targets = path in fs ? [path] : Object.keys(fs).filter((p) => p.startsWith(path + "/"));
+    if (!(path in fs) && !allDirs(fs).includes(path)) return { ok: false, error: `「${path}」が見つかりません` };
+    for (const p of targets) {
+      removeLocal(p);
+      cloudNoteDelete(p);
+    }
+    saveDirs(loadDirs().filter((d) => d !== path && !d.startsWith(path + "/")));
+    return { ok: true };
   }
 
   function storeFile(path, src) {
@@ -460,12 +569,21 @@
         storeFile(body.path, body.src || "");
         return json({ ok: true, path: body.path });
       }
+      case "/api/create":
+        return json(createFile(body.path));
+      case "/api/mkdir":
+        return json(makeDir(body.path));
+      case "/api/rename":
+        return json(renamePath(body.from, body.to));
+      case "/api/delete":
+        return json(deletePath(body.path));
       case "/api/save-as": {
-        let name = prompt("ブラウザ内に保存する名前（フォルダは / で区切る）:", body.name || "note.narfi");
+        let name = await window.uiPrompt("名前を付けて保存", body.name || "note.narfi", "フォルダの中に置くときは week1/note.narfi のように / で区切る");
         if (!name) return json({ ok: false, cancelled: true });
-        name = name.replace(/^\/+/, "");
+        name = name.trim().replace(/^\/+/, "");
         if (!name.endsWith(".narfi")) name += ".narfi";
-        if (name in loadFs() && !confirm(`${name} はすでにある。上書きしてよいですか？`)) return json({ ok: false, cancelled: true });
+        if (!validRel(name)) return json({ ok: false, error: "名前が正しくありません" });
+        if (name in loadFs() && !(await window.uiConfirm(`「${name}」はすでにあります。上書きしますか？`, "上書き"))) return json({ ok: false, cancelled: true });
         storeFile(name, body.src || "");
         return json({ ok: true, path: name, src: body.src || "" });
       }
@@ -474,7 +592,7 @@
         if (files.length === 0) return json({ ok: false, cancelled: true });
         const f = files[0];
         const src = await f.text();
-        if (f.name in loadFs() && !confirm(`ブラウザ内の ${f.name} を、読み込んだファイルで上書きしてよいですか？`)) {
+        if (f.name in loadFs() && !(await window.uiConfirm(`「${f.name}」はすでにあります。読み込んだファイルで上書きしますか？`, "上書き"))) {
           return json({ ok: false, cancelled: true });
         }
         storeFile(f.name, src);
@@ -492,10 +610,8 @@
       }
       case "/api/reveal": {
         const fs = loadFs();
-        if (body.target === "lib") {
-          alert("Web 版では、自分用のライブラリは保存領域の lib/ フォルダに置く（例：lib/mydefs.narfi は import mydefs で読める）。");
-        } else if (Object.keys(fs).length === 0) {
-          alert("ブラウザ内にファイルがない");
+        if (Object.keys(fs).length === 0) {
+          window.uiToast("ダウンロードするファイルがありません");
         } else {
           const stamp = new Date().toISOString().slice(0, 10);
           download(`narfi-${stamp}.zip`, zip(Object.entries(fs)));
@@ -503,10 +619,10 @@
         return json({ ok: true });
       }
       case "/api/pdf":
-        return json({ ok: false, error: "Web 版では LaTeX の PDF は作れない。Print（⌘P）から「PDF として保存」を使う。" }, 400);
+        return json({ ok: false, error: "Print から「PDF として保存」を使ってください" }, 400);
       case "/api/ai":
       case "/api/ai/providers":
-        return json({ ok: false, error: "Web 版では AI 補助は使えない（ローカル版の narfi web で使える）" });
+        return json({ ok: false, error: "unavailable" });
       default:
         return json({ ok: false, error: `Web 版にない API: ${path}` }, 404);
     }
@@ -525,20 +641,6 @@
     return realFetch(input, opts);
   };
 
-  // ボタンの名前を Web 版に合わせる
-  window.addEventListener("DOMContentLoaded", () => {
-    const set = (sel, text, title) => {
-      for (const b of document.querySelectorAll(sel)) {
-        // File メニューの項目は名前の部分だけ（右のショートカットは残す）
-        const label = b.querySelector(".mi-label");
-        (label || b).textContent = text;
-        if (title) b.title = title;
-      }
-    };
-    set('button[onclick="openFolder()"]', "Import…", "フォルダの中の .narfi をまとめてブラウザ内に読み込む");
-    set('button[onclick="revealDir(\'workspace\')"]', "Export", "ブラウザ内の全ファイルを zip で書き出す（バックアップ・持ち出し用）");
-    set('button[onclick="revealDir(\'lib\')"]', "lib/ について");
-    set('button[onclick="openFileDialog()"]', "Open…", "パソコンの .narfi ファイルをブラウザ内に読み込む（⌘O）");
-    set('button[onclick="exportPdf()"]', "PDF（Web 版では使えない）", "Web 版では使えない。Print から「PDF として保存」を使う");
-  });
+  // Web 版だけ・ローカル版だけの項目は、data-only で出し分ける（web_ui.html の CSS）
+  document.documentElement.classList.add("web");
 })();

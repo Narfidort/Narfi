@@ -245,22 +245,76 @@ html, body {
 }
 .sb-mini:hover { color: var(--text); border-color: var(--text-dim); }
 .sb-list { padding: 2px 0 6px 0; }
-.sb-dir {
-  padding: 3px 10px 3px calc(10px + var(--depth) * 12px);
-  color: var(--text-dim);
-  font-size: 11px;
+.sb-icon {
+  width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0;
+  background: transparent; border: 0; border-radius: 3px; color: var(--text-faint); cursor: pointer;
 }
-.sb-item {
-  padding: 3px 10px 3px calc(10px + var(--depth) * 12px);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
+.sb-icon svg { width: 14px; height: 14px; }
+.sb-icon:hover { color: var(--text); background: var(--bg-hover); }
+.sb-head-lib { margin-top: 10px; }
+.sb-empty { padding: 3px 12px; color: var(--text-faint); font-size: 11.5px; }
+/* ファイルの木 */
+.tree { min-height: 24px; }
+.tree.drop-root { background: var(--bg-active); }
+.t-row {
+  position: relative; display: flex; align-items: center; gap: 5px; height: 24px;
+  padding-left: calc(8px + var(--depth) * 14px); padding-right: 8px;
+  cursor: pointer; white-space: nowrap; color: var(--text); font-size: 12.5px;
 }
-.sb-item:hover { background: var(--bg-hover); }
-.sb-item.active { background: var(--bg-active); color: var(--accent); }
-.sb-empty { padding: 3px 10px; color: var(--text-faint); font-size: 11px; }
+.t-row:hover { background: var(--bg-hover); }
+.t-row.active { background: var(--bg-active); color: var(--accent); }
+.t-row.ctx { outline: 1px solid var(--border-focus); outline-offset: -1px; }
+.t-row.drop { background: var(--bg-active); outline: 1px dashed var(--accent); outline-offset: -1px; }
+.t-row.ro .t-name { color: var(--text-dim); }
+.t-name { overflow: hidden; text-overflow: ellipsis; }
+.t-ico { width: 14px; height: 14px; flex-shrink: 0; color: var(--text-faint); }
+.t-row.dir .t-ico { color: var(--text-dim); }
+.t-chev { width: 10px; height: 10px; flex-shrink: 0; color: var(--text-faint); transition: transform 0.1s; }
+.t-row.dir.open .t-chev { transform: rotate(90deg); }
+.t-row.file .t-chev { visibility: hidden; }
+/* 字下げの線（Zed 風） */
+.t-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.t-input {
+  flex: 1; min-width: 0; height: 20px; padding: 0 4px; font-size: 12.5px; font-family: inherit;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border-focus); border-radius: 2px; outline: none;
+}
+.t-row.error .t-input { border-color: var(--err); }
+/* 右クリックのメニュー */
+.ctx-menu { position: fixed; top: 0; left: 0; min-width: 190px; }
+.ctx-menu .menu-item { padding-left: 12px; }
+.menu-item.danger { color: var(--err); }
+/* 確認・名前の入力 */
+.modal-back {
+  position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.45);
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 18vh;
+}
+.modal-back[hidden] { display: none; }
+.modal {
+  width: min(440px, 90vw); background: var(--bg-elev); border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35); padding: 18px 18px 14px;
+}
+.modal-title { font-size: 13.5px; color: var(--text); line-height: 1.6; white-space: pre-wrap; }
+.modal-note { font-size: 11.5px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+.modal-note:empty { display: none; }
+.modal-input {
+  width: 100%; margin-top: 12px; padding: 6px 8px; font-size: 13px; font-family: "JetBrains Mono", monospace;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 3px; outline: none;
+}
+.modal-input:focus { border-color: var(--border-focus); }
+.modal-input[hidden] { display: none; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.ctrl-btn.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+.ctrl-btn.primary:hover { filter: brightness(1.1); color: #fff; background: var(--accent); }
+.ctrl-btn.primary.danger { background: var(--err); border-color: var(--err); }
+.toast {
+  position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 110; max-width: 80vw;
+  padding: 8px 14px; font-size: 12.5px; color: var(--text); background: var(--bg-elev);
+  border: 1px solid var(--border); box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.toast[hidden] { display: none; }
+/* Web 版だけ・ローカル版だけのもの */
+html.web [data-only="local"] { display: none !important; }
+html:not(.web) [data-only="web"] { display: none !important; }
 .file-label {
   font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
   font-size: 12px;
@@ -828,20 +882,26 @@ html, body {
     <button id="btnFileMenu" class="menu-btn" onclick="toggleFileMenu(event)" title="ファイルの操作">File<svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
     <div id="fileMenu" class="menu" hidden>
       <button class="menu-item" onclick="newFile()"><span class="mi-label">New</span><span class="kbd"></span></button>
-      <button class="menu-item" onclick="openFileDialog()"><span class="mi-label">Open…</span><span class="kbd">⌘O</span></button>
-      <button class="menu-item" onclick="openFolder()"><span class="mi-label">Open Folder…</span><span class="kbd">⇧⌘O</span></button>
+      <button class="menu-item" onclick="treeNew('dir', '')"><span class="mi-label">New Folder</span><span class="kbd"></span></button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" onclick="openFileDialog()" data-only="local"><span class="mi-label">Open…</span><span class="kbd">⌘O</span></button>
+      <button class="menu-item" onclick="openFolder()" data-only="local"><span class="mi-label">Open Folder…</span><span class="kbd">⇧⌘O</span></button>
+      <button class="menu-item" onclick="revealDir('workspace')" data-only="local"><span class="mi-label">Reveal in Finder</span><span class="kbd"></span></button>
+      <button class="menu-item" onclick="openFileDialog()" data-only="web"><span class="mi-label">Upload File…</span><span class="kbd">⌘O</span></button>
+      <button class="menu-item" onclick="openFolder()" data-only="web"><span class="mi-label">Upload Folder…</span><span class="kbd"></span></button>
+      <button class="menu-item" onclick="revealDir('workspace')" data-only="web"><span class="mi-label">Download All (.zip)</span><span class="kbd"></span></button>
       <div class="menu-sep"></div>
       <button class="menu-item" onclick="saveFile()"><span class="mi-label">Save</span><span class="kbd">⌘S</span></button>
       <button class="menu-item" onclick="saveAs()"><span class="mi-label">Save As…</span><span class="kbd">⇧⌘S</span></button>
       <button id="btnAutosave" class="menu-item check" onclick="toggleAutosave()" title="編集が止まって約1秒後に自動で保存する"><span class="mi-label">Auto Save</span><span class="kbd"></span></button>
       <div class="menu-sep"></div>
-      <button class="menu-item" onclick="exportPdf()"><span class="mi-label">PDF (LaTeX)</span><span class="kbd">⇧⌘P</span></button>
+      <button class="menu-item" onclick="exportPdf()" data-only="local"><span class="mi-label">Export PDF (LaTeX)</span><span class="kbd">⇧⌘P</span></button>
       <button class="menu-item" onclick="printDocument()"><span class="mi-label">Print</span><span class="kbd">⌘P</span></button>
     </div>
   </div>
   <div id="tabStrip" class="tab-strip"></div>
   <div class="topbar-right">
-    <span id="statusPill" class="status-pill ok">READY</span>
+    <span id="statusPill" class="status-pill">Checking…</span>
   </div>
 </div>
 
@@ -849,16 +909,16 @@ html, body {
   <!-- Left: Workspace Files & Libraries -->
   <div id="sidebar" class="sidebar">
     <div class="sb-head">
-      <span id="sbRoot" class="sb-root" title="">workspace</span>
-      <button class="sb-mini" onclick="openFolder()" title="作業フォルダを選ぶ（⇧⌘O）">Folder</button>
-      <button class="sb-mini" onclick="revealDir('workspace')" title="Finder で表示">Finder</button>
+      <span id="sbRoot" class="sb-root" title="">Files</span>
+      <button class="sb-icon" onclick="treeNew('file', '')" title="新しいファイル"><svg viewBox="0 0 16 16"><path d="M4 1.5h5l3 3v10H4z M9 1.5v3h3" fill="none" stroke="currentColor"/><path d="M8 7.5v5M5.5 10h5" stroke="currentColor"/></svg></button>
+      <button class="sb-icon" onclick="treeNew('dir', '')" title="新しいフォルダ"><svg viewBox="0 0 16 16"><path d="M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z" fill="none" stroke="currentColor"/><path d="M8 7v5M5.5 9.5h5" stroke="currentColor"/></svg></button>
+      <button class="sb-icon" onclick="treeCollapseAll()" title="すべてのフォルダを閉じる"><svg viewBox="0 0 16 16"><path d="M4 6.5l4-3 4 3M4 12.5l4-3 4 3" fill="none" stroke="currentColor"/></svg></button>
     </div>
-    <div id="sbFiles" class="sb-list"></div>
-    <div class="sb-head">
+    <div id="sbFiles" class="sb-list tree" data-tree="ws"></div>
+    <div class="sb-head sb-head-lib">
       <span class="sb-root">Library</span>
-      <button class="sb-mini" onclick="revealDir('lib')" title="自分用ライブラリ ~/.narfi/lib を Finder で開く（ここに置いた .narfi は import できる）">~/.narfi/lib</button>
     </div>
-    <div id="sbLibs" class="sb-list"></div>
+    <div id="sbLibs" class="sb-list tree" data-tree="lib"></div>
   </div>
   <!-- Left: Mathcha-style Inline Structured Editor -->
   <div id="editorSurface" class="editor-surface" tabindex="0"></div>
@@ -871,10 +931,10 @@ html, body {
   <div id="inspectorPane" class="inspector">
     <div class="insp-tabs">
       <button class="insp-tab active" onclick="switchTab('goal', this)">Goal</button>
-      <button class="insp-tab" onclick="switchTab('prose', this)">Prose (JP)</button>
-      <button class="insp-tab" onclick="switchTab('code', this)">ASCII Code</button>
+      <button class="insp-tab" onclick="switchTab('prose', this)">Prose</button>
+      <button class="insp-tab" onclick="switchTab('code', this)">Source</button>
       <button class="insp-tab" onclick="switchTab('latex', this)">LaTeX</button>
-      <button class="insp-tab" onclick="switchTab('ai', this)">AI</button>
+      <button class="insp-tab" onclick="switchTab('ai', this)" data-only="local">AI</button>
     </div>
 
     <div id="tab-goal" class="insp-body active">
@@ -902,15 +962,15 @@ html, body {
 
     <div id="tab-code" class="insp-body">
       <div class="sec-label">
-        <span>Underlying Pure ASCII Code (.narfi)</span>
-        <button class="ctrl-btn" onclick="applyRawCodeEdit()">Apply Text Edits</button>
+        <span>Source (.narfi)</span>
+        <button class="ctrl-btn" onclick="applyRawCodeEdit()">Apply</button>
       </div>
       <textarea id="rawAsciiArea" class="raw-box" spellcheck="false"></textarea>
     </div>
 
     <div id="tab-latex" class="insp-body">
       <div class="sec-label">
-        <span>LaTeX Output (theorem / proof)</span>
+        <span>LaTeX (theorem / proof)</span>
         <button class="ctrl-btn" onclick="copyLatex()">Copy LaTeX</button>
       </div>
       <textarea id="latexArea" class="raw-box" readonly></textarea>
@@ -946,6 +1006,19 @@ html, body {
     </div>
   </div>
 </div>
+<div id="ctxMenu" class="menu ctx-menu" hidden></div>
+<div id="modalBack" class="modal-back" hidden>
+  <div class="modal" role="dialog">
+    <div id="modalTitle" class="modal-title"></div>
+    <div id="modalNote" class="modal-note"></div>
+    <input id="modalInput" class="modal-input" spellcheck="false">
+    <div class="modal-actions">
+      <button id="modalCancel" class="ctrl-btn">キャンセル</button>
+      <button id="modalOk" class="ctrl-btn primary">OK</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
 <div class="statusbar">
   <div class="sbar-left">
     <button id="btnFiles" class="icon-btn active" onclick="toggleSidebar()" title="ファイル一覧の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M6 2.5v11" stroke="currentColor"/></svg></button>
@@ -1585,8 +1658,8 @@ function serializeSeqToAscii(seq) {
 // 4. Document Model, Cursor & Japanese Sugar View Lens
 // ================================================================
 
-const DEFAULT_ASCII_DOC = `// Mathcha-style Structured Narfi Editor
-// Type \\fr + Tab for fraction, / for fraction, _ for subscript, | for abs, <= for ≤
+const DEFAULT_ASCII_DOC = `-- Narfi へようこそ。証明を書くと、各行が検査され、右上に結果が出ます。
+-- \\fr + Tab で分数、_ で添字、| で絶対値、<= で ≤。カーソルの行の文脈と Goal は右側に出ます。
 
 axiom triangle    : forall x:Real. forall y:Real. abs(x + y) <= abs(x) + abs(y)
 axiom pos_half    : x : Real, h : x > 0 |- x/2 > 0
@@ -3112,15 +3185,17 @@ function updateStatusPill(data) {
   const hasSorry = decls.some(d => d.status === "sorry");
   const thms = decls.filter(d => !d.is_axiom).length;
 
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   if (hasErr) {
+    const n = decls.filter(d => d.status === "error").length;
     pill.className = "status-pill err";
-    pill.textContent = "ERROR";
+    pill.textContent = data.parse_error ? "Syntax error" : plural(n, "error");
   } else if (hasSorry) {
     pill.className = "status-pill sorry";
-    pill.textContent = `SORRY (${thms} thms)`;
+    pill.textContent = `${decls.filter(d => d.status === "sorry").length} incomplete`;
   } else {
     pill.className = "status-pill ok";
-    pill.textContent = `VERIFIED (${thms} thms)`;
+    pill.textContent = thms === 0 ? "No theorems" : `${plural(thms, "theorem")} verified`;
   }
 }
 
@@ -3442,23 +3517,81 @@ async function loadWorkspace() {
   } catch (_) {}
 }
 
-function fileTreeHtml(files, prefix) {
-  if (!files || files.length === 0) return `<div class="sb-empty">（.narfi ファイルなし）</div>`;
-  let html = "";
-  let openDirs = [];
-  for (const f of files) {
-    const parts = f.split("/");
-    const dirs = parts.slice(0, -1);
-    let k = 0;
-    while (k < openDirs.length && k < dirs.length && openDirs[k] === dirs[k]) k++;
-    openDirs = openDirs.slice(0, k);
-    for (; k < dirs.length; k++) {
-      html += `<div class="sb-dir" style="--depth:${k}">${escHtml(dirs[k])}/</div>`;
-      openDirs.push(dirs[k]);
+// ---- ファイルの木（作業フォルダ・ライブラリ）。フォルダの開閉・作る・名前を変える・消す・ドラッグで移す
+
+const ICON = {
+  chev: `<svg class="t-chev" viewBox="0 0 10 10"><path d="M3.5 2l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`,
+  dir: `<svg class="t-ico" viewBox="0 0 16 16"><path d="M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z" fill="none" stroke="currentColor"/></svg>`,
+  dirOpen: `<svg class="t-ico" viewBox="0 0 16 16"><path d="M1.5 13.5v-10h4.5l1.5 1.5h6v2" fill="none" stroke="currentColor"/><path d="M1.5 13.5l2-6h11l-2 6z" fill="none" stroke="currentColor"/></svg>`,
+  file: `<svg class="t-ico" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h6" stroke="currentColor"/></svg>`
+};
+
+let treeOpen = new Set(JSON.parse(localStorage.getItem("narfi.tree.open") || "[]"));
+let treeEdit = null; // { kind: "rename" | "new-file" | "new-dir", path, parent, isDir }
+
+function saveTreeOpen() {
+  localStorage.setItem("narfi.tree.open", JSON.stringify([...treeOpen]));
+}
+
+const baseName = (p) => p.split("/").pop();
+const dirName = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+const joinPath = (d, n) => (d ? `${d}/${n}` : n);
+
+// パスの一覧から木を作る（prefix は "lib:std/" など。作業フォルダは ""）
+function buildTree(files, dirs, prefix) {
+  const root = { children: new Map() };
+  const node = (parts) => {
+    let cur = root;
+    let path = "";
+    for (const part of parts) {
+      path = joinPath(path, part);
+      if (!cur.children.has(part)) cur.children.set(part, { name: part, path: prefix + path, dir: true, children: new Map() });
+      cur = cur.children.get(part);
     }
-    const path = prefix + f;
-    const active = path === currentFilePath ? " active" : "";
-    html += `<div class="sb-item${active}" style="--depth:${dirs.length}" data-path="${escHtml(path)}" title="${escHtml(f)}">${escHtml(parts[parts.length - 1])}</div>`;
+    return cur;
+  };
+  for (const d of dirs || []) node(d.split("/"));
+  for (const f of files || []) {
+    const parts = f.split("/");
+    const parent = node(parts.slice(0, -1));
+    parent.children.set(parts[parts.length - 1], { name: parts[parts.length - 1], path: prefix + f, dir: false });
+  }
+  return root;
+}
+
+function sortedChildren(n) {
+  return [...n.children.values()].sort((a, b) => (a.dir !== b.dir ? (a.dir ? -1 : 1) : a.name.localeCompare(b.name, "ja")));
+}
+
+function editRowHtml(depth, isDir, value) {
+  return `<div class="t-row editing ${isDir ? "dir" : "file"}" style="--depth:${depth}">${guides(depth)}${ICON.chev}${isDir ? ICON.dir : ICON.file}` +
+    `<input class="t-input" id="treeInput" value="${escHtml(value)}" spellcheck="false"></div>`;
+}
+
+function guides(depth) {
+  let g = "";
+  for (let k = 0; k < depth; k++) g += `<span class="t-guide" style="left:${8 + k * 14 + 4}px"></span>`;
+  return g;
+}
+
+function treeRowsHtml(n, depth, tree) {
+  let html = "";
+  const ro = tree === "lib";
+  if (treeEdit && !ro && (treeEdit.kind === "new-dir" || treeEdit.kind === "new-file") && (n.path || "") === treeEdit.parent) {
+    html += editRowHtml(depth, treeEdit.kind === "new-dir", "");
+  }
+  for (const c of sortedChildren(n)) {
+    if (treeEdit && treeEdit.kind === "rename" && c.path === treeEdit.path) {
+      html += editRowHtml(depth, c.dir, c.name);
+      continue;
+    }
+    const open = c.dir && (treeOpen.has(c.path) || (treeEdit && treeEdit.parent === c.path));
+    const cls = ["t-row", c.dir ? "dir" : "file", open ? "open" : "", c.path === currentFilePath ? "active" : "", ro ? "ro" : ""].join(" ");
+    const label = c.label || c.name;
+    html += `<div class="${cls}" style="--depth:${depth}" data-path="${escHtml(c.path)}" data-kind="${c.dir ? "dir" : "file"}" data-tree="${tree}"` +
+      `${ro ? "" : ' draggable="true"'} title="${escHtml(c.title || label)}">${guides(depth)}${ICON.chev}${c.dir ? (open ? ICON.dirOpen : ICON.dir) : ICON.file}` +
+      `<span class="t-name">${escHtml(label)}</span></div>`;
+    if (open) html += treeRowsHtml(c, depth + 1, tree);
   }
   return html;
 }
@@ -3467,16 +3600,327 @@ function renderSidebar() {
   const ws = workspaceInfo;
   if (!ws || !ws.ok) return;
   const root = document.getElementById("sbRoot");
-  root.textContent = ws.name || ws.root;
+  root.textContent = ws.name || "Files";
   root.title = ws.root;
-  document.getElementById("sbFiles").innerHTML = fileTreeHtml(ws.files, "");
-  let libs = "";
-  for (const lib of ws.libs || []) {
-    libs += `<div class="sb-dir" style="--depth:0">${lib.label === "user" ? "自分用（~/.narfi/lib）" : "標準"}</div>`;
-    libs += `<div style="padding-left:12px">${fileTreeHtml(lib.files, `lib:${lib.label}/`)}</div>`;
+  // 開いているファイルのフォルダは開いておく
+  if (currentFilePath) {
+    const parts = currentFilePath.split("/");
+    for (let k = 1; k < parts.length; k++) treeOpen.add(parts.slice(0, k).join("/"));
   }
-  document.getElementById("sbLibs").innerHTML = libs;
+  const wsTree = buildTree(ws.files, ws.dirs, "");
+  const empty = (ws.files || []).length === 0 && (ws.dirs || []).length === 0 && !treeEdit;
+  document.getElementById("sbFiles").innerHTML = empty
+    ? `<div class="sb-empty">ファイルがありません。右クリックか上のボタンで作れます。</div>`
+    : treeRowsHtml(wsTree, 0, "ws");
+  const libRoot = { children: new Map() };
+  for (const lib of ws.libs || []) {
+    if (lib.label === "user" && (lib.files || []).length === 0) continue;
+    const t = buildTree(lib.files, [], `lib:${lib.label}/`);
+    libRoot.children.set(lib.label, {
+      name: lib.label === "user" ? "~" : "std",
+      label: lib.label === "user" ? "My Library" : "Standard Library",
+      title: lib.label === "user" ? "~/.narfi/lib（ここに置いた .narfi は import できる）" : "標準ライブラリ（読み取り専用）",
+      path: `lib:${lib.label}`,
+      dir: true,
+      children: t.children
+    });
+  }
+  document.getElementById("sbLibs").innerHTML = treeRowsHtml(libRoot, 0, "lib");
+  const input = document.getElementById("treeInput");
+  if (input) setupTreeInput(input);
 }
+
+function setupTreeInput(input) {
+  input.focus();
+  const v = input.value;
+  const dot = v.endsWith(".narfi") ? v.length - ".narfi".length : v.length;
+  input.setSelectionRange(0, dot);
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); commitTreeEdit(input.value); }
+    else if (e.key === "Escape") { e.preventDefault(); treeEdit = null; renderSidebar(); }
+  });
+  input.addEventListener("blur", () => { if (treeEdit) commitTreeEdit(input.value); });
+}
+
+async function fsOp(url, body) {
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return await r.json();
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+
+function treeNew(kind, parent) {
+  closeFileMenu();
+  if (document.getElementById("sidebar").classList.contains("collapsed")) toggleSidebar();
+  if (parent) treeOpen.add(parent);
+  treeEdit = { kind: kind === "dir" ? "new-dir" : "new-file", parent: parent || "" };
+  renderSidebar();
+}
+
+function treeRename(path, isDir) {
+  treeEdit = { kind: "rename", path, isDir };
+  renderSidebar();
+}
+
+function treeCollapseAll() {
+  treeOpen.clear();
+  saveTreeOpen();
+  renderSidebar();
+}
+
+async function commitTreeEdit(raw) {
+  const e = treeEdit;
+  treeEdit = null;
+  const name = raw.trim();
+  if (!e || !name) { renderSidebar(); return; }
+  if (name.includes("/") || name === "." || name === "..") {
+    uiToast("名前に「/」は使えません。移すときはドラッグします");
+    renderSidebar();
+    return;
+  }
+  if (e.kind === "new-file") {
+    const path = joinPath(e.parent, name.endsWith(".narfi") ? name : `${name}.narfi`);
+    const d = await fsOp("/api/create", { path });
+    if (!d.ok) { uiToast(d.error || "作れませんでした"); renderSidebar(); return; }
+    await loadWorkspace();
+    await openPath(path);
+  } else if (e.kind === "new-dir") {
+    const path = joinPath(e.parent, name);
+    const d = await fsOp("/api/mkdir", { path });
+    if (!d.ok) { uiToast(d.error || "作れませんでした"); renderSidebar(); return; }
+    treeOpen.add(path);
+    saveTreeOpen();
+    await loadWorkspace();
+  } else {
+    const to = joinPath(dirName(e.path), e.isDir || name.endsWith(".narfi") ? name : `${name}.narfi`);
+    if (to === e.path) { renderSidebar(); return; }
+    await movePath(e.path, to);
+  }
+}
+
+async function movePath(from, to) {
+  if (to === from) return;
+  const d = await fsOp("/api/rename", { from, to });
+  if (!d.ok) { uiToast(d.error || "名前を変えられませんでした"); renderSidebar(); return; }
+  // 開いているタブ・開いたフォルダの記録を新しい名前に合わせる
+  const re = (p) => (p === from ? to : p.startsWith(from + "/") ? to + p.slice(from.length) : p);
+  for (const t of tabs) t.path = t.path ? re(t.path) : t.path;
+  currentFilePath = currentFilePath ? re(currentFilePath) : currentFilePath;
+  treeOpen = new Set([...treeOpen].map(re));
+  saveTreeOpen();
+  if (currentFilePath && !currentReadOnly) localStorage.setItem("narfi.lastFile", currentFilePath);
+  persistTabs();
+  updateFileLabel();
+  await loadWorkspace();
+}
+
+async function treeDelete(path, isDir) {
+  const note = window.NARFI_WEB
+    ? (document.getElementById("btnAccount") && /同期/.test(document.getElementById("btnAccount").textContent) ? "クラウドからも削除されます。" : "元に戻せません。")
+    : "ゴミ箱に移します（Finder から戻せます）。";
+  const ok = await uiConfirm(`「${baseName(path)}」${isDir ? "フォルダとその中身" : ""}を削除しますか？`, "削除", { note, danger: true });
+  if (!ok) return;
+  const d = await fsOp("/api/delete", { path });
+  if (!d.ok) { uiToast(d.error || "削除できませんでした"); return; }
+  // そのファイル（フォルダの中のファイル）のタブは閉じる
+  for (let i = tabs.length - 1; i >= 0; i--) {
+    const p = tabs[i].path;
+    if (p && (p === path || p.startsWith(path + "/"))) closeTab(i, true);
+  }
+  await loadWorkspace();
+}
+
+// ---- 右クリックのメニュー
+
+function showCtxMenu(x, y, items) {
+  const m = document.getElementById("ctxMenu");
+  m.innerHTML = "";
+  for (const it of items) {
+    if (it === "-") { m.insertAdjacentHTML("beforeend", `<div class="menu-sep"></div>`); continue; }
+    const b = document.createElement("button");
+    b.className = `menu-item${it.danger ? " danger" : ""}`;
+    b.innerHTML = `<span class="mi-label">${escHtml(it.label)}</span><span class="kbd"></span>`;
+    b.addEventListener("click", () => { hideCtxMenu(); it.run(); });
+    m.appendChild(b);
+  }
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = `${Math.min(x, window.innerWidth - r.width - 4)}px`;
+  m.style.top = `${Math.min(y, window.innerHeight - r.height - 4)}px`;
+}
+
+function hideCtxMenu() {
+  document.getElementById("ctxMenu").hidden = true;
+  document.querySelectorAll(".t-row.ctx").forEach((r) => r.classList.remove("ctx"));
+}
+
+document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctxMenu")) hideCtxMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCtxMenu(); });
+window.addEventListener("blur", hideCtxMenu);
+
+const sidebarEl = document.getElementById("sidebar");
+
+sidebarEl.addEventListener("contextmenu", (e) => {
+  const row = e.target.closest(".t-row");
+  const inWs = e.target.closest("#sbFiles") || e.target.closest(".sb-head:not(.sb-head-lib)");
+  e.preventDefault();
+  if (!row) {
+    if (!inWs) return;
+    showCtxMenu(e.clientX, e.clientY, [
+      { label: "New File", run: () => treeNew("file", "") },
+      { label: "New Folder", run: () => treeNew("dir", "") }
+    ]);
+    return;
+  }
+  if (row.classList.contains("editing")) return;
+  const path = row.getAttribute("data-path");
+  const isDir = row.getAttribute("data-kind") === "dir";
+  row.classList.add("ctx");
+  if (row.getAttribute("data-tree") === "lib") {
+    if (!isDir) showCtxMenu(e.clientX, e.clientY, [{ label: "Open", run: () => openPath(path) }]);
+    return;
+  }
+  const items = isDir
+    ? [
+        { label: "New File", run: () => treeNew("file", path) },
+        { label: "New Folder", run: () => treeNew("dir", path) },
+        "-",
+        { label: "Rename", run: () => treeRename(path, true) },
+        { label: "Delete", danger: true, run: () => treeDelete(path, true) }
+      ]
+    : [
+        { label: "Open", run: () => openPath(path) },
+        "-",
+        { label: "Rename", run: () => treeRename(path, false) },
+        { label: "Delete", danger: true, run: () => treeDelete(path, false) }
+      ];
+  showCtxMenu(e.clientX, e.clientY, items);
+});
+
+sidebarEl.addEventListener("click", (e) => {
+  const row = e.target.closest(".t-row");
+  if (!row || row.classList.contains("editing")) return;
+  const path = row.getAttribute("data-path");
+  if (row.getAttribute("data-kind") === "dir") {
+    if (treeOpen.has(path)) treeOpen.delete(path); else treeOpen.add(path);
+    saveTreeOpen();
+    renderSidebar();
+  } else {
+    openPath(path);
+  }
+});
+
+// ドラッグでフォルダに移す（一覧の空いた所に落とすと一番上へ）
+let dragPath = null;
+sidebarEl.addEventListener("dragstart", (e) => {
+  const row = e.target.closest(".t-row[draggable]");
+  if (!row) return;
+  dragPath = row.getAttribute("data-path");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", dragPath);
+});
+sidebarEl.addEventListener("dragend", () => {
+  dragPath = null;
+  document.querySelectorAll(".t-row.drop, .tree.drop-root").forEach((r) => r.classList.remove("drop", "drop-root"));
+});
+function dropTarget(e) {
+  if (!dragPath) return null;
+  const row = e.target.closest(".t-row");
+  if (row && row.getAttribute("data-tree") === "ws") {
+    const p = row.getAttribute("data-path");
+    const dir = row.getAttribute("data-kind") === "dir" ? p : dirName(p);
+    return { el: dir ? sidebarEl.querySelector(`.t-row[data-path="${CSS.escape(dir)}"]`) : document.getElementById("sbFiles"), dir };
+  }
+  if (e.target.closest("#sbFiles")) return { el: document.getElementById("sbFiles"), dir: "" };
+  return null;
+}
+sidebarEl.addEventListener("dragover", (e) => {
+  const t = dropTarget(e);
+  document.querySelectorAll(".t-row.drop, .tree.drop-root").forEach((r) => r.classList.remove("drop", "drop-root"));
+  if (!t || t.dir === dragPath || t.dir.startsWith(dragPath + "/") || dirName(dragPath) === t.dir) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  if (t.el) t.el.classList.add(t.dir ? "drop" : "drop-root");
+});
+sidebarEl.addEventListener("drop", (e) => {
+  const t = dropTarget(e);
+  const from = dragPath;
+  document.querySelectorAll(".t-row.drop, .tree.drop-root").forEach((r) => r.classList.remove("drop", "drop-root"));
+  if (!t || !from) return;
+  e.preventDefault();
+  if (t.dir) treeOpen.add(t.dir);
+  movePath(from, joinPath(t.dir, baseName(from)));
+});
+
+// ---- 確認・名前の入力・お知らせ（ブラウザ標準のダイアログの代わり）
+
+function uiModal({ title, note = "", value = null, okLabel = "OK", danger = false }) {
+  return new Promise((resolve) => {
+    const back = document.getElementById("modalBack");
+    const input = document.getElementById("modalInput");
+    const ok = document.getElementById("modalOk");
+    const cancel = document.getElementById("modalCancel");
+    document.getElementById("modalTitle").textContent = title;
+    document.getElementById("modalNote").textContent = note;
+    input.hidden = value === null;
+    input.value = value || "";
+    ok.textContent = okLabel;
+    ok.classList.toggle("danger", danger);
+    back.hidden = false;
+    const done = (v) => {
+      back.hidden = true;
+      ok.removeEventListener("click", onOk);
+      cancel.removeEventListener("click", onCancel);
+      back.removeEventListener("keydown", onKey, true);
+      back.removeEventListener("mousedown", onBack);
+      if (typeof editorSurface !== "undefined") editorSurface.focus();
+      resolve(v);
+    };
+    const onOk = () => done(value === null ? true : input.value);
+    const onCancel = () => done(value === null ? false : null);
+    const onKey = (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); onOk(); }
+      else if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    };
+    const onBack = (e) => { if (e.target === back) onCancel(); };
+    ok.addEventListener("click", onOk);
+    cancel.addEventListener("click", onCancel);
+    back.addEventListener("keydown", onKey, true);
+    back.addEventListener("mousedown", onBack);
+    if (value !== null) {
+      input.focus();
+      const dot = input.value.endsWith(".narfi") ? input.value.length - ".narfi".length : input.value.length;
+      input.setSelectionRange(0, dot);
+    } else {
+      ok.focus();
+    }
+  });
+}
+
+function uiConfirm(title, okLabel = "OK", opts = {}) {
+  return uiModal({ title, okLabel, note: opts.note || "", danger: !!opts.danger });
+}
+
+function uiPrompt(title, value = "", note = "") {
+  return uiModal({ title, value, note });
+}
+
+let toastTimer = null;
+function uiToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.hidden = false;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, Math.min(9000, 2500 + msg.length * 60));
+}
+
+window.uiConfirm = uiConfirm;
+window.uiPrompt = uiPrompt;
+window.uiToast = uiToast;
 
 // ---- タブ：開いたファイルが上に並ぶ。切り替えても、保存していない変更はタブの中に残る
 
@@ -3559,7 +4003,7 @@ async function activateTab(i) {
   if (t.src == null) {
     const data = await (await fetch(`/api/file?path=${encodeURIComponent(t.path)}`)).json();
     if (!data.ok) {
-      alert(data.error || "開けなかった");
+      uiToast(data.error || "開けませんでした");
       closeTab(i, true);
       return;
     }
@@ -3569,9 +4013,10 @@ async function activateTab(i) {
   showTab(i);
 }
 
-function closeTab(i, force = false) {
+async function closeTab(i, force = false) {
   if (!tabs[i]) return;
-  if (!force && tabDirty(i) && !confirm(`${tabs[i].path ? displayName(tabs[i].path) : "untitled.narfi"} の保存していない変更を破棄してよいですか？`)) return;
+  const name = tabs[i].path ? baseName(displayName(tabs[i].path)) : "untitled.narfi";
+  if (!force && tabDirty(i) && !(await uiConfirm(`「${name}」の変更は保存されていません。閉じますか？`, "保存せずに閉じる", { danger: true }))) return;
   if (!tabs[i].path) localStorage.removeItem("narfi.draft");
   if (i !== activeTab) {
     tabs.splice(i, 1);
@@ -3626,15 +4071,16 @@ window.addEventListener("narfi:files-changed", async (e) => {
   tabs.forEach((t, i) => {
     if (i !== activeTab && paths.includes(t.path) && !t.dirty) t.src = null;
   });
+  // ほかの端末で消された・名前を変えられたファイルのタブは閉じる（保存していない変更があれば残す）
+  const files = new Set((workspaceInfo && workspaceInfo.files) || []);
+  for (let i = tabs.length - 1; i >= 0; i--) {
+    const p = tabs[i].path;
+    if (p && !p.startsWith("lib:") && paths.includes(p) && !files.has(p) && !tabDirty(i)) await closeTab(i, true);
+  }
   if (currentFilePath && paths.includes(currentFilePath) && !docDirty) {
     const data = await (await fetch(`/api/file?path=${encodeURIComponent(currentFilePath)}`)).json();
     if (data.ok && data.src !== serializeDocToAscii()) await loadSrc(data.src, data.path);
   }
-});
-
-document.getElementById("sidebar").addEventListener("click", (e) => {
-  const item = e.target.closest(".sb-item");
-  if (item) openPath(item.getAttribute("data-path"));
 });
 
 async function openPath(path) {
@@ -3642,29 +4088,29 @@ async function openPath(path) {
   if (i >= 0) return activateTab(i);
   const resp = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
   const data = await resp.json();
-  if (!data.ok) { alert(data.error || "開けなかった"); return; }
+  if (!data.ok) { uiToast(data.error || "開けませんでした"); return; }
   await loadSrc(data.src, data.path);
 }
 
 async function openFileDialog() {
   const data = await (await fetch("/api/open-file", { method: "POST", body: "{}" })).json();
   if (data.cancelled) return;
-  if (!data.ok) { alert(data.error || "開けなかった"); return; }
+  if (!data.ok) { uiToast(data.error || "開けませんでした"); return; }
   await loadWorkspace();
   await loadSrc(data.src, data.path);
 }
 
 async function openFolder() {
-  if (anyDirty() && !confirm("保存していない変更があるタブがあります。破棄してフォルダを開いてよいですか？")) return;
+  if (!window.NARFI_WEB && anyDirty() && !(await uiConfirm("保存していない変更があるタブがあります。閉じてフォルダを開きますか？", "開く", { danger: true }))) return;
   let body = "{}";
   if (workspaceInfo && !workspaceInfo.dialogs) {
-    const p = prompt("作業フォルダのパス:", workspaceInfo.root);
+    const p = await uiPrompt("作業フォルダのパス", workspaceInfo.root);
     if (!p) return;
     body = JSON.stringify({ path: p });
   }
   const data = await (await fetch("/api/open-folder", { method: "POST", body })).json();
   if (data.cancelled) return;
-  if (!data.ok) { alert(data.error || "開けなかった"); return; }
+  if (!data.ok) { uiToast(data.error || "開けませんでした"); return; }
   workspaceInfo = data;
   localStorage.removeItem("narfi.lastFile");
   // フォルダが変わったので、タブは閉じる（ただし Web 版の Import は同じ保存領域に足すだけなので残す）
@@ -3700,10 +4146,10 @@ async function saveFile(opts = {}) {
       if (serializeDocToAscii() === src) docDirty = false;
       updateFileLabel();
     } else if (!opts.silent) {
-      alert(data.error || "保存できなかった");
+      uiToast(data.error || "保存できませんでした");
     }
   } catch (e) {
-    if (!opts.silent) alert("保存できなかった（サーバーが止まっていないか確認する）");
+    if (!opts.silent) uiToast("保存できませんでした。narfi web が動いているか確認してください");
   }
 }
 
@@ -3712,7 +4158,7 @@ async function saveAs() {
   const name = currentFilePath ? currentFilePath.split("/").pop() : "note.narfi";
   let data;
   if (workspaceInfo && !workspaceInfo.dialogs) {
-    let p = prompt("保存するファイル（作業フォルダからの相対パス）:", name);
+    let p = await uiPrompt("名前を付けて保存", name, "作業フォルダからの相対パス（例：week1/note.narfi）");
     if (!p) return;
     if (!p.endsWith(".narfi")) p += ".narfi";
     data = await (await fetch("/api/save", { method: "POST", body: JSON.stringify({ path: p, src }) })).json();
@@ -3720,7 +4166,7 @@ async function saveAs() {
     data = await (await fetch("/api/save-as", { method: "POST", body: JSON.stringify({ src, name }) })).json();
     if (data.cancelled) return;
   }
-  if (!data.ok) { alert(data.error || "保存できなかった"); return; }
+  if (!data.ok) { uiToast(data.error || "保存できませんでした"); return; }
   // 同じファイルのタブがほかにあれば閉じる（上書きしたので）
   const other = tabIndex(data.path);
   if (other >= 0 && other !== activeTab) {
@@ -3749,7 +4195,7 @@ function printDocument() {
   const title = displayName(currentFilePath).split("/").pop().replace(/\.narfi$/, "");
   const body = document.getElementById("proseDocArea").innerHTML;
   const w = window.open("", "_blank");
-  if (!w) { alert("ポップアップがブロックされた。このサイトのポップアップを許可する"); return; }
+  if (!w) { uiToast("ポップアップがブロックされました。このサイトのポップアップを許可してください"); return; }
   w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>${escHtml(title)}</title>
 <link rel="stylesheet" href="${location.origin}/assets/katex/katex.min.css">
 <style>
@@ -3784,10 +4230,10 @@ async function exportPdf() {
     }
     const data = await resp.json();
     if (w) w.close();
-    alert(data.error || "PDF を作れなかった");
+    uiToast(data.error || "PDF を作れませんでした");
   } catch (e) {
     if (w) w.close();
-    alert("PDF を作れなかった（サーバーが止まっていないか確認する）");
+    uiToast("PDF を作れませんでした。narfi web が動いているか確認してください");
   }
 }
 
