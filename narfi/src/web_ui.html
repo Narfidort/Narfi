@@ -216,6 +216,9 @@ html, body {
   flex: 1;
   min-width: 280px;
   position: relative;
+  /* スクロールを GPU 側で処理させる（背景が透明だと Chrome は再描画でスクロールすることがある） */
+  background: var(--bg);
+  will-change: scroll-position;
   overflow-y: auto;
   overflow-x: auto;
   padding: 18px 0 80px 0;
@@ -359,7 +362,7 @@ html, body {
   vertical-align: sub;
   font-size: 0.72em;
   line-height: 1;
-  margin-left: 1px;
+  margin-left: 0;
   transform: translateY(3px);
 }
 .mc-sup {
@@ -367,8 +370,21 @@ html, body {
   vertical-align: super;
   font-size: 0.72em;
   line-height: 1;
-  margin-left: 1px;
+  margin-left: 0.5px;
   transform: translateY(-5px);
+}
+/* 中身のある添字・上付きは親文字に詰める（入力欄の余白・最小幅・枠線をなくす。枠は outline で描いてずれないように） */
+.mc-sub > .mc-slot:not(.empty),
+.mc-sup > .mc-slot:not(.empty) {
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  border-width: 0;
+}
+.mc-sub > .mc-slot.focused-slot:not(.empty),
+.mc-sup > .mc-slot.focused-slot:not(.empty) {
+  outline: 1px dashed rgba(96, 165, 250, 0.45);
+  outline-offset: 1px;
 }
 /* Absolute value |...| and Paren (...) Nodes */
 .mc-abs {
