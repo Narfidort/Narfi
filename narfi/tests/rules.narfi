@@ -1,0 +1,26 @@
+-- 自然演繹の規則の名前（docs/v2/syntax.md）。短い書き方と同じ証明項になる
+
+thm r1 :
+  P : Prop, Q : Prop
+  |- P and Q -> Q and P
+
+assume h : P and Q
+  and.intro(and.right(h), and.left(h))
+
+thm r2 :
+  P : Prop, Q : Prop, f : P -> Q, a : P
+  |- Q
+
+imp.elim(f, a)
+
+thm r3 :
+  P : Prop, h : false
+  |- P
+
+bot.elim(h)
+
+thm r4 :
+  h : forall x:Nat. x = x
+  |- 3 = 3
+
+all.elim(h, 3)

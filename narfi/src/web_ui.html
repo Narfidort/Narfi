@@ -845,6 +845,27 @@ html:not(.web) [data-only="web"] { display: none !important; }
   white-space: pre-wrap;
   line-height: 1.7;
 }
+/* 証明木 */
+.tree-style { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 10px; padding: 1px 6px; margin-left: 4px; cursor: pointer; font-family: inherit; letter-spacing: 0; text-transform: none; }
+.tree-style.active { color: var(--accent); border-color: var(--accent); }
+.pt-wrap { overflow-x: auto; padding: 10px 3em 12px 4px; font-size: 0.92em; text-align: center; }
+.pt { display: inline-flex; align-items: flex-end; vertical-align: bottom; }
+.pt-main { display: inline-flex; flex-direction: column; align-items: center; }
+.pt-prems { display: flex; align-items: flex-end; gap: 1.2em; padding: 0 0.3em; }
+.pt-bar { align-self: stretch; border-top: 1px solid var(--text-dim); margin: 3px 0; }
+.pt-rule { padding: 0 0 1.05em 0.3em; font-size: 0.78em; white-space: nowrap; color: var(--text-dim); line-height: 1; }
+.pt-concl, .pt-leaf { padding: 0 0.3em; white-space: nowrap; }
+.pt-leaf sup, .pt-rule sup { font-size: 0.75em; color: var(--accent); }
+.pt-ctx { font-size: 0.7em; color: var(--text-faint); margin-left: 1px; }
+.pt-hyp { font-family: "JetBrains Mono", monospace; font-size: 0.85em; color: var(--accent); }
+.fitch { border-collapse: collapse; font-size: 0.92em; margin-top: 6px; }
+.fitch td { padding: 2px 6px; vertical-align: middle; white-space: nowrap; }
+.fitch .fn { color: var(--text-faint); font-family: "JetBrains Mono", monospace; font-size: 11px; text-align: right; }
+.fitch .ff { display: flex; align-items: stretch; }
+.fitch .fb { border-left: 1px solid var(--text-dim); margin-right: 10px; }
+.fitch .fb.first + .fformula, .fitch .fformula { padding: 1px 0; }
+.fitch tr:has(.fb.first) .fformula { border-bottom: 1px solid var(--text-dim); }
+.fitch .fj { color: var(--text-dim); font-size: 0.85em; }
 .err-banner .katex { color: var(--text); font-size: 1.08em; margin: 0 0.15em; }
 /* Learn（チュートリアル） */
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
@@ -852,6 +873,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .learn-body { font-size: 13.5px; line-height: 1.85; color: var(--text); }
 .learn-body h3 { font-size: 15px; margin: 0 0 10px; font-weight: 600; }
 .learn-body p { margin: 0 0 12px; }
+.learn-body a { color: var(--accent); }
 .learn-body code { font-family: "JetBrains Mono", monospace; font-size: 12px; padding: 1px 4px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 2px; }
 .learn-body pre { font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.6; padding: 10px 12px; margin: 0 0 12px; background: var(--bg-elev); border: 1px solid var(--border); overflow-x: auto; }
 .learn-body table { border-collapse: collapse; margin: 0 0 12px; font-size: 12.5px; }
@@ -3324,6 +3346,7 @@ function renderGoalInspector() {
         </div>`;
       }
     }
+    if (activeDecl.tree) html += derivationHtml(activeDecl, curLine);
     goalViewArea.innerHTML = html;
   }
 
@@ -3342,6 +3365,97 @@ function renderGoalInspector() {
       <div style="font-size:12.5px;max-width:58%;overflow-x:auto;">${renderKatex(d.concl_latex, false)}</div>
     </div>`;
   }).join("");
+}
+
+// ---- 証明木（kernel が検算した証明。src/derivation.rs）：カーソルの行から作られた部分を、Gentzen 式か Fitch 式で
+
+let treeStyle = localStorage.getItem("narfi.tree.style") || "gentzen";
+
+function setTreeStyle(st) {
+  treeStyle = st;
+  localStorage.setItem("narfi.tree.style", st);
+  renderGoalInspector();
+}
+
+function findTreeAt(n, line) {
+  if (n.l === line) return n;
+  for (const c of n.p) {
+    const r = findTreeAt(c, line);
+    if (r) return r;
+  }
+  return null;
+}
+
+function derivationHtml(decl, curLine) {
+  const node = findTreeAt(decl.tree, curLine) || decl.tree;
+  const whole = node === decl.tree;
+  const tabs = ["gentzen", "fitch"].map((st) =>
+    `<button class="tree-style${treeStyle === st ? " active" : ""}" onclick="setTreeStyle('${st}')">${st === "gentzen" ? "Gentzen" : "Fitch"}</button>`).join("");
+  const body = treeStyle === "fitch" ? fitchHtml(node) : `<div class="pt-wrap">${gentzenHtml(node)}</div>`;
+  return `<div class="sec-label" style="margin-top:22px;"><span>Derivation（${whole ? "定理全体" : `Ln ${curLine} の部分`}）</span><span>${tabs}</span></div>${body}`;
+}
+
+function hypLabel(h) {
+  return `<span class="pt-hyp">${escHtml(h)}</span>`;
+}
+
+function gentzenHtml(n) {
+  const k = (f) => renderKatex(f, false);
+  if (n.p.length === 0 && !n.r) {
+    // 仮定の葉：打ち消されるものは [φ]^h
+    return n.o
+      ? `<div class="pt-leaf">[${k(n.c)}]<sup>${escHtml(n.h)}</sup></div>`
+      : `<div class="pt-leaf">${k(n.c)}${n.h ? `<sub class="pt-ctx">${escHtml(n.h)}</sub>` : ""}</div>`;
+  }
+  const dis = n.d.length ? `<sup>${n.d.map((d) => escHtml(d[1])).join(",")}</sup>` : "";
+  // 規則の名前は横線の右に、幅を取って置く（隣の枝と重ならないように）
+  return `<div class="pt"><div class="pt-main"><div class="pt-prems">${n.p.map(gentzenHtml).join("")}</div>` +
+    `<div class="pt-bar"></div><div class="pt-concl">${k(n.c)}</div></div><div class="pt-rule">${k(n.r)}${dis}</div></div>`;
+}
+
+function fitchHtml(root) {
+  const lines = [];
+  const env = new Map();
+  // 文脈の仮定（前提）を先に並べる
+  const prem = [];
+  (function walk(n) {
+    if (n.p.length === 0 && !n.r && n.h && !n.o && !prem.some((p) => p.h === n.h)) prem.push(n);
+    n.p.forEach(walk);
+  })(root);
+  for (const p of prem) {
+    lines.push({ depth: 0, f: p.c, just: "前提", first: true, label: p.h });
+    env.set(p.h, lines.length);
+  }
+  function emit(n, depth) {
+    if (n.p.length === 0 && !n.r && n.h) {
+      if (env.has(n.h)) return env.get(n.h);
+      lines.push({ depth, f: n.c, just: "仮定", label: n.h });
+      return lines.length;
+    }
+    const refs = [];
+    n.p.forEach((c, i) => {
+      const d = n.d.find((x) => x[0] === i);
+      if (d) {
+        lines.push({ depth: depth + 1, f: d[2], just: "仮定", first: true, label: d[1] });
+        const a = lines.length;
+        const prev = env.get(d[1]);
+        env.set(d[1], a);
+        const b = emit(c, depth + 1);
+        if (prev === undefined) env.delete(d[1]); else env.set(d[1], prev);
+        refs.push(`${a}–${b}`);
+      } else {
+        refs.push(String(emit(c, depth)));
+      }
+    });
+    lines.push({ depth, f: n.c, just: `${renderKatex(n.r, false)} ${refs.join(", ")}`, raw: true });
+    return lines.length;
+  }
+  emit(root, 0);
+  return `<table class="fitch">${lines.map((l, i) => {
+    const bars = Array.from({ length: l.depth + 1 }, (_, k) => `<span class="fb${k === l.depth && l.first ? " first" : ""}"></span>`).join("");
+    const just = l.raw ? l.just : escHtml(l.just) + (l.label ? ` <span class="pt-hyp">${escHtml(l.label)}</span>` : "");
+    return `<tr><td class="fn">${i + 1}</td><td class="ff">${bars}<span class="fformula">${renderKatex(l.f, false)}</span></td><td class="fj">${just}</td></tr>`;
+  }).join("")}</table>`;
 }
 
 function jumpToLine(idx) {
@@ -3412,10 +3526,13 @@ function toggleTheme() {
 let learnIndex = Number(localStorage.getItem("narfi.learn.index") || 0);
 
 function inlineMd(text) {
-  // `code` はコード、$…$ は数式、それ以外は文字
+  // `code` はコード、$…$ は数式、[文字](URL) はリンク、それ以外は文字
   return text.split(/(`[^`]*`)/).map((part) => {
     if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) return `<code>${escHtml(part.slice(1, -1))}</code>`;
-    return part.split("$").map((q, k) => (k % 2 ? renderKatex(q, false) : escHtml(q))).join("");
+    return part.split("$").map((q, k) => {
+      if (k % 2) return renderKatex(q, false);
+      return escHtml(q).replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    }).join("");
   }).join("");
 }
 

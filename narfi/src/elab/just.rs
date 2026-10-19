@@ -1,7 +1,7 @@
 //! 根拠の解釈：`h(a, b)`・`thm(…)`・`h.left`・`refl`・`ring`・`linarith`・`EQ2` など。
 //! どれも (示す命題, 証明項) を返す。
 
-use super::{BUILTINS, CResult, Checker, Ctx, Entry};
+use super::{BUILTINS, CResult, Checker, Ctx, Entry, RULES};
 use crate::kernel::arith::{decide, ring_eq};
 use crate::kernel::proof::Proof;
 use crate::syntax::{Formula, Term, instantiate};
@@ -82,7 +82,7 @@ impl<'a> Checker<'a> {
         if ctx.is_term_var(n) {
             return false;
         }
-        if self.env.kernel.thms.contains_key(n) || self.env.failed.contains(n) || BUILTINS.contains(&n) {
+        if self.env.kernel.thms.contains_key(n) || self.env.failed.contains(n) || BUILTINS.contains(&n) || RULES.contains(&n) {
             return true;
         }
         if let Some(base) = n.strip_suffix(".def") {
@@ -122,6 +122,24 @@ impl<'a> Checker<'a> {
             Term::Var(n) | Term::App(n, _) if BUILTINS.contains(&n.as_str()) => self.err(format!(
                 "`{n}` は、示すべき命題が決まっている場所（goal・have・連鎖）でしか使えない"
             )),
+            // 規則の名前（∧除去・→除去・∀除去）
+            Term::App(n, args) if (n == "and.left" || n == "and.right") && args.len() == 1 => {
+                let (f, pf) = self.infer(ctx, &args[0])?;
+                match self.whnf(&self.norm(ctx, &f)) {
+                    Formula::And(a, b) => {
+                        let right = n == "and.right";
+                        Ok((if right { *b } else { *a }, Proof::AndE { right, p: pf.b() }))
+                    }
+                    g => self.err(format!("{n} に渡せるのは ∧ の形の根拠だけ（「{g}」）")),
+                }
+            }
+            Term::App(n, args) if (n == "imp.elim" || n == "all.elim") && !args.is_empty() => {
+                let (f, pf) = self.infer(ctx, &args[0])?;
+                self.apply(ctx, f, pf, &args[1..])
+            }
+            Term::Var(n) | Term::App(n, _) if n == "and.intro" || n == "bot.elim" => {
+                self.err(format!("`{n}` は、示すべき命題が決まっている場所（goal・have・連鎖）でしか使えない"))
+            }
             Term::Var(n) => self.resolve(ctx, n),
             Term::App(n, args) => {
                 let (f, pf) = self.resolve(ctx, n)?;
@@ -241,6 +259,18 @@ impl<'a> Checker<'a> {
                 }
             }
             Term::App(n, args) if n == "EQ2" => self.eq2(ctx, args, &e),
+            Term::App(n, args) if n == "and.intro" && args.len() == 2 => match self.whnf(&e) {
+                Formula::And(l, r) => {
+                    let a = self.check(ctx, &args[0], &l)?;
+                    let b = self.check(ctx, &args[1], &r)?;
+                    Ok(Proof::AndI(a.b(), b.b()))
+                }
+                g => self.err(format!("and.intro で示せるのは ∧ の形だけ（必要なのは「{g}」）")),
+            },
+            Term::App(n, args) if n == "bot.elim" && args.len() == 1 => {
+                let q = self.check(ctx, &args[0], &Formula::Bot)?;
+                Ok(Proof::BotE(e, q.b()))
+            }
             Term::App(n, args) if (n == "or.left" || n == "or.right") && args.len() == 1 => match &e {
                 Formula::Or(l, r) => {
                     let right = n == "or.right";

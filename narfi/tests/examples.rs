@@ -99,3 +99,12 @@ fn sequence_subscripts() {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }
+
+/// 規則の名前：and.intro・and.left・and.right・imp.elim・all.elim・bot.elim
+#[test]
+fn rule_names() {
+    let out = run(&["tests/rules.narfi"]);
+    for n in ["r1", "r2", "r3", "r4"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+}

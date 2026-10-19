@@ -6,6 +6,7 @@
 pub mod api;
 pub mod arith;
 pub mod assets;
+pub mod derivation;
 pub mod elab;
 pub mod kernel;
 pub mod module;

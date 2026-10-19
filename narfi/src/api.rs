@@ -251,7 +251,7 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
         .collect();
 
     format!(
-        "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{}}}",
+        "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{},\"tree\":{}}}",
         json_str(&r.name),
         r.line,
         r.is_axiom,
@@ -264,7 +264,8 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
         sorries_json.join(","),
         steps_json.join(","),
         prose_json.join(","),
-        json_str(&latex_env)
+        json_str(&latex_env),
+        r.tree.as_deref().unwrap_or("null")
     )
 }
 

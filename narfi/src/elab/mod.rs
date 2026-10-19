@@ -153,6 +153,9 @@ pub struct CheckError {
 type CResult<T> = Result<T, CheckError>;
 
 const BUILTINS: [&str; 8] = ["sorry", "refl", "ring", "linarith", "decide", "EQ2", "or.left", "or.right"];
+/// 自然演繹の規則の名前（短い書き方の別名。docs/v2/syntax.md）。
+/// and.intro(p, q) = `p, q`、and.left(h) = `h.left`、imp.elim(f, a) = `f(a)`、all.elim(h, t) = `h(t)`、bot.elim(h)
+const RULES: [&str; 6] = ["and.intro", "and.left", "and.right", "imp.elim", "all.elim", "bot.elim"];
 
 // ================================================================ 検査器の状態
 
@@ -293,6 +296,8 @@ pub struct Report {
     pub oracles: BTreeSet<String>,
     pub sorries: Vec<(usize, Vec<String>, Formula)>,
     pub steps: Vec<StepTrace>,
+    /// 証明木（JSON。src/derivation.rs）
+    pub tree: Option<String>,
 }
 
 fn simple_err(line: usize, msg: String) -> CheckError {
@@ -340,6 +345,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
         oracles: BTreeSet::new(),
         sorries: vec![],
         steps: vec![],
+        tree: None,
     };
     if env.kernel.thms.contains_key(&d.name) || env.failed.contains(&d.name) {
         report.err = Some(simple_err(
@@ -404,6 +410,9 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
     };
     match added {
         Ok(deps) => {
+            if d.typedef.is_none() {
+                report.tree = crate::derivation::derivation(&env.kernel, &st, &proof).map(|n| n.to_json());
+            }
             report.axioms = deps.axioms;
             report.oracles = deps.arith;
             if deps.sorry {
@@ -472,6 +481,7 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
                         oracles: BTreeSet::new(),
                         sorries: vec![],
                         steps: vec![],
+                        tree: None,
                     });
                 }
             }

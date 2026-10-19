@@ -9,6 +9,8 @@ use crate::syntax::{Formula, Term, not};
 pub struct Checker<'a, 'c> {
     pub ctx: &'c mut KCtx<'a>,
     pub deps: Deps,
+    /// 表示用（証明木）：部分証明（のアドレス）→ その結論。検査の判断には使わない
+    pub record: Option<std::collections::HashMap<usize, Formula>>,
 }
 
 fn rel_parts(f: &Formula) -> Option<(&str, &Term, &Term)> {
@@ -56,7 +58,7 @@ fn compose(a: &str, b: &str) -> Option<&'static str> {
 
 impl<'a, 'c> Checker<'a, 'c> {
     pub fn new(ctx: &'c mut KCtx<'a>) -> Self {
-        Checker { ctx, deps: Deps::default() }
+        Checker { ctx, deps: Deps::default(), record: None }
     }
 
     fn want_conv(&mut self, have: &Formula, want: &Formula, what: &str) -> KResult<()> {
@@ -93,6 +95,14 @@ impl<'a, 'c> Checker<'a, 'c> {
 
     /// 証明項 p が示す命題
     pub fn infer(&mut self, p: &Proof) -> KResult<Formula> {
+        let f = self.infer0(p)?;
+        if let Some(r) = &mut self.record {
+            r.insert(p as *const Proof as usize, f.clone());
+        }
+        Ok(f)
+    }
+
+    fn infer0(&mut self, p: &Proof) -> KResult<Formula> {
         match p {
             Proof::Line(line, q) => self.infer(q).map_err(|mut e| {
                 e.line.get_or_insert(*line);
