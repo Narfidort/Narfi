@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Narfi</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="stylesheet" href="/assets/katex/katex.min.css">
+<script src="/assets/katex/katex.min.js"></script>
 <style>
 :root[data-theme="dark"] {
   --bg: #0a0a0c;
@@ -134,6 +134,74 @@ html, body {
 .status-pill.ok { color: var(--ok); border-color: rgba(16,185,129,0.35); }
 .status-pill.sorry { color: var(--warn); border-color: rgba(245,158,11,0.35); }
 .status-pill.err { color: var(--err); border-color: rgba(239,68,68,0.4); }
+
+/* Left Sidebar: workspace files & libraries */
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 6px 0 20px 0;
+  font-size: 12px;
+  user-select: none;
+}
+.sidebar.collapsed { display: none; }
+.sb-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 4px 10px;
+  color: var(--text-dim);
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+}
+.sb-root {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}
+.sb-mini {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.sb-mini:hover { color: var(--text); border-color: var(--text-dim); }
+.sb-list { padding: 2px 0 6px 0; }
+.sb-dir {
+  padding: 3px 10px 3px calc(10px + var(--depth) * 12px);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.sb-item {
+  padding: 3px 10px 3px calc(10px + var(--depth) * 12px);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.sb-item:hover { background: var(--bg-hover); }
+.sb-item.active { background: var(--bg-active); color: var(--accent); }
+.sb-empty { padding: 3px 10px; color: var(--text-faint); font-size: 11px; }
+.file-label {
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-label.dirty::after { content: " ●"; color: var(--warn); }
+.file-label.readonly::after { content: " (read-only)"; color: var(--text-dim); }
 
 /* Split Workspace with Resizable Right Pane */
 .workspace {
@@ -671,13 +739,18 @@ html, body {
 <div class="topbar">
   <div class="topbar-left">
     <span class="logo">NARFI</span>
-    <select id="fileSelect" class="ctrl-select" title="Workspace Files">
-      <option value="">untitled.narfi</option>
-    </select>
-    <button class="ctrl-btn" onclick="saveFile()">Save</button>
+    <button id="btnFiles" class="ctrl-btn active" onclick="toggleSidebar()" title="ファイル一覧の表示・非表示">Files</button>
+    <span id="fileLabel" class="file-label">untitled.narfi</span>
+    <button class="ctrl-btn" onclick="newFile()" title="新しいファイル">New</button>
+    <button class="ctrl-btn" onclick="openFileDialog()" title="ファイルを開く（⌘O）">Open</button>
+    <button class="ctrl-btn" onclick="saveFile()" title="保存（⌘S）">Save</button>
+    <button class="ctrl-btn" onclick="saveAs()" title="名前を付けて保存（⇧⌘S）">Save As</button>
+    <button id="btnAutosave" class="ctrl-btn" onclick="toggleAutosave()" title="編集が止まって約1秒後に自動で保存する">Auto Save: ON</button>
     <button id="btnJpLens" class="ctrl-btn" onclick="toggleJpLens()" title="エディタ上の表示を日本語シュガーレンズに切り替え（裏のASCIIコードは不変）">JP Sugar View: OFF</button>
   </div>
   <div class="topbar-right">
+    <button class="ctrl-btn" onclick="exportPdf()" title="LaTeX で組版した PDF を作る（⇧⌘P）">PDF</button>
+    <button class="ctrl-btn" onclick="printDocument()" title="証明文を印刷する・PDF として保存する（⌘P）">Print</button>
     <span id="statusPill" class="status-pill ok">READY</span>
     <button id="btnInspector" class="ctrl-btn active" onclick="toggleInspector()" title="Toggle Right Pane">Inspector</button>
     <button id="btnTheme" class="ctrl-btn" onclick="toggleTheme()">Light / Dark</button>
@@ -685,6 +758,20 @@ html, body {
 </div>
 
 <div class="workspace" id="workspaceEl">
+  <!-- Left: Workspace Files & Libraries -->
+  <div id="sidebar" class="sidebar">
+    <div class="sb-head">
+      <span id="sbRoot" class="sb-root" title="">workspace</span>
+      <button class="sb-mini" onclick="openFolder()" title="作業フォルダを選ぶ（⇧⌘O）">Folder</button>
+      <button class="sb-mini" onclick="revealDir('workspace')" title="Finder で表示">Finder</button>
+    </div>
+    <div id="sbFiles" class="sb-list"></div>
+    <div class="sb-head">
+      <span class="sb-root">Library</span>
+      <button class="sb-mini" onclick="revealDir('lib')" title="自分用ライブラリ ~/.narfi/lib を Finder で開く（ここに置いた .narfi は import できる）">~/.narfi/lib</button>
+    </div>
+    <div id="sbLibs" class="sb-list"></div>
+  </div>
   <!-- Left: Mathcha-style Inline Structured Editor -->
   <div id="editorSurface" class="editor-surface" tabindex="0"></div>
   <div id="acPopup" class="ac-popup"></div>
@@ -2841,6 +2928,7 @@ function onDocMutated() {
   selAnchor = null;
   pushHistory();
   refreshAfterEdit();
+  noteEdited();
 }
 
 function refreshAfterEdit() {
@@ -3090,16 +3178,6 @@ function copyLatex() {
   navigator.clipboard.writeText(document.getElementById("latexArea").value);
 }
 
-async function loadFiles() {
-  try {
-    const resp = await fetch("/api/files");
-    const data = await resp.json();
-    const sel = document.getElementById("fileSelect");
-    sel.innerHTML = `<option value="">untitled.narfi</option>` +
-      (data.files || []).map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join("");
-  } catch (_) {}
-}
-
 // Right Pane Drag Resizer & Collapse Toggle
 const paneResizer = document.getElementById("paneResizer");
 const inspectorPane = document.getElementById("inspectorPane");
@@ -3135,51 +3213,6 @@ window.addEventListener("mouseup", () => {
   }
 });
 
-document.getElementById("fileSelect").addEventListener("change", async (e) => {
-  const path = e.target.value;
-  if (!path) {
-    currentFilePath = "";
-    loadSourceIntoDoc(DEFAULT_ASCII_DOC);
-    onDocMutated();
-    return;
-  }
-  const resp = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
-  const data = await resp.json();
-  if (data.ok) {
-    currentFilePath = data.path;
-    // Normalize loaded file into clean ASCII code before populating structured Mathcha AST
-    const convResp = await fetch("/api/convert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src: data.src, mode: "to_standard" })
-    });
-    const convData = await convResp.json();
-    loadSourceIntoDoc(convData.src || data.src);
-    onDocMutated();
-  }
-});
-
-async function saveFile() {
-  let path = currentFilePath;
-  if (!path) {
-    path = prompt("File path (.narfi):", "note.narfi") || "";
-    if (!path) return;
-    if (!path.endsWith(".narfi")) path += ".narfi";
-  }
-  const src = serializeDocToAscii();
-  const resp = await fetch("/api/save", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, src })
-  });
-  const data = await resp.json();
-  if (data.ok) {
-    currentFilePath = data.path;
-    await loadFiles();
-    document.getElementById("fileSelect").value = currentFilePath;
-  }
-}
-
 async function askAi(mode) {
   const reply = document.getElementById("aiReply");
   reply.textContent = "Thinking...";
@@ -3205,12 +3238,319 @@ async function askAi(mode) {
   reply.textContent = data.ok ? data.reply : (data.error || "Error");
 }
 
+// ================================================================
+// 10. Files: workspace, libraries, save / autosave, print & PDF
+// ================================================================
+
+let currentReadOnly = false;   // ライブラリのファイルは読み取り専用
+let docDirty = false;          // 保存していない変更がある
+let autosaveOn = localStorage.getItem("narfi.autosave") !== "off";
+let autosaveTimer = null;
+let workspaceInfo = null;
+
+function displayName(path) {
+  if (!path) return "untitled.narfi";
+  return path.replace(/^lib:(user|std)\//, "lib/");
+}
+
+function updateFileLabel() {
+  const el = document.getElementById("fileLabel");
+  el.textContent = displayName(currentFilePath);
+  el.title = currentFilePath ? (workspaceInfo ? `${workspaceInfo.root}/${currentFilePath}` : currentFilePath) : "保存されていない文書";
+  el.classList.toggle("dirty", docDirty);
+  el.classList.toggle("readonly", currentReadOnly);
+  document.title = `${docDirty ? "● " : ""}${displayName(currentFilePath)} — Narfi`;
+}
+
+function updateAutosaveButton() {
+  const b = document.getElementById("btnAutosave");
+  b.textContent = `Auto Save: ${autosaveOn ? "ON" : "OFF"}`;
+  b.classList.toggle("active", autosaveOn);
+}
+
+function toggleAutosave() {
+  autosaveOn = !autosaveOn;
+  localStorage.setItem("narfi.autosave", autosaveOn ? "on" : "off");
+  updateAutosaveButton();
+  if (autosaveOn) scheduleAutosave();
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById("sidebar");
+  const collapsed = sb.classList.toggle("collapsed");
+  document.getElementById("btnFiles").classList.toggle("active", !collapsed);
+  localStorage.setItem("narfi.sidebar", collapsed ? "off" : "on");
+}
+
+// 編集のたびに呼ばれる（onDocMutated から）
+function noteEdited() {
+  docDirty = true;
+  updateFileLabel();
+  if (!currentFilePath) {
+    // 名前のない文書は、ブラウザ内に下書きとして残す
+    try { localStorage.setItem("narfi.draft", serializeDocToAscii()); } catch (_) {}
+  }
+  scheduleAutosave();
+}
+
+function scheduleAutosave() {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  if (!autosaveOn || !currentFilePath || currentReadOnly || !docDirty) return;
+  autosaveTimer = setTimeout(() => saveFile({ silent: true }), 1100);
+}
+
+// ---- 作業フォルダとファイル一覧
+
+async function loadWorkspace() {
+  try {
+    const resp = await fetch("/api/workspace");
+    workspaceInfo = await resp.json();
+    renderSidebar();
+  } catch (_) {}
+}
+
+function fileTreeHtml(files, prefix) {
+  if (!files || files.length === 0) return `<div class="sb-empty">（.narfi ファイルなし）</div>`;
+  let html = "";
+  let openDirs = [];
+  for (const f of files) {
+    const parts = f.split("/");
+    const dirs = parts.slice(0, -1);
+    let k = 0;
+    while (k < openDirs.length && k < dirs.length && openDirs[k] === dirs[k]) k++;
+    openDirs = openDirs.slice(0, k);
+    for (; k < dirs.length; k++) {
+      html += `<div class="sb-dir" style="--depth:${k}">${escHtml(dirs[k])}/</div>`;
+      openDirs.push(dirs[k]);
+    }
+    const path = prefix + f;
+    const active = path === currentFilePath ? " active" : "";
+    html += `<div class="sb-item${active}" style="--depth:${dirs.length}" data-path="${escHtml(path)}" title="${escHtml(f)}">${escHtml(parts[parts.length - 1])}</div>`;
+  }
+  return html;
+}
+
+function renderSidebar() {
+  const ws = workspaceInfo;
+  if (!ws || !ws.ok) return;
+  const root = document.getElementById("sbRoot");
+  root.textContent = ws.name || ws.root;
+  root.title = ws.root;
+  document.getElementById("sbFiles").innerHTML = fileTreeHtml(ws.files, "");
+  let libs = "";
+  for (const lib of ws.libs || []) {
+    libs += `<div class="sb-dir" style="--depth:0">${lib.label === "user" ? "自分用（~/.narfi/lib）" : "標準"}</div>`;
+    libs += `<div style="padding-left:12px">${fileTreeHtml(lib.files, `lib:${lib.label}/`)}</div>`;
+  }
+  document.getElementById("sbLibs").innerHTML = libs;
+}
+
+document.getElementById("sidebar").addEventListener("click", (e) => {
+  const item = e.target.closest(".sb-item");
+  if (item) openPath(item.getAttribute("data-path"));
+});
+
+function confirmDiscard() {
+  return !docDirty || confirm("保存していない変更があります。破棄してよいですか？");
+}
+
+// 読み込んだソースをエディタに入れる。
+// 構文木を経由する変換（/api/convert）は通さない：コメントが消え、自動保存でファイルから失われるため。
+async function loadSrc(src, path) {
+  loadSourceIntoDoc(src);
+  currentFilePath = path || "";
+  currentReadOnly = !!path && path.startsWith("lib:");
+  docDirty = false;
+  if (path && !currentReadOnly) localStorage.setItem("narfi.lastFile", path);
+  updateFileLabel();
+  renderSidebar();
+  refreshAfterEdit();
+}
+
+async function openPath(path) {
+  if (!confirmDiscard()) return;
+  const resp = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+  const data = await resp.json();
+  if (!data.ok) { alert(data.error || "開けなかった"); return; }
+  await loadSrc(data.src, data.path);
+}
+
+async function openFileDialog() {
+  if (!confirmDiscard()) return;
+  const data = await (await fetch("/api/open-file", { method: "POST", body: "{}" })).json();
+  if (data.cancelled) return;
+  if (!data.ok) { alert(data.error || "開けなかった"); return; }
+  await loadWorkspace();
+  await loadSrc(data.src, data.path);
+}
+
+async function openFolder() {
+  if (!confirmDiscard()) return;
+  let body = "{}";
+  if (workspaceInfo && !workspaceInfo.dialogs) {
+    const p = prompt("作業フォルダのパス:", workspaceInfo.root);
+    if (!p) return;
+    body = JSON.stringify({ path: p });
+  }
+  const data = await (await fetch("/api/open-folder", { method: "POST", body })).json();
+  if (data.cancelled) return;
+  if (!data.ok) { alert(data.error || "開けなかった"); return; }
+  workspaceInfo = data;
+  localStorage.removeItem("narfi.lastFile");
+  await loadSrc("", "");
+}
+
+function newFile() {
+  if (!confirmDiscard()) return;
+  localStorage.removeItem("narfi.draft");
+  loadSrc("", "");
+}
+
+async function saveFile(opts = {}) {
+  if (!currentFilePath || currentReadOnly) {
+    if (!opts.silent) await saveAs();
+    return;
+  }
+  const src = serializeDocToAscii();
+  try {
+    const data = await (await fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: currentFilePath, src })
+    })).json();
+    if (data.ok) {
+      // 保存中にさらに編集されていなければ「保存済み」
+      if (serializeDocToAscii() === src) docDirty = false;
+      updateFileLabel();
+    } else if (!opts.silent) {
+      alert(data.error || "保存できなかった");
+    }
+  } catch (e) {
+    if (!opts.silent) alert("保存できなかった（サーバーが止まっていないか確認する）");
+  }
+}
+
+async function saveAs() {
+  const src = serializeDocToAscii();
+  const name = currentFilePath ? currentFilePath.split("/").pop() : "note.narfi";
+  let data;
+  if (workspaceInfo && !workspaceInfo.dialogs) {
+    let p = prompt("保存するファイル（作業フォルダからの相対パス）:", name);
+    if (!p) return;
+    if (!p.endsWith(".narfi")) p += ".narfi";
+    data = await (await fetch("/api/save", { method: "POST", body: JSON.stringify({ path: p, src }) })).json();
+  } else {
+    data = await (await fetch("/api/save-as", { method: "POST", body: JSON.stringify({ src, name }) })).json();
+    if (data.cancelled) return;
+  }
+  if (!data.ok) { alert(data.error || "保存できなかった"); return; }
+  currentFilePath = data.path;
+  currentReadOnly = false;
+  docDirty = false;
+  localStorage.setItem("narfi.lastFile", currentFilePath);
+  localStorage.removeItem("narfi.draft");
+  await loadWorkspace();
+  updateFileLabel();
+}
+
+function revealDir(target) {
+  fetch("/api/reveal", { method: "POST", body: JSON.stringify({ target }) });
+}
+
+// ---- 印刷・PDF
+
+function printDocument() {
+  if (!lastCheckData) return;
+  const title = displayName(currentFilePath).split("/").pop().replace(/\.narfi$/, "");
+  const body = document.getElementById("proseDocArea").innerHTML;
+  const w = window.open("", "_blank");
+  if (!w) { alert("ポップアップがブロックされた。このサイトのポップアップを許可する"); return; }
+  w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>${escHtml(title)}</title>
+<link rel="stylesheet" href="${location.origin}/assets/katex/katex.min.css">
+<style>
+  :root { --text:#111; --text-dim:#555; --text-faint:#888; --border:#ccc; --accent:#1d4ed8; --bg-elev:#fff; }
+  body { font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; color:#111; max-width: 46em; margin: 2em auto; line-height: 1.8; font-size: 11pt; }
+  h1 { font-size: 16pt; text-align: center; margin-bottom: 1.5em; }
+  .prose-thm { border-left: 3px solid #333; padding: 4px 0 4px 12px; margin: 22px 0 8px 0; break-inside: avoid; }
+  .prose-proof { margin: 0 0 18px 0; }
+  .katex-display { overflow-x: visible; }
+  @page { size: A4; margin: 18mm; }
+  @media print { body { margin: 0 auto; } }
+</style></head><body><h1>${escHtml(title)}</h1>${body}
+<script>window.onload = () => setTimeout(() => window.print(), 400);<\/script>
+</body></html>`);
+  w.document.close();
+}
+
+async function exportPdf() {
+  // ポップアップのブロックを避けるため、先に窓を開いておく
+  const w = window.open("", "_blank");
+  if (w) w.document.write("<p style='font-family:sans-serif;color:#555'>PDF を作成中…（LaTeX）</p>");
+  try {
+    const resp = await fetch("/api/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ src: serializeDocToAscii(), path: currentReadOnly ? "" : currentFilePath })
+    });
+    if ((resp.headers.get("Content-Type") || "").includes("application/pdf")) {
+      const url = URL.createObjectURL(await resp.blob());
+      if (w) w.location.href = url; else window.open(url, "_blank");
+      return;
+    }
+    const data = await resp.json();
+    if (w) w.close();
+    alert(data.error || "PDF を作れなかった");
+  } catch (e) {
+    if (w) w.close();
+    alert("PDF を作れなかった（サーバーが止まっていないか確認する）");
+  }
+}
+
+// ---- ショートカット（エディタの外にフォーカスがあるときも効くように）
+
+document.addEventListener("keydown", (e) => {
+  if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "o") { e.preventDefault(); e.shiftKey ? openFolder() : openFileDialog(); }
+  else if (k === "s") { e.preventDefault(); e.shiftKey ? saveAs() : saveFile(); }
+  else if (k === "p") { e.preventDefault(); e.shiftKey ? exportPdf() : printDocument(); }
+});
+
+window.addEventListener("beforeunload", (e) => {
+  if (docDirty && (!autosaveOn || !currentFilePath || currentReadOnly)) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
+// ---- 起動：前回のファイル → 下書き → 例の順に開く
+
+async function startup() {
+  if (localStorage.getItem("narfi.sidebar") === "off") toggleSidebar();
+  updateAutosaveButton();
+  await loadWorkspace();
+  const last = localStorage.getItem("narfi.lastFile");
+  if (last && workspaceInfo && (workspaceInfo.files || []).includes(last)) {
+    const data = await (await fetch(`/api/file?path=${encodeURIComponent(last)}`)).json();
+    if (data.ok) { await loadSrc(data.src, data.path); return; }
+  }
+  const draft = localStorage.getItem("narfi.draft");
+  if (draft && draft.trim()) {
+    await loadSrc(draft, "");
+    docDirty = true;
+    updateFileLabel();
+    return;
+  }
+  loadSourceIntoDoc(DEFAULT_ASCII_DOC);
+  currentFilePath = "";
+  updateFileLabel();
+  refreshAfterEdit();
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   const savedTheme = localStorage.getItem("narfi_theme");
   if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
-  await loadFiles();
-  loadSourceIntoDoc(DEFAULT_ASCII_DOC);
-  onDocMutated();
+  await startup();
   editorSurface.focus();
 });
 </script>

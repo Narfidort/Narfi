@@ -430,26 +430,46 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
     }
 }
 
+/// LaTeX の文書全体（LuaLaTeX + ltjsarticle）。title が空なら表題をつけない。
+pub fn latex_document(title: &str, items: &[(&Decl, &[StepTrace])]) -> String {
+    let mut out = String::new();
+    out.push_str("\\documentclass[a4paper,11pt]{ltjsarticle}\n");
+    out.push_str("\\usepackage{amsmath,amssymb,amsthm}\n");
+    out.push_str("\\usepackage[margin=22mm]{geometry}\n");
+    out.push_str("\\newtheorem{theorem}{定理}\n");
+    out.push_str("\\newtheorem{axiom}{公理}\n");
+    out.push_str("\\allowdisplaybreaks\n");
+    out.push_str("\\begin{document}\n\n");
+    if !title.is_empty() {
+        let t = title.replace('_', "\\_").replace('&', "\\&").replace('%', "\\%").replace('#', "\\#");
+        out.push_str(&format!("\\begin{{center}}{{\\Large {t}}}\\end{{center}}\n\n"));
+    }
+    for (d, steps) in items {
+        out.push_str(&decl_to_latex_env(d, steps));
+        out.push('\n');
+    }
+    out.push_str("\\end{document}\n");
+    out
+}
+
 /// 1つの宣言を提出レポート用の LaTeX ソース（theorem + proof 環境）に変換する
 pub fn decl_to_latex_env(d: &Decl, steps: &[StepTrace]) -> String {
+    // 文は見出しの下に、別行の数式として置く（見出しの横に置くと上下中央にそろって間が空く）
+    let statement = format!("\\leavevmode\n\\[\n{}\n\\]", decl_header_latex(d));
     if d.is_axiom {
-        return format!(
-            "\\begin{{axiom}}[{}]\n${}$\n\\end{{axiom}}\n",
-            d.name.replace('_', "\\_"),
-            decl_header_latex(d)
-        );
+        return format!("\\begin{{axiom}}[{}]{statement}\n\\end{{axiom}}\n", d.name.replace('_', "\\_"));
     }
     let prose = decl_to_japanese_prose(d, steps);
     let mut body = String::new();
     for b in prose {
         let indent = "  ".repeat(b.depth);
-        let line = b.text.replace("**", "");
+        // 証明の終わりの印は proof 環境の □ に任せる
+        let line = b.text.replace("**", "").replace("$\\blacksquare$", "");
         body.push_str(&format!("{indent}{line}\n\n"));
     }
     format!(
-        "\\begin{{theorem}}[{}]\n${}$\n\\end{{theorem}}\n\\begin{{proof}}\n{}\\end{{proof}}\n",
+        "\\begin{{theorem}}[{}]{statement}\n\\end{{theorem}}\n\\begin{{proof}}\n{}\\end{{proof}}\n",
         d.name.replace('_', "\\_"),
-        decl_header_latex(d),
         body
     )
 }

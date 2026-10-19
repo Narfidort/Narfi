@@ -11,16 +11,24 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 
 const WEB_UI_HTML: &str = include_str!("web_ui.html");
 
-pub fn serve(port: u16, open_browser: bool) -> std::io::Result<()> {
+/// 待ち受けているポート（Host・Origin の確認に使う）
+static PORT: AtomicU16 = AtomicU16::new(0);
+
+pub fn serve(port: u16, open_browser: bool, dir: Option<PathBuf>) -> std::io::Result<()> {
+    init_workspace(dir);
+    PORT.store(port, Ordering::SeqCst);
     let addr = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&addr)?;
     let url = format!("http://{addr}");
     println!("============================================================");
     println!("  Narfi Live Editor & Execution Environment");
     println!("  URL: {url}");
+    println!("  作業フォルダ: {}", workspace_root().display());
     println!("  終了するには Ctrl+C を押してください");
     println!("============================================================");
 
@@ -82,6 +90,12 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
     let body =
         String::from_utf8_lossy(&data[hend..(hend + content_length).min(data.len())]).to_string();
 
+    // ほかの Web サイトからこのサーバーを使わせない（ファイルの読み書きができるため）。
+    // Host が自分自身であること（DNS リバインディング対策）、Origin があれば自分自身であること。
+    if !request_is_local(&req_header) {
+        return send_response(&mut stream, 403, "text/plain; charset=utf-8", "forbidden".as_bytes());
+    }
+
     match (method, path) {
         ("GET", "/") | ("GET", "/index.html") => send_response(
             &mut stream,
@@ -89,6 +103,13 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             "text/html; charset=utf-8",
             WEB_UI_HTML.as_bytes(),
         ),
+        ("GET", p) if p.starts_with("/assets/katex/") => {
+            let name = &p["/assets/katex/".len()..];
+            match crate::assets::KATEX_FILES.iter().find(|(n, _)| *n == name) {
+                Some((n, bytes)) => send_response(&mut stream, 200, crate::assets::content_type(n), bytes),
+                None => send_response(&mut stream, 404, "text/plain", b"not found"),
+            }
+        }
         ("POST", "/api/check") => {
             let src = json_get_str(&body, "src").unwrap_or_default();
             let cursor_line = json_get_usize(&body, "cursor_line");
@@ -128,7 +149,7 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
         }
         ("GET", "/api/file") => {
             let rel = query_param(query, "path").unwrap_or_default();
-            match safe_resolve_path(&rel) {
+            match resolve_readable(&rel) {
                 Some(p) => match std::fs::read_to_string(&p) {
                     Ok(content) => {
                         let res = format!(
@@ -166,7 +187,7 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             let rel = json_get_str(&body, "path").unwrap_or_default();
             let src = json_get_str(&body, "src").unwrap_or_default();
             match safe_resolve_path(&rel) {
-                Some(p) => match std::fs::write(&p, &src) {
+                Some(p) => match p.parent().map(std::fs::create_dir_all).unwrap_or(Ok(())).and_then(|_| std::fs::write(&p, &src)) {
                     Ok(()) => {
                         let res = format!("{{\"ok\":true,\"path\":{}}}", json_str(&rel));
                         send_response(
@@ -193,6 +214,64 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
                     "application/json; charset=utf-8",
                     b"{\"ok\":false,\"error\":\"invalid path\"}",
                 ),
+            }
+        }
+        ("GET", "/api/workspace") => {
+            let res = api_workspace();
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/open-folder") => {
+            let path = json_get_str(&body, "path").unwrap_or_default();
+            let dir = if path.is_empty() { mac_choose_folder() } else { Some(PathBuf::from(path)) };
+            let res = match dir {
+                Some(d) if d.is_dir() => {
+                    set_workspace(d);
+                    api_workspace()
+                }
+                Some(d) => json_err(&format!("フォルダがない：{}", d.display())),
+                None => json_cancel(),
+            };
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/open-file") => {
+            let res = match mac_choose_file() {
+                Some(p) => api_open_abs(&p),
+                None => json_cancel(),
+            };
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/save-as") => {
+            let src = json_get_str(&body, "src").unwrap_or_default();
+            let name = json_get_str(&body, "name").unwrap_or_else(|| "note.narfi".into());
+            let res = match mac_choose_save(&name) {
+                Some(mut p) => {
+                    if p.extension().is_none() {
+                        p.set_extension("narfi");
+                    }
+                    match std::fs::write(&p, &src) {
+                        Ok(()) => api_open_abs(&p),
+                        Err(e) => json_err(&e.to_string()),
+                    }
+                }
+                None => json_cancel(),
+            };
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
+        }
+        ("POST", "/api/reveal") => {
+            let target = json_get_str(&body, "target").unwrap_or_default();
+            let dir = if target == "lib" { user_lib_dir() } else { Some(workspace_root()) };
+            if let Some(d) = dir {
+                let _ = std::fs::create_dir_all(&d);
+                let _ = Command::new("open").arg(&d).spawn();
+            }
+            send_response(&mut stream, 200, "application/json; charset=utf-8", b"{\"ok\":true}")
+        }
+        ("POST", "/api/pdf") => {
+            let src = json_get_str(&body, "src").unwrap_or_default();
+            let path = json_get_str(&body, "path").unwrap_or_default();
+            match api_pdf(&src, &path) {
+                Ok(pdf) => send_response(&mut stream, 200, "application/pdf", &pdf),
+                Err(e) => send_response(&mut stream, 400, "application/json; charset=utf-8", json_err(&e).as_bytes()),
             }
         }
         ("GET", "/api/ai/providers") => {
@@ -230,11 +309,12 @@ fn send_response(
     let status_text = match status {
         200 => "OK",
         400 => "Bad Request",
+        403 => "Forbidden",
         404 => "Not Found",
         _ => "Error",
     };
     let header = format!(
-        "HTTP/1.1 {status} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         body.len()
     );
     stream.write_all(header.as_bytes())?;
@@ -501,7 +581,55 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
 
 // ================================================================ ファイル管理
 
+// ================================================================ 作業フォルダ・ライブラリ
+
+static WORKSPACE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn narfi_home() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".narfi"))
+}
+
+/// 自分用のライブラリ（~/.narfi/lib）。import の探索先にもなる（module.rs）
+pub fn user_lib_dir() -> Option<PathBuf> {
+    narfi_home().map(|h| h.join("lib"))
+}
+
+fn std_lib_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("lib")
+}
+
+/// 起動時：--dir、前回のフォルダ（~/.narfi/workspace）、カレントディレクトリの順
+fn init_workspace(dir: Option<PathBuf>) {
+    if let Some(lib) = user_lib_dir() {
+        let _ = std::fs::create_dir_all(lib);
+    }
+    let saved = narfi_home()
+        .and_then(|h| std::fs::read_to_string(h.join("workspace")).ok())
+        .map(|s| PathBuf::from(s.trim()))
+        .filter(|p| p.is_dir());
+    match dir.or(saved) {
+        Some(d) => set_workspace(d),
+        None => {}
+    }
+}
+
+fn set_workspace(d: PathBuf) {
+    let d = d.canonicalize().unwrap_or(d);
+    if let Some(h) = narfi_home() {
+        let _ = std::fs::create_dir_all(&h);
+        let _ = std::fs::write(h.join("workspace"), d.to_string_lossy().as_bytes());
+    }
+    *WORKSPACE.lock().unwrap() = Some(d);
+}
+
 fn workspace_root() -> PathBuf {
+    if let Some(d) = WORKSPACE.lock().unwrap().clone() {
+        return d;
+    }
+    default_workspace()
+}
+
+fn default_workspace() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     if cwd.ends_with("narfi") {
         if let Some(parent) = cwd.parent() {
@@ -519,6 +647,182 @@ fn safe_resolve_path(rel: &str) -> Option<PathBuf> {
     }
     let root = workspace_root();
     Some(root.join(rel))
+}
+
+/// 読めるファイル：作業フォルダの相対パス、または `lib:user/…`・`lib:std/…`（ライブラリ、読み取り専用）
+fn resolve_readable(rel: &str) -> Option<PathBuf> {
+    if let Some(rest) = rel.strip_prefix("lib:") {
+        let (label, sub) = rest.split_once('/')?;
+        if sub.contains("..") || Path::new(sub).is_absolute() {
+            return None;
+        }
+        let base = match label {
+            "user" => user_lib_dir()?,
+            "std" => std_lib_dir(),
+            _ => return None,
+        };
+        return Some(base.join(sub));
+    }
+    safe_resolve_path(rel)
+}
+
+fn json_err(msg: &str) -> String {
+    format!("{{\"ok\":false,\"error\":{}}}", json_str(msg))
+}
+
+fn json_cancel() -> String {
+    "{\"ok\":false,\"cancelled\":true}".to_string()
+}
+
+fn list_narfi(dir: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    collect_narfi_files(dir, dir, &mut files);
+    files.sort();
+    files
+}
+
+fn api_workspace() -> String {
+    let root = workspace_root();
+    let name = root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let mut libs = Vec::new();
+    if let Some(u) = user_lib_dir() {
+        libs.push(format!(
+            "{{\"label\":\"user\",\"dir\":{},\"files\":{}}}",
+            json_str(&u.to_string_lossy()),
+            json_str_array(&list_narfi(&u))
+        ));
+    }
+    let s = std_lib_dir();
+    libs.push(format!(
+        "{{\"label\":\"std\",\"dir\":{},\"files\":{}}}",
+        json_str(&s.to_string_lossy()),
+        json_str_array(&list_narfi(&s))
+    ));
+    format!(
+        "{{\"ok\":true,\"root\":{},\"name\":{},\"files\":{},\"libs\":[{}],\"dialogs\":{}}}",
+        json_str(&root.to_string_lossy()),
+        json_str(&name),
+        json_str_array(&list_narfi(&root)),
+        libs.join(","),
+        cfg!(target_os = "macos")
+    )
+}
+
+/// 絶対パスのファイルを開く。作業フォルダの外なら、そのファイルのフォルダを作業フォルダにする。
+fn api_open_abs(p: &Path) -> String {
+    let p = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let root = workspace_root();
+    let rel = match p.strip_prefix(&root) {
+        Ok(r) => r.to_path_buf(),
+        Err(_) => {
+            if let Some(parent) = p.parent() {
+                set_workspace(parent.to_path_buf());
+            }
+            PathBuf::from(p.file_name().unwrap_or_default())
+        }
+    };
+    match std::fs::read_to_string(&p) {
+        Ok(src) => format!(
+            "{{\"ok\":true,\"path\":{},\"src\":{},\"root\":{}}}",
+            json_str(&rel.to_string_lossy()),
+            json_str(&src),
+            json_str(&workspace_root().to_string_lossy())
+        ),
+        Err(e) => json_err(&e.to_string()),
+    }
+}
+
+// ---------------------------------------------------------------- macOS の標準ダイアログ（osascript）
+
+fn osascript(lines: &[String]) -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let mut cmd = Command::new("osascript");
+    for l in lines {
+        cmd.arg("-e").arg(l);
+    }
+    let out = cmd.output().ok()?;
+    if !out.status.success() {
+        return None; // キャンセル
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+fn applescript_str(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// ダイアログを前面に出すため、System Events の中で開く
+fn front_dialog(expr: &str) -> Vec<String> {
+    vec![
+        "tell application \"System Events\"".into(),
+        "activate".into(),
+        format!("set p to POSIX path of ({expr})"),
+        "end tell".into(),
+        "return p".into(),
+    ]
+}
+
+fn mac_choose_folder() -> Option<PathBuf> {
+    let root = workspace_root();
+    let expr = format!(
+        "choose folder with prompt \"Narfi：作業フォルダを選ぶ\" default location (POSIX file {})",
+        applescript_str(&root.to_string_lossy())
+    );
+    osascript(&front_dialog(&expr)).map(PathBuf::from)
+}
+
+fn mac_choose_file() -> Option<PathBuf> {
+    let root = workspace_root();
+    let expr = format!(
+        "choose file with prompt \"Narfi：開くファイル\" default location (POSIX file {})",
+        applescript_str(&root.to_string_lossy())
+    );
+    osascript(&front_dialog(&expr)).map(PathBuf::from)
+}
+
+fn mac_choose_save(name: &str) -> Option<PathBuf> {
+    let root = workspace_root();
+    let expr = format!(
+        "choose file name with prompt \"Narfi：保存先\" default name {} default location (POSIX file {})",
+        applescript_str(name),
+        applescript_str(&root.to_string_lossy())
+    );
+    osascript(&front_dialog(&expr)).map(PathBuf::from)
+}
+
+// ---------------------------------------------------------------- PDF（LuaLaTeX）
+
+static PDF_SEQ: AtomicU64 = AtomicU64::new(0);
+
+fn api_pdf(src: &str, path: &str) -> Result<Vec<u8>, String> {
+    let file = safe_resolve_path(path).unwrap_or_else(|| workspace_root().join("untitled.narfi"));
+    let (_, m, reports) = load_and_check(src, Some(&file)).map_err(|e| format!("{}行目：{}", e.line, e.msg))?;
+    let decls: Vec<&Decl> = m.decls().collect();
+    let items: Vec<(&Decl, &[crate::elab::StepTrace])> =
+        decls.iter().zip(reports.iter()).map(|(d, r)| (*d, r.steps.as_slice())).collect();
+    let title = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let tex = prose::latex_document(&title, &items);
+    let dir = std::env::temp_dir().join(format!("narfi-pdf-{}-{}", std::process::id(), PDF_SEQ.fetch_add(1, Ordering::SeqCst)));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("doc.tex"), tex).map_err(|e| e.to_string())?;
+    let out = Command::new("latexmk")
+        .args(["-lualatex", "-interaction=nonstopmode", "-halt-on-error", "doc.tex"])
+        .current_dir(&dir)
+        .output()
+        .map_err(|_| "LaTeX（latexmk・lualatex）が見つからない。TeX をインストールするか「印刷」を使う".to_string())?;
+    let pdf = std::fs::read(dir.join("doc.pdf"));
+    let log = std::fs::read_to_string(dir.join("doc.log")).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+    match pdf {
+        Ok(p) if out.status.success() => Ok(p),
+        _ => {
+            let err: Vec<&str> = log.lines().filter(|l| l.starts_with('!')).take(3).collect();
+            Err(format!("LaTeX のコンパイルに失敗した：{}", err.join(" / ")))
+        }
+    }
 }
 
 fn api_list_files() -> String {
@@ -899,4 +1203,22 @@ fn url_decode(s: &str) -> String {
         }
     }
     String::from_utf8_lossy(&bytes).to_string()
+}
+
+/// Host が自分自身で、Origin（あれば）も自分自身のリクエストか
+fn request_is_local(header: &str) -> bool {
+    let port = PORT.load(Ordering::SeqCst);
+    let ok_hosts = [format!("127.0.0.1:{port}"), format!("localhost:{port}")];
+    let mut host_ok = false;
+    for line in header.lines() {
+        let Some((k, v)) = line.split_once(':') else { continue };
+        let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
+        if k == "host" {
+            host_ok = ok_hosts.iter().any(|h| h == v);
+        }
+        if k == "origin" && !ok_hosts.iter().any(|h| v == format!("http://{h}")) {
+            return false;
+        }
+    }
+    host_ok
 }

@@ -36,6 +36,10 @@ impl Loader {
         let mut search: Vec<PathBuf> = std::env::var("NARFI_PATH")
             .map(|v| v.split(':').filter(|s| !s.is_empty()).map(PathBuf::from).collect())
             .unwrap_or_default();
+        // 自分用のライブラリ（~/.narfi/lib）、同梱の標準ライブラリの順
+        if let Some(h) = std::env::var_os("HOME") {
+            search.push(PathBuf::from(h).join(".narfi").join("lib"));
+        }
         search.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("lib"));
         let ld = Loader {
             search,

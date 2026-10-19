@@ -117,3 +117,24 @@ fn source_conversion_preserves_proofs() {
         }
     }
 }
+
+/// エディタの往復でコメント・見出しの行が失われないこと（自動保存でファイルから消えないように）
+#[test]
+fn editor_roundtrip_keeps_comments() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("node がないので飛ばす");
+        return;
+    }
+    let comment_lines = |s: &str| -> Vec<String> {
+        s.lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("--") || l.starts_with("//") || l.starts_with('#'))
+            .map(String::from)
+            .collect()
+    };
+    for f in FILES {
+        let src = std::fs::read_to_string(f).unwrap();
+        let once = roundtrip(Path::new(f));
+        assert_eq!(comment_lines(&src), comment_lines(&once), "{f}: エディタを通すとコメントが変わる");
+    }
+}

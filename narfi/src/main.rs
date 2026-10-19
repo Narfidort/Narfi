@@ -1,4 +1,5 @@
 mod arith;
+mod assets;
 mod elab;
 mod kernel;
 mod module;
@@ -17,7 +18,7 @@ use std::process::ExitCode;
 fn usage() -> ExitCode {
     eprintln!("使い方:");
     eprintln!("  narfi check [--trace] <ファイル.narfi>...   定理の検証");
-    eprintln!("  narfi web [--port 3000] [--no-open]         Mathcha風 Web エディタを起動");
+    eprintln!("  narfi web [--port 3000] [--no-open] [--dir フォルダ]  Web エディタを起動");
     eprintln!("  narfi prose <ファイル.narfi>                自然な日本語の証明文(Markdown)を出力");
     eprintln!("  narfi latex <ファイル.narfi>                提出用 LaTeX ソースを出力");
     eprintln!("  narfi convert --jp|--std <ファイル.narfi>   日本語シュガー／標準の ASCII に変換");
@@ -34,6 +35,7 @@ fn main() -> ExitCode {
         "web" => {
             let mut port: u16 = 3000;
             let mut open_browser = true;
+            let mut dir: Option<std::path::PathBuf> = None;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -47,10 +49,14 @@ fn main() -> ExitCode {
                         open_browser = false;
                         i += 1;
                     }
+                    "--dir" | "-d" => {
+                        dir = args.get(i + 1).map(std::path::PathBuf::from);
+                        i += 2;
+                    }
                     _ => i += 1,
                 }
             }
-            if let Err(e) = web::serve(port, open_browser) {
+            if let Err(e) = web::serve(port, open_browser, dir) {
                 eprintln!("Webサーバーの起動に失敗しました: {e}");
                 return ExitCode::FAILURE;
             }
@@ -118,15 +124,9 @@ fn main() -> ExitCode {
                     println!();
                 }
             } else {
-                println!("\\documentclass[a4paper,11pt]{{ltjsarticle}}");
-                println!("\\usepackage{{amsmath,amssymb,amsthm}}");
-                println!("\\newtheorem{{theorem}}{{定理}}");
-                println!("\\newtheorem{{axiom}}{{公理}}");
-                println!("\\begin{{document}}\n");
-                for (d, r) in decls.iter().zip(reports.iter()) {
-                    println!("{}", prose::decl_to_latex_env(d, &r.steps));
-                }
-                println!("\\end{{document}}");
+                let items: Vec<(&parser::Decl, &[elab::StepTrace])> =
+                    decls.iter().zip(reports.iter()).map(|(d, r)| (*d, r.steps.as_slice())).collect();
+                print!("{}", prose::latex_document("", &items));
             }
             return ExitCode::SUCCESS;
         }
