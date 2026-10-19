@@ -160,8 +160,9 @@ impl KEnv {
             match body {
                 DefBody::Pred(f) => ctx.check_f(f)?,
                 DefBody::Term(s, t) => {
-                    if !ctx.valid_sort(s) || s.contains('→') || s == "Prop" {
-                        return kerr(format!("項の定義の値の型 `{s}` は使えない（関数・命題を値にする定義はまだ書けない）"));
+                    // 値が関数の定義（行列の積など）も、閉じた項に名前を付けるだけなので保守的（矛盾を持ち込まない）
+                    if !ctx.valid_sort(s) || s == "Prop" {
+                        return kerr(format!("項の定義の値の型 `{s}` は使えない（命題を値にするなら述語の def を使う）"));
                     }
                     ctx.check_sort(t, s)?;
                 }

@@ -448,6 +448,10 @@ impl<'a> KCtx<'a> {
         match t {
             Term::App(f, args) => {
                 let args: Vec<Term> = args.iter().map(|a| self.unfold_terms(a)).collect();
+                // β：展開して λ になった頭を、残りの引数に適用する（mmul(A, B, n)(i, j)）
+                if f == "@" && matches!(args.first(), Some(Term::Lam(..))) {
+                    return self.unfold_terms(&crate::syntax::apply_term(&args[0], &args[1..]));
+                }
                 match self.env.defs.get(f) {
                     Some(KDef { params, body: DefBody::Term(_, b) }) if params.len() == args.len() => {
                         let subs: Vec<(String, Term)> =

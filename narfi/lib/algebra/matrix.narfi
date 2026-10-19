@@ -1,0 +1,521 @@
+-- 行列：n×n 行列を関数 ℕ × ℕ → ℝ で表す（使うのは i, j < n の成分）
+
+import algebra.sum
+
+-- ---------------------------------------------------------------- 準備
+
+-- 排中律（古典論理）
+thm em :
+  P : Prop
+  ⊢ P ∨ ¬P
+
+by_contra h
+  have np : ¬P
+    assume p : P
+      h(or.left(p))
+  h(or.right(np))
+
+-- 自然数は 0 か、ある m の次
+thm nat.cases :
+  ⊢ ∀n:ℕ. n = 0 ∨ (∃m:ℕ. n = S(m))
+
+Fix n
+  induction n
+    Case zero
+      choose left
+      refl
+    Case succ k, IH : k = 0 ∨ (∃m:ℕ. k = S(m))
+      choose right
+      choose k
+      refl
+
+-- 2 より小さい自然数は 0 か 1
+thm nat.lt2 :
+  ⊢ ∀n:ℕ. n < 2 → n = 0 ∨ n = 1
+
+Fix n | h : n < 2
+  have c : n = 0 ∨ (∃m:ℕ. n = S(m)) := nat.cases(n)
+  cases c
+    Case left z
+      choose left
+      z
+    Case right e
+      Obtain m, hm : e
+      have d : m = 0 ∨ (∃p:ℕ. m = S(p)) := nat.cases(m)
+      cases d
+        Case left mz
+          choose right
+          n
+            = S(m)   by hm
+            = S(0)   by EQ2(mz, refl)
+            = 1      by ring
+        Case right f
+          Obtain p, hp : f
+          have q : p ≥ 0 := nat.nonneg(p)
+          have r : n = S(S(p)) := EQ2(hp, hm)
+          choose right
+          linarith
+
+-- クロネッカーのデルタ δ(i, j)：i = j なら 1、そうでなければ 0
+def isdelta(i : ℕ, j : ℕ, x : ℝ) := (i = j ∧ x = 1) ∨ (¬(i = j) ∧ x = 0)
+def delta(i : ℕ, j : ℕ) : ℝ := some({x : ℝ | isdelta(i, j, x)})
+
+thm delta.exists :
+  ⊢ ∀i:ℕ. ∀j:ℕ. ∃x:ℝ. isdelta(i, j, x)
+
+Fix i, j
+  have c : i = j ∨ ¬(i = j) := em
+  cases c
+    Case left e
+      choose 1
+      choose left
+      e, refl
+    Case right ne
+      choose 0
+      choose right
+      ne, refl
+
+thm delta.spec :
+  ⊢ ∀i:ℕ. ∀j:ℕ. isdelta(i, j, delta(i, j))
+
+Fix i, j
+  choice({x : ℝ | isdelta(i, j, x)}, delta.exists(i, j))
+
+thm delta.same :
+  ⊢ ∀i:ℕ. delta(i, i) = 1
+
+Fix i
+  have s : isdelta(i, i, delta(i, i)) := delta.spec(i, i)
+  cases s
+    Case left a
+      a.right
+    Case right b
+      have e : i = i := refl
+      bot.elim(b.left(e))
+
+thm delta.diff :
+  ⊢ ∀i:ℕ. ∀j:ℕ. ¬(i = j) → delta(i, j) = 0
+
+Fix i, j
+  assume ne : ¬(i = j)
+    have s : isdelta(i, j, delta(i, j)) := delta.spec(i, j)
+    cases s
+      Case left a
+        bot.elim(ne(a.left))
+      Case right b
+        b.right
+
+-- ---------------------------------------------------------------- 行列の演算
+
+def madd(A : ℕ × ℕ → ℝ, B : ℕ × ℕ → ℝ) : ℕ × ℕ → ℝ := ((i, j) : ℕ × ℕ ↦ A(i, j) + B(i, j))
+def msmul(c : ℝ, A : ℕ × ℕ → ℝ) : ℕ × ℕ → ℝ := ((i, j) : ℕ × ℕ ↦ c * A(i, j))
+def mmul(A : ℕ × ℕ → ℝ, B : ℕ × ℕ → ℝ, n : ℕ) : ℕ × ℕ → ℝ := ((i, j) : ℕ × ℕ ↦ sum((k : ℕ ↦ A(i, k) * B(k, j)), n))
+def mid(i : ℕ, j : ℕ) : ℝ := delta(i, j)
+def mtr(A : ℕ × ℕ → ℝ, n : ℕ) : ℝ := sum((k : ℕ ↦ A(k, k)), n)
+
+-- 2 項の和
+thm sum.two :
+  ⊢ ∀a:ℕ → ℝ. sum(a, 2) = a_0 + a_1
+
+Fix a
+  sum(a, 2)
+    = sum(a, 1) + a_1         by sum.succ(a, 1)
+    = sum(a, 0) + a_0 + a_1   by sum.succ(a, 0)
+    = a_0 + a_1               by sum.zero(a)
+
+-- 積の成分（2×2）
+thm mmul.two :
+  ⊢ ∀A:ℕ × ℕ → ℝ. ∀B:ℕ × ℕ → ℝ. ∀i:ℕ. ∀j:ℕ. mmul(A, B, 2)(i, j) = A(i, 0) * B(0, j) + A(i, 1) * B(1, j)
+
+Fix A, B, i, j
+  sum.two((k : ℕ ↦ A(i, k) * B(k, j)))
+
+-- ---------------------------------------------------------------- 2×2 のケイリー・ハミルトンの定理
+-- A² − tr(A)·A + det(A)·I = O
+
+def det2(A : ℕ × ℕ → ℝ) : ℝ := A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0)
+
+thm mtr.two :
+  ⊢ ∀A:ℕ × ℕ → ℝ. mtr(A, 2) = A(0, 0) + A(1, 1)
+
+Fix A
+  sum.two((k : ℕ ↦ A(k, k)))
+
+-- 成分ごと：(i, j) = (0, 0)
+thm ch2.e00 :
+  ⊢ ∀A:ℕ × ℕ → ℝ. mmul(A, A, 2)(0, 0) - mtr(A, 2) * A(0, 0) + det2(A) * mid(0, 0) = 0
+
+Fix A
+  have m : mmul(A, A, 2)(0, 0) = A(0, 0) * A(0, 0) + A(0, 1) * A(1, 0) := mmul.two(A, A, 0, 0)
+  have d : mid(0, 0) = 1 := delta.same(0)
+  mmul(A, A, 2)(0, 0) - mtr(A, 2) * A(0, 0) + det2(A) * mid(0, 0)
+    = mmul(A, A, 2)(0, 0) - (A(0, 0) + A(1, 1)) * A(0, 0) + det2(A) * mid(0, 0)   by EQ2(mtr.two(A), refl)
+    = mmul(A, A, 2)(0, 0) - (A(0, 0) + A(1, 1)) * A(0, 0) + det2(A) * 1          by EQ2(d, refl)
+    = 0                                                                          by m
+
+-- (i, j) = (0, 1)
+thm ch2.e01 :
+  ⊢ ∀A:ℕ × ℕ → ℝ. mmul(A, A, 2)(0, 1) - mtr(A, 2) * A(0, 1) + det2(A) * mid(0, 1) = 0
+
+Fix A
+  have m : mmul(A, A, 2)(0, 1) = A(0, 0) * A(0, 1) + A(0, 1) * A(1, 1) := mmul.two(A, A, 0, 1)
+  have ne : ¬(0 = 1) := decide
+  have d : mid(0, 1) = 0 := delta.diff(0, 1, ne)
+  mmul(A, A, 2)(0, 1) - mtr(A, 2) * A(0, 1) + det2(A) * mid(0, 1)
+    = mmul(A, A, 2)(0, 1) - (A(0, 0) + A(1, 1)) * A(0, 1) + det2(A) * mid(0, 1)   by EQ2(mtr.two(A), refl)
+    = mmul(A, A, 2)(0, 1) - (A(0, 0) + A(1, 1)) * A(0, 1) + det2(A) * 0          by EQ2(d, refl)
+    = 0                                                                          by m
+
+-- (i, j) = (1, 0)
+thm ch2.e10 :
+  ⊢ ∀A:ℕ × ℕ → ℝ. mmul(A, A, 2)(1, 0) - mtr(A, 2) * A(1, 0) + det2(A) * mid(1, 0) = 0
+
+Fix A
+  have m : mmul(A, A, 2)(1, 0) = A(1, 0) * A(0, 0) + A(1, 1) * A(1, 0) := mmul.two(A, A, 1, 0)
+  have ne : ¬(1 = 0) := decide
+  have d : mid(1, 0) = 0 := delta.diff(1, 0, ne)
+  mmul(A, A, 2)(1, 0) - mtr(A, 2) * A(1, 0) + det2(A) * mid(1, 0)
+    = mmul(A, A, 2)(1, 0) - (A(0, 0) + A(1, 1)) * A(1, 0) + det2(A) * mid(1, 0)   by EQ2(mtr.two(A), refl)
+    = mmul(A, A, 2)(1, 0) - (A(0, 0) + A(1, 1)) * A(1, 0) + det2(A) * 0          by EQ2(d, refl)
+    = 0                                                                          by m
+
+-- (i, j) = (1, 1)
+thm ch2.e11 :
+  ⊢ ∀A:ℕ × ℕ → ℝ. mmul(A, A, 2)(1, 1) - mtr(A, 2) * A(1, 1) + det2(A) * mid(1, 1) = 0
+
+Fix A
+  have m : mmul(A, A, 2)(1, 1) = A(1, 0) * A(0, 1) + A(1, 1) * A(1, 1) := mmul.two(A, A, 1, 1)
+  have d : mid(1, 1) = 1 := delta.same(1)
+  mmul(A, A, 2)(1, 1) - mtr(A, 2) * A(1, 1) + det2(A) * mid(1, 1)
+    = mmul(A, A, 2)(1, 1) - (A(0, 0) + A(1, 1)) * A(1, 1) + det2(A) * mid(1, 1)   by EQ2(mtr.two(A), refl)
+    = mmul(A, A, 2)(1, 1) - (A(0, 0) + A(1, 1)) * A(1, 1) + det2(A) * 1          by EQ2(d, refl)
+    = 0                                                                          by m
+
+thm cayley_hamilton2 :
+  ⊢ ∀A:ℕ × ℕ → ℝ. ∀i:ℕ. ∀j:ℕ. i < 2 → j < 2 → mmul(A, A, 2)(i, j) - mtr(A, 2) * A(i, j) + det2(A) * mid(i, j) = 0
+
+Fix A, i, j
+  assume hi : i < 2
+    assume hj : j < 2
+      have ci : i = 0 ∨ i = 1 := nat.lt2(i, hi)
+      have cj : j = 0 ∨ j = 1 := nat.lt2(j, hj)
+      cases ci
+        Case left i0
+          cases cj
+            Case left j0
+              have h : mmul(A, A, 2)(0, j) - mtr(A, 2) * A(0, j) + det2(A) * mid(0, j) = 0 := EQ2(eq.symm(j0), ch2.e00(A))
+              EQ2(eq.symm(i0), h)
+            Case right j1
+              have h : mmul(A, A, 2)(0, j) - mtr(A, 2) * A(0, j) + det2(A) * mid(0, j) = 0 := EQ2(eq.symm(j1), ch2.e01(A))
+              EQ2(eq.symm(i0), h)
+        Case right i1
+          cases cj
+            Case left j0
+              have h : mmul(A, A, 2)(1, j) - mtr(A, 2) * A(1, j) + det2(A) * mid(1, j) = 0 := EQ2(eq.symm(j0), ch2.e10(A))
+              EQ2(eq.symm(i1), h)
+            Case right j1
+              have h : mmul(A, A, 2)(1, j) - mtr(A, 2) * A(1, j) + det2(A) * mid(1, j) = 0 := EQ2(eq.symm(j1), ch2.e11(A))
+              EQ2(eq.symm(i1), h)
+
+-- ---------------------------------------------------------------- 一般の n：分配法則 (A + B)C = AC + BC
+
+thm mmul.add_left :
+  ⊢ ∀A:ℕ × ℕ → ℝ. ∀B:ℕ × ℕ → ℝ. ∀C:ℕ × ℕ → ℝ. ∀n:ℕ. ∀i:ℕ. ∀j:ℕ. mmul(madd(A, B), C, n)(i, j) = madd(mmul(A, C, n), mmul(B, C, n))(i, j)
+
+Fix A, B, C, n, i, j
+  have pw : ∀k:ℕ. (A(i, k) + B(i, k)) * C(k, j) = A(i, k) * C(k, j) + B(i, k) * C(k, j)
+    Fix k
+      ring
+  have f : (k : ℕ ↦ (A(i, k) + B(i, k)) * C(k, j)) = (k : ℕ ↦ A(i, k) * C(k, j) + B(i, k) * C(k, j)) := funext((k : ℕ ↦ (A(i, k) + B(i, k)) * C(k, j)), (k : ℕ ↦ A(i, k) * C(k, j) + B(i, k) * C(k, j)), pw)
+  mmul(madd(A, B), C, n)(i, j)
+    = sum((k : ℕ ↦ (A(i, k) + B(i, k)) * C(k, j)), n)                         by refl
+    = sum((k : ℕ ↦ A(i, k) * C(k, j) + B(i, k) * C(k, j)), n)                  by EQ2(f, refl)
+    = sum((k : ℕ ↦ A(i, k) * C(k, j)), n) + sum((k : ℕ ↦ B(i, k) * C(k, j)), n)  by sum.add((k : ℕ ↦ A(i, k) * C(k, j)), (k : ℕ ↦ B(i, k) * C(k, j)), n)
+    = madd(mmul(A, C, n), mmul(B, C, n))(i, j)                                by refl
+
+-- ---------------------------------------------------------------- 行列の書き方 [[a, b], [c, d]]
+
+-- 2×2 の行列 [[…], …]（成分は δ で選ぶ）
+def mat2(a00 : ℝ, a01 : ℝ, a10 : ℝ, a11 : ℝ) : ℕ × ℕ → ℝ := ((i, j) : ℕ × ℕ ↦ a00 * delta(i, 0) * delta(j, 0) + a01 * delta(i, 0) * delta(j, 1) + a10 * delta(i, 1) * delta(j, 0) + a11 * delta(i, 1) * delta(j, 1))
+
+thm mat2.e00 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a10:ℝ. ∀a11:ℝ. mat2(a00, a01, a10, a11)(0, 0) = a00
+
+Fix a00, a01, a10, a11
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  mat2(a00, a01, a10, a11)(0, 0)
+    = a00 * delta(0, 0) * delta(0, 0) + a01 * delta(0, 0) * delta(0, 1) + a10 * delta(0, 1) * delta(0, 0) + a11 * delta(0, 1) * delta(0, 1)   by refl
+    = a00 * 1 * 1 + a01 * 1 * delta(0, 1) + a10 * delta(0, 1) * 1 + a11 * delta(0, 1) * delta(0, 1)   by EQ2(d00, refl)
+    = a00 * 1 * 1 + a01 * 1 * 0 + a10 * 0 * 1 + a11 * 0 * 0   by EQ2(d01, refl)
+    = a00   by ring
+
+thm mat2.e01 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a10:ℝ. ∀a11:ℝ. mat2(a00, a01, a10, a11)(0, 1) = a01
+
+Fix a00, a01, a10, a11
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  mat2(a00, a01, a10, a11)(0, 1)
+    = a00 * delta(0, 0) * delta(1, 0) + a01 * delta(0, 0) * delta(1, 1) + a10 * delta(0, 1) * delta(1, 0) + a11 * delta(0, 1) * delta(1, 1)   by refl
+    = a00 * 1 * delta(1, 0) + a01 * 1 * delta(1, 1) + a10 * delta(0, 1) * delta(1, 0) + a11 * delta(0, 1) * delta(1, 1)   by EQ2(d00, refl)
+    = a00 * 1 * delta(1, 0) + a01 * 1 * delta(1, 1) + a10 * 0 * delta(1, 0) + a11 * 0 * delta(1, 1)   by EQ2(d01, refl)
+    = a00 * 1 * 0 + a01 * 1 * delta(1, 1) + a10 * 0 * 0 + a11 * 0 * delta(1, 1)   by EQ2(d10, refl)
+    = a00 * 1 * 0 + a01 * 1 * 1 + a10 * 0 * 0 + a11 * 0 * 1   by EQ2(d11, refl)
+    = a01   by ring
+
+thm mat2.e10 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a10:ℝ. ∀a11:ℝ. mat2(a00, a01, a10, a11)(1, 0) = a10
+
+Fix a00, a01, a10, a11
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  mat2(a00, a01, a10, a11)(1, 0)
+    = a00 * delta(1, 0) * delta(0, 0) + a01 * delta(1, 0) * delta(0, 1) + a10 * delta(1, 1) * delta(0, 0) + a11 * delta(1, 1) * delta(0, 1)   by refl
+    = a00 * delta(1, 0) * 1 + a01 * delta(1, 0) * delta(0, 1) + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * delta(0, 1)   by EQ2(d00, refl)
+    = a00 * delta(1, 0) * 1 + a01 * delta(1, 0) * 0 + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * 0   by EQ2(d01, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * 0   by EQ2(d10, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a10 * 1 * 1 + a11 * 1 * 0   by EQ2(d11, refl)
+    = a10   by ring
+
+thm mat2.e11 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a10:ℝ. ∀a11:ℝ. mat2(a00, a01, a10, a11)(1, 1) = a11
+
+Fix a00, a01, a10, a11
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  mat2(a00, a01, a10, a11)(1, 1)
+    = a00 * delta(1, 0) * delta(1, 0) + a01 * delta(1, 0) * delta(1, 1) + a10 * delta(1, 1) * delta(1, 0) + a11 * delta(1, 1) * delta(1, 1)   by refl
+    = a00 * 0 * 0 + a01 * 0 * delta(1, 1) + a10 * delta(1, 1) * 0 + a11 * delta(1, 1) * delta(1, 1)   by EQ2(d10, refl)
+    = a00 * 0 * 0 + a01 * 0 * 1 + a10 * 1 * 0 + a11 * 1 * 1   by EQ2(d11, refl)
+    = a11   by ring
+
+-- 3×3 の行列 [[…], …]（成分は δ で選ぶ）
+def mat3(a00 : ℝ, a01 : ℝ, a02 : ℝ, a10 : ℝ, a11 : ℝ, a12 : ℝ, a20 : ℝ, a21 : ℝ, a22 : ℝ) : ℕ × ℕ → ℝ := ((i, j) : ℕ × ℕ ↦ a00 * delta(i, 0) * delta(j, 0) + a01 * delta(i, 0) * delta(j, 1) + a02 * delta(i, 0) * delta(j, 2) + a10 * delta(i, 1) * delta(j, 0) + a11 * delta(i, 1) * delta(j, 1) + a12 * delta(i, 1) * delta(j, 2) + a20 * delta(i, 2) * delta(j, 0) + a21 * delta(i, 2) * delta(j, 1) + a22 * delta(i, 2) * delta(j, 2))
+
+thm mat3.e00 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(0, 0) = a00
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n02 : ¬(0 = 2) := decide
+  have d02 : delta(0, 2) = 0 := delta.diff(0, 2, n02)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(0, 0)
+    = a00 * delta(0, 0) * delta(0, 0) + a01 * delta(0, 0) * delta(0, 1) + a02 * delta(0, 0) * delta(0, 2) + a10 * delta(0, 1) * delta(0, 0) + a11 * delta(0, 1) * delta(0, 1) + a12 * delta(0, 1) * delta(0, 2) + a20 * delta(0, 2) * delta(0, 0) + a21 * delta(0, 2) * delta(0, 1) + a22 * delta(0, 2) * delta(0, 2)   by refl
+    = a00 * 1 * 1 + a01 * 1 * delta(0, 1) + a02 * 1 * delta(0, 2) + a10 * delta(0, 1) * 1 + a11 * delta(0, 1) * delta(0, 1) + a12 * delta(0, 1) * delta(0, 2) + a20 * delta(0, 2) * 1 + a21 * delta(0, 2) * delta(0, 1) + a22 * delta(0, 2) * delta(0, 2)   by EQ2(d00, refl)
+    = a00 * 1 * 1 + a01 * 1 * 0 + a02 * 1 * delta(0, 2) + a10 * 0 * 1 + a11 * 0 * 0 + a12 * 0 * delta(0, 2) + a20 * delta(0, 2) * 1 + a21 * delta(0, 2) * 0 + a22 * delta(0, 2) * delta(0, 2)   by EQ2(d01, refl)
+    = a00 * 1 * 1 + a01 * 1 * 0 + a02 * 1 * 0 + a10 * 0 * 1 + a11 * 0 * 0 + a12 * 0 * 0 + a20 * 0 * 1 + a21 * 0 * 0 + a22 * 0 * 0   by EQ2(d02, refl)
+    = a00   by ring
+
+thm mat3.e01 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(0, 1) = a01
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n02 : ¬(0 = 2) := decide
+  have d02 : delta(0, 2) = 0 := delta.diff(0, 2, n02)
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  have n12 : ¬(1 = 2) := decide
+  have d12 : delta(1, 2) = 0 := delta.diff(1, 2, n12)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(0, 1)
+    = a00 * delta(0, 0) * delta(1, 0) + a01 * delta(0, 0) * delta(1, 1) + a02 * delta(0, 0) * delta(1, 2) + a10 * delta(0, 1) * delta(1, 0) + a11 * delta(0, 1) * delta(1, 1) + a12 * delta(0, 1) * delta(1, 2) + a20 * delta(0, 2) * delta(1, 0) + a21 * delta(0, 2) * delta(1, 1) + a22 * delta(0, 2) * delta(1, 2)   by refl
+    = a00 * 1 * delta(1, 0) + a01 * 1 * delta(1, 1) + a02 * 1 * delta(1, 2) + a10 * delta(0, 1) * delta(1, 0) + a11 * delta(0, 1) * delta(1, 1) + a12 * delta(0, 1) * delta(1, 2) + a20 * delta(0, 2) * delta(1, 0) + a21 * delta(0, 2) * delta(1, 1) + a22 * delta(0, 2) * delta(1, 2)   by EQ2(d00, refl)
+    = a00 * 1 * delta(1, 0) + a01 * 1 * delta(1, 1) + a02 * 1 * delta(1, 2) + a10 * 0 * delta(1, 0) + a11 * 0 * delta(1, 1) + a12 * 0 * delta(1, 2) + a20 * delta(0, 2) * delta(1, 0) + a21 * delta(0, 2) * delta(1, 1) + a22 * delta(0, 2) * delta(1, 2)   by EQ2(d01, refl)
+    = a00 * 1 * delta(1, 0) + a01 * 1 * delta(1, 1) + a02 * 1 * delta(1, 2) + a10 * 0 * delta(1, 0) + a11 * 0 * delta(1, 1) + a12 * 0 * delta(1, 2) + a20 * 0 * delta(1, 0) + a21 * 0 * delta(1, 1) + a22 * 0 * delta(1, 2)   by EQ2(d02, refl)
+    = a00 * 1 * 0 + a01 * 1 * delta(1, 1) + a02 * 1 * delta(1, 2) + a10 * 0 * 0 + a11 * 0 * delta(1, 1) + a12 * 0 * delta(1, 2) + a20 * 0 * 0 + a21 * 0 * delta(1, 1) + a22 * 0 * delta(1, 2)   by EQ2(d10, refl)
+    = a00 * 1 * 0 + a01 * 1 * 1 + a02 * 1 * delta(1, 2) + a10 * 0 * 0 + a11 * 0 * 1 + a12 * 0 * delta(1, 2) + a20 * 0 * 0 + a21 * 0 * 1 + a22 * 0 * delta(1, 2)   by EQ2(d11, refl)
+    = a00 * 1 * 0 + a01 * 1 * 1 + a02 * 1 * 0 + a10 * 0 * 0 + a11 * 0 * 1 + a12 * 0 * 0 + a20 * 0 * 0 + a21 * 0 * 1 + a22 * 0 * 0   by EQ2(d12, refl)
+    = a01   by ring
+
+thm mat3.e02 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(0, 2) = a02
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n02 : ¬(0 = 2) := decide
+  have d02 : delta(0, 2) = 0 := delta.diff(0, 2, n02)
+  have n20 : ¬(2 = 0) := decide
+  have d20 : delta(2, 0) = 0 := delta.diff(2, 0, n20)
+  have n21 : ¬(2 = 1) := decide
+  have d21 : delta(2, 1) = 0 := delta.diff(2, 1, n21)
+  have d22 : delta(2, 2) = 1 := delta.same(2)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(0, 2)
+    = a00 * delta(0, 0) * delta(2, 0) + a01 * delta(0, 0) * delta(2, 1) + a02 * delta(0, 0) * delta(2, 2) + a10 * delta(0, 1) * delta(2, 0) + a11 * delta(0, 1) * delta(2, 1) + a12 * delta(0, 1) * delta(2, 2) + a20 * delta(0, 2) * delta(2, 0) + a21 * delta(0, 2) * delta(2, 1) + a22 * delta(0, 2) * delta(2, 2)   by refl
+    = a00 * 1 * delta(2, 0) + a01 * 1 * delta(2, 1) + a02 * 1 * delta(2, 2) + a10 * delta(0, 1) * delta(2, 0) + a11 * delta(0, 1) * delta(2, 1) + a12 * delta(0, 1) * delta(2, 2) + a20 * delta(0, 2) * delta(2, 0) + a21 * delta(0, 2) * delta(2, 1) + a22 * delta(0, 2) * delta(2, 2)   by EQ2(d00, refl)
+    = a00 * 1 * delta(2, 0) + a01 * 1 * delta(2, 1) + a02 * 1 * delta(2, 2) + a10 * 0 * delta(2, 0) + a11 * 0 * delta(2, 1) + a12 * 0 * delta(2, 2) + a20 * delta(0, 2) * delta(2, 0) + a21 * delta(0, 2) * delta(2, 1) + a22 * delta(0, 2) * delta(2, 2)   by EQ2(d01, refl)
+    = a00 * 1 * delta(2, 0) + a01 * 1 * delta(2, 1) + a02 * 1 * delta(2, 2) + a10 * 0 * delta(2, 0) + a11 * 0 * delta(2, 1) + a12 * 0 * delta(2, 2) + a20 * 0 * delta(2, 0) + a21 * 0 * delta(2, 1) + a22 * 0 * delta(2, 2)   by EQ2(d02, refl)
+    = a00 * 1 * 0 + a01 * 1 * delta(2, 1) + a02 * 1 * delta(2, 2) + a10 * 0 * 0 + a11 * 0 * delta(2, 1) + a12 * 0 * delta(2, 2) + a20 * 0 * 0 + a21 * 0 * delta(2, 1) + a22 * 0 * delta(2, 2)   by EQ2(d20, refl)
+    = a00 * 1 * 0 + a01 * 1 * 0 + a02 * 1 * delta(2, 2) + a10 * 0 * 0 + a11 * 0 * 0 + a12 * 0 * delta(2, 2) + a20 * 0 * 0 + a21 * 0 * 0 + a22 * 0 * delta(2, 2)   by EQ2(d21, refl)
+    = a00 * 1 * 0 + a01 * 1 * 0 + a02 * 1 * 1 + a10 * 0 * 0 + a11 * 0 * 0 + a12 * 0 * 1 + a20 * 0 * 0 + a21 * 0 * 0 + a22 * 0 * 1   by EQ2(d22, refl)
+    = a02   by ring
+
+thm mat3.e10 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(1, 0) = a10
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n02 : ¬(0 = 2) := decide
+  have d02 : delta(0, 2) = 0 := delta.diff(0, 2, n02)
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  have n12 : ¬(1 = 2) := decide
+  have d12 : delta(1, 2) = 0 := delta.diff(1, 2, n12)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(1, 0)
+    = a00 * delta(1, 0) * delta(0, 0) + a01 * delta(1, 0) * delta(0, 1) + a02 * delta(1, 0) * delta(0, 2) + a10 * delta(1, 1) * delta(0, 0) + a11 * delta(1, 1) * delta(0, 1) + a12 * delta(1, 1) * delta(0, 2) + a20 * delta(1, 2) * delta(0, 0) + a21 * delta(1, 2) * delta(0, 1) + a22 * delta(1, 2) * delta(0, 2)   by refl
+    = a00 * delta(1, 0) * 1 + a01 * delta(1, 0) * delta(0, 1) + a02 * delta(1, 0) * delta(0, 2) + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * delta(0, 1) + a12 * delta(1, 1) * delta(0, 2) + a20 * delta(1, 2) * 1 + a21 * delta(1, 2) * delta(0, 1) + a22 * delta(1, 2) * delta(0, 2)   by EQ2(d00, refl)
+    = a00 * delta(1, 0) * 1 + a01 * delta(1, 0) * 0 + a02 * delta(1, 0) * delta(0, 2) + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * 0 + a12 * delta(1, 1) * delta(0, 2) + a20 * delta(1, 2) * 1 + a21 * delta(1, 2) * 0 + a22 * delta(1, 2) * delta(0, 2)   by EQ2(d01, refl)
+    = a00 * delta(1, 0) * 1 + a01 * delta(1, 0) * 0 + a02 * delta(1, 0) * 0 + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * 0 + a12 * delta(1, 1) * 0 + a20 * delta(1, 2) * 1 + a21 * delta(1, 2) * 0 + a22 * delta(1, 2) * 0   by EQ2(d02, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a02 * 0 * 0 + a10 * delta(1, 1) * 1 + a11 * delta(1, 1) * 0 + a12 * delta(1, 1) * 0 + a20 * delta(1, 2) * 1 + a21 * delta(1, 2) * 0 + a22 * delta(1, 2) * 0   by EQ2(d10, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a02 * 0 * 0 + a10 * 1 * 1 + a11 * 1 * 0 + a12 * 1 * 0 + a20 * delta(1, 2) * 1 + a21 * delta(1, 2) * 0 + a22 * delta(1, 2) * 0   by EQ2(d11, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a02 * 0 * 0 + a10 * 1 * 1 + a11 * 1 * 0 + a12 * 1 * 0 + a20 * 0 * 1 + a21 * 0 * 0 + a22 * 0 * 0   by EQ2(d12, refl)
+    = a10   by ring
+
+thm mat3.e11 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(1, 1) = a11
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  have n12 : ¬(1 = 2) := decide
+  have d12 : delta(1, 2) = 0 := delta.diff(1, 2, n12)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(1, 1)
+    = a00 * delta(1, 0) * delta(1, 0) + a01 * delta(1, 0) * delta(1, 1) + a02 * delta(1, 0) * delta(1, 2) + a10 * delta(1, 1) * delta(1, 0) + a11 * delta(1, 1) * delta(1, 1) + a12 * delta(1, 1) * delta(1, 2) + a20 * delta(1, 2) * delta(1, 0) + a21 * delta(1, 2) * delta(1, 1) + a22 * delta(1, 2) * delta(1, 2)   by refl
+    = a00 * 0 * 0 + a01 * 0 * delta(1, 1) + a02 * 0 * delta(1, 2) + a10 * delta(1, 1) * 0 + a11 * delta(1, 1) * delta(1, 1) + a12 * delta(1, 1) * delta(1, 2) + a20 * delta(1, 2) * 0 + a21 * delta(1, 2) * delta(1, 1) + a22 * delta(1, 2) * delta(1, 2)   by EQ2(d10, refl)
+    = a00 * 0 * 0 + a01 * 0 * 1 + a02 * 0 * delta(1, 2) + a10 * 1 * 0 + a11 * 1 * 1 + a12 * 1 * delta(1, 2) + a20 * delta(1, 2) * 0 + a21 * delta(1, 2) * 1 + a22 * delta(1, 2) * delta(1, 2)   by EQ2(d11, refl)
+    = a00 * 0 * 0 + a01 * 0 * 1 + a02 * 0 * 0 + a10 * 1 * 0 + a11 * 1 * 1 + a12 * 1 * 0 + a20 * 0 * 0 + a21 * 0 * 1 + a22 * 0 * 0   by EQ2(d12, refl)
+    = a11   by ring
+
+thm mat3.e12 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(1, 2) = a12
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  have n12 : ¬(1 = 2) := decide
+  have d12 : delta(1, 2) = 0 := delta.diff(1, 2, n12)
+  have n20 : ¬(2 = 0) := decide
+  have d20 : delta(2, 0) = 0 := delta.diff(2, 0, n20)
+  have n21 : ¬(2 = 1) := decide
+  have d21 : delta(2, 1) = 0 := delta.diff(2, 1, n21)
+  have d22 : delta(2, 2) = 1 := delta.same(2)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(1, 2)
+    = a00 * delta(1, 0) * delta(2, 0) + a01 * delta(1, 0) * delta(2, 1) + a02 * delta(1, 0) * delta(2, 2) + a10 * delta(1, 1) * delta(2, 0) + a11 * delta(1, 1) * delta(2, 1) + a12 * delta(1, 1) * delta(2, 2) + a20 * delta(1, 2) * delta(2, 0) + a21 * delta(1, 2) * delta(2, 1) + a22 * delta(1, 2) * delta(2, 2)   by refl
+    = a00 * 0 * delta(2, 0) + a01 * 0 * delta(2, 1) + a02 * 0 * delta(2, 2) + a10 * delta(1, 1) * delta(2, 0) + a11 * delta(1, 1) * delta(2, 1) + a12 * delta(1, 1) * delta(2, 2) + a20 * delta(1, 2) * delta(2, 0) + a21 * delta(1, 2) * delta(2, 1) + a22 * delta(1, 2) * delta(2, 2)   by EQ2(d10, refl)
+    = a00 * 0 * delta(2, 0) + a01 * 0 * delta(2, 1) + a02 * 0 * delta(2, 2) + a10 * 1 * delta(2, 0) + a11 * 1 * delta(2, 1) + a12 * 1 * delta(2, 2) + a20 * delta(1, 2) * delta(2, 0) + a21 * delta(1, 2) * delta(2, 1) + a22 * delta(1, 2) * delta(2, 2)   by EQ2(d11, refl)
+    = a00 * 0 * delta(2, 0) + a01 * 0 * delta(2, 1) + a02 * 0 * delta(2, 2) + a10 * 1 * delta(2, 0) + a11 * 1 * delta(2, 1) + a12 * 1 * delta(2, 2) + a20 * 0 * delta(2, 0) + a21 * 0 * delta(2, 1) + a22 * 0 * delta(2, 2)   by EQ2(d12, refl)
+    = a00 * 0 * 0 + a01 * 0 * delta(2, 1) + a02 * 0 * delta(2, 2) + a10 * 1 * 0 + a11 * 1 * delta(2, 1) + a12 * 1 * delta(2, 2) + a20 * 0 * 0 + a21 * 0 * delta(2, 1) + a22 * 0 * delta(2, 2)   by EQ2(d20, refl)
+    = a00 * 0 * 0 + a01 * 0 * 0 + a02 * 0 * delta(2, 2) + a10 * 1 * 0 + a11 * 1 * 0 + a12 * 1 * delta(2, 2) + a20 * 0 * 0 + a21 * 0 * 0 + a22 * 0 * delta(2, 2)   by EQ2(d21, refl)
+    = a00 * 0 * 0 + a01 * 0 * 0 + a02 * 0 * 1 + a10 * 1 * 0 + a11 * 1 * 0 + a12 * 1 * 1 + a20 * 0 * 0 + a21 * 0 * 0 + a22 * 0 * 1   by EQ2(d22, refl)
+    = a12   by ring
+
+thm mat3.e20 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(2, 0) = a20
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have d00 : delta(0, 0) = 1 := delta.same(0)
+  have n01 : ¬(0 = 1) := decide
+  have d01 : delta(0, 1) = 0 := delta.diff(0, 1, n01)
+  have n02 : ¬(0 = 2) := decide
+  have d02 : delta(0, 2) = 0 := delta.diff(0, 2, n02)
+  have n20 : ¬(2 = 0) := decide
+  have d20 : delta(2, 0) = 0 := delta.diff(2, 0, n20)
+  have n21 : ¬(2 = 1) := decide
+  have d21 : delta(2, 1) = 0 := delta.diff(2, 1, n21)
+  have d22 : delta(2, 2) = 1 := delta.same(2)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(2, 0)
+    = a00 * delta(2, 0) * delta(0, 0) + a01 * delta(2, 0) * delta(0, 1) + a02 * delta(2, 0) * delta(0, 2) + a10 * delta(2, 1) * delta(0, 0) + a11 * delta(2, 1) * delta(0, 1) + a12 * delta(2, 1) * delta(0, 2) + a20 * delta(2, 2) * delta(0, 0) + a21 * delta(2, 2) * delta(0, 1) + a22 * delta(2, 2) * delta(0, 2)   by refl
+    = a00 * delta(2, 0) * 1 + a01 * delta(2, 0) * delta(0, 1) + a02 * delta(2, 0) * delta(0, 2) + a10 * delta(2, 1) * 1 + a11 * delta(2, 1) * delta(0, 1) + a12 * delta(2, 1) * delta(0, 2) + a20 * delta(2, 2) * 1 + a21 * delta(2, 2) * delta(0, 1) + a22 * delta(2, 2) * delta(0, 2)   by EQ2(d00, refl)
+    = a00 * delta(2, 0) * 1 + a01 * delta(2, 0) * 0 + a02 * delta(2, 0) * delta(0, 2) + a10 * delta(2, 1) * 1 + a11 * delta(2, 1) * 0 + a12 * delta(2, 1) * delta(0, 2) + a20 * delta(2, 2) * 1 + a21 * delta(2, 2) * 0 + a22 * delta(2, 2) * delta(0, 2)   by EQ2(d01, refl)
+    = a00 * delta(2, 0) * 1 + a01 * delta(2, 0) * 0 + a02 * delta(2, 0) * 0 + a10 * delta(2, 1) * 1 + a11 * delta(2, 1) * 0 + a12 * delta(2, 1) * 0 + a20 * delta(2, 2) * 1 + a21 * delta(2, 2) * 0 + a22 * delta(2, 2) * 0   by EQ2(d02, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a02 * 0 * 0 + a10 * delta(2, 1) * 1 + a11 * delta(2, 1) * 0 + a12 * delta(2, 1) * 0 + a20 * delta(2, 2) * 1 + a21 * delta(2, 2) * 0 + a22 * delta(2, 2) * 0   by EQ2(d20, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a02 * 0 * 0 + a10 * 0 * 1 + a11 * 0 * 0 + a12 * 0 * 0 + a20 * delta(2, 2) * 1 + a21 * delta(2, 2) * 0 + a22 * delta(2, 2) * 0   by EQ2(d21, refl)
+    = a00 * 0 * 1 + a01 * 0 * 0 + a02 * 0 * 0 + a10 * 0 * 1 + a11 * 0 * 0 + a12 * 0 * 0 + a20 * 1 * 1 + a21 * 1 * 0 + a22 * 1 * 0   by EQ2(d22, refl)
+    = a20   by ring
+
+thm mat3.e21 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(2, 1) = a21
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have n10 : ¬(1 = 0) := decide
+  have d10 : delta(1, 0) = 0 := delta.diff(1, 0, n10)
+  have d11 : delta(1, 1) = 1 := delta.same(1)
+  have n12 : ¬(1 = 2) := decide
+  have d12 : delta(1, 2) = 0 := delta.diff(1, 2, n12)
+  have n20 : ¬(2 = 0) := decide
+  have d20 : delta(2, 0) = 0 := delta.diff(2, 0, n20)
+  have n21 : ¬(2 = 1) := decide
+  have d21 : delta(2, 1) = 0 := delta.diff(2, 1, n21)
+  have d22 : delta(2, 2) = 1 := delta.same(2)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(2, 1)
+    = a00 * delta(2, 0) * delta(1, 0) + a01 * delta(2, 0) * delta(1, 1) + a02 * delta(2, 0) * delta(1, 2) + a10 * delta(2, 1) * delta(1, 0) + a11 * delta(2, 1) * delta(1, 1) + a12 * delta(2, 1) * delta(1, 2) + a20 * delta(2, 2) * delta(1, 0) + a21 * delta(2, 2) * delta(1, 1) + a22 * delta(2, 2) * delta(1, 2)   by refl
+    = a00 * delta(2, 0) * 0 + a01 * delta(2, 0) * delta(1, 1) + a02 * delta(2, 0) * delta(1, 2) + a10 * delta(2, 1) * 0 + a11 * delta(2, 1) * delta(1, 1) + a12 * delta(2, 1) * delta(1, 2) + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * delta(1, 1) + a22 * delta(2, 2) * delta(1, 2)   by EQ2(d10, refl)
+    = a00 * delta(2, 0) * 0 + a01 * delta(2, 0) * 1 + a02 * delta(2, 0) * delta(1, 2) + a10 * delta(2, 1) * 0 + a11 * delta(2, 1) * 1 + a12 * delta(2, 1) * delta(1, 2) + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * 1 + a22 * delta(2, 2) * delta(1, 2)   by EQ2(d11, refl)
+    = a00 * delta(2, 0) * 0 + a01 * delta(2, 0) * 1 + a02 * delta(2, 0) * 0 + a10 * delta(2, 1) * 0 + a11 * delta(2, 1) * 1 + a12 * delta(2, 1) * 0 + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * 1 + a22 * delta(2, 2) * 0   by EQ2(d12, refl)
+    = a00 * 0 * 0 + a01 * 0 * 1 + a02 * 0 * 0 + a10 * delta(2, 1) * 0 + a11 * delta(2, 1) * 1 + a12 * delta(2, 1) * 0 + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * 1 + a22 * delta(2, 2) * 0   by EQ2(d20, refl)
+    = a00 * 0 * 0 + a01 * 0 * 1 + a02 * 0 * 0 + a10 * 0 * 0 + a11 * 0 * 1 + a12 * 0 * 0 + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * 1 + a22 * delta(2, 2) * 0   by EQ2(d21, refl)
+    = a00 * 0 * 0 + a01 * 0 * 1 + a02 * 0 * 0 + a10 * 0 * 0 + a11 * 0 * 1 + a12 * 0 * 0 + a20 * 1 * 0 + a21 * 1 * 1 + a22 * 1 * 0   by EQ2(d22, refl)
+    = a21   by ring
+
+thm mat3.e22 :
+  ⊢ ∀a00:ℝ. ∀a01:ℝ. ∀a02:ℝ. ∀a10:ℝ. ∀a11:ℝ. ∀a12:ℝ. ∀a20:ℝ. ∀a21:ℝ. ∀a22:ℝ. mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(2, 2) = a22
+
+Fix a00, a01, a02, a10, a11, a12, a20, a21, a22
+  have n20 : ¬(2 = 0) := decide
+  have d20 : delta(2, 0) = 0 := delta.diff(2, 0, n20)
+  have n21 : ¬(2 = 1) := decide
+  have d21 : delta(2, 1) = 0 := delta.diff(2, 1, n21)
+  have d22 : delta(2, 2) = 1 := delta.same(2)
+  mat3(a00, a01, a02, a10, a11, a12, a20, a21, a22)(2, 2)
+    = a00 * delta(2, 0) * delta(2, 0) + a01 * delta(2, 0) * delta(2, 1) + a02 * delta(2, 0) * delta(2, 2) + a10 * delta(2, 1) * delta(2, 0) + a11 * delta(2, 1) * delta(2, 1) + a12 * delta(2, 1) * delta(2, 2) + a20 * delta(2, 2) * delta(2, 0) + a21 * delta(2, 2) * delta(2, 1) + a22 * delta(2, 2) * delta(2, 2)   by refl
+    = a00 * 0 * 0 + a01 * 0 * delta(2, 1) + a02 * 0 * delta(2, 2) + a10 * delta(2, 1) * 0 + a11 * delta(2, 1) * delta(2, 1) + a12 * delta(2, 1) * delta(2, 2) + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * delta(2, 1) + a22 * delta(2, 2) * delta(2, 2)   by EQ2(d20, refl)
+    = a00 * 0 * 0 + a01 * 0 * 0 + a02 * 0 * delta(2, 2) + a10 * 0 * 0 + a11 * 0 * 0 + a12 * 0 * delta(2, 2) + a20 * delta(2, 2) * 0 + a21 * delta(2, 2) * 0 + a22 * delta(2, 2) * delta(2, 2)   by EQ2(d21, refl)
+    = a00 * 0 * 0 + a01 * 0 * 0 + a02 * 0 * 1 + a10 * 0 * 0 + a11 * 0 * 0 + a12 * 0 * 1 + a20 * 1 * 0 + a21 * 1 * 0 + a22 * 1 * 1   by EQ2(d22, refl)
+    = a22   by ring
+
+-- 2×2 の行列式・トレース（成分を書いた行列で）
+thm mat2.det :
+  ⊢ ∀a:ℝ. ∀b:ℝ. ∀c:ℝ. ∀d:ℝ. det2([[a, b], [c, d]]) = a * d - b * c
+
+Fix a, b, c, d
+  have e00 : [[a, b], [c, d]](0, 0) = a := mat2.e00(a, b, c, d)
+  have e01 : [[a, b], [c, d]](0, 1) = b := mat2.e01(a, b, c, d)
+  have e10 : [[a, b], [c, d]](1, 0) = c := mat2.e10(a, b, c, d)
+  have e11 : [[a, b], [c, d]](1, 1) = d := mat2.e11(a, b, c, d)
+  det2([[a, b], [c, d]])
+    = [[a, b], [c, d]](0, 0) * [[a, b], [c, d]](1, 1) - [[a, b], [c, d]](0, 1) * [[a, b], [c, d]](1, 0)   by refl
+    = a * [[a, b], [c, d]](1, 1) - [[a, b], [c, d]](0, 1) * [[a, b], [c, d]](1, 0)   by EQ2(e00, refl)
+    = a * d - [[a, b], [c, d]](0, 1) * [[a, b], [c, d]](1, 0)   by EQ2(e11, refl)
+    = a * d - b * [[a, b], [c, d]](1, 0)   by EQ2(e01, refl)
+    = a * d - b * c   by EQ2(e10, refl)
+
+thm mat2.tr :
+  ⊢ ∀a:ℝ. ∀b:ℝ. ∀c:ℝ. ∀d:ℝ. mtr([[a, b], [c, d]], 2) = a + d
+
+Fix a, b, c, d
+  have t : mtr([[a, b], [c, d]], 2) = [[a, b], [c, d]](0, 0) + [[a, b], [c, d]](1, 1) := mtr.two([[a, b], [c, d]])
+  have e00 : [[a, b], [c, d]](0, 0) = a := mat2.e00(a, b, c, d)
+  have e11 : [[a, b], [c, d]](1, 1) = d := mat2.e11(a, b, c, d)
+  linarith

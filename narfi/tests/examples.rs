@@ -130,3 +130,13 @@ fn primitive_recursion() {
         assert!(out.contains("構文エラー") && out.contains(msg), "{src}\n{out}");
     }
 }
+
+/// 行列（関数を値にする定義・β・Σ）：2×2 のケイリー・ハミルトンなどがすべて通る
+#[test]
+fn matrices() {
+    let out = run(&["lib/algebra/matrix.narfi"]);
+    assert!(!out.contains('✗') && !out.contains("構文エラー"), "{out}");
+    for n in ["cayley_hamilton2", "mmul.add_left", "mat2.det", "delta.same"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+}

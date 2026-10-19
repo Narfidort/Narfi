@@ -121,10 +121,12 @@ pub enum StmtKind {
         hyps: Vec<String>,
         just: Just,
     },
+    /// `have h : φ := j`、または `have h : φ` の下に字下げして φ の証明（body。このとき just は空）
     Have {
         name: String,
         ty: Formula,
         just: Just,
+        body: Vec<Stmt>,
     },
     Suffices {
         ty: Formula,
@@ -320,6 +322,14 @@ pub fn normalize_japanese_sugar(raw: &str) -> String {
                     return format!("have {} := {}", rest, just.trim());
                 }
             }
+        }
+    }
+
+    // Have（下に証明）: `h : φ を示す`
+    if let Some(body) = s.strip_suffix("を示す") {
+        let body = body.trim();
+        if body.contains(':') && !body.contains("より") {
+            return format!("have {body}");
         }
     }
 
@@ -756,7 +766,12 @@ impl SubScope {
                 *ty = self.formula(ty);
                 *just = self.just(just);
             }
-            StmtKind::Have { ty, just, .. } | StmtKind::Suffices { ty, just } => {
+            StmtKind::Have { ty, just, body, .. } => {
+                *ty = self.formula(ty);
+                *just = self.just(just);
+                self.stmts(body);
+            }
+            StmtKind::Suffices { ty, just } => {
                 *ty = self.formula(ty);
                 *just = self.just(just);
             }
@@ -956,7 +971,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             '²' | '³' | '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
             | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆'
             | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−'
-            | '·' | '/' | '^' | '⇐' | '∴' | '×' | '{' | '}' | '↦' => {
+            | '·' | '/' | '^' | '⇐' | '∴' | '×' | '{' | '}' | '↦' | '[' | ']' => {
                 if c == '−' {
                     "-".to_string()
                 } else {
@@ -1447,6 +1462,29 @@ impl P {
                 let t = self.term()?;
                 self.expect_sym("|")?;
                 Ok(Term::App("abs".into(), vec![t]))
+            }
+            // 行列 [[a, b], [c, d]]（2×2・3×3。lib/algebra/matrix の mat2・mat3）
+            Some(Tok::Sym(s)) if s == "[" => {
+                self.pos += 1;
+                let mut rows: Vec<Vec<Term>> = Vec::new();
+                loop {
+                    self.expect_sym("[")?;
+                    let mut row = vec![self.term()?];
+                    while self.eat_sym(",") {
+                        row.push(self.term()?);
+                    }
+                    self.expect_sym("]")?;
+                    rows.push(row);
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                }
+                self.expect_sym("]")?;
+                let n = rows.len();
+                if !(n == 2 || n == 3) || rows.iter().any(|r| r.len() != n) {
+                    return self.err("行列は 2×2 か 3×3 の [[…], …] で書く（いまはこの 2 つだけ）".to_string());
+                }
+                Ok(Term::App(format!("mat{n}"), rows.into_iter().flatten().collect()))
             }
             _ => self.err(format!("項が必要（{} の位置）", self.here())),
         }
@@ -2441,11 +2479,16 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             let name = p.ident()?;
             p.expect_sym(":")?;
             let ty = p.formula()?;
-            p.expect_sym(":=")?;
-            let just = p.just()?;
-            p.expect_end()?;
-            no_children(n)?;
-            StmtKind::Have { name, ty, just }
+            if p.at_end() && !n.children.is_empty() {
+                // have h : φ の下に、φ の証明を字下げして書く
+                StmtKind::Have { name, ty, just: vec![], body: block(&p)? }
+            } else {
+                p.expect_sym(":=")?;
+                let just = p.just()?;
+                p.expect_end()?;
+                no_children(n)?;
+                StmtKind::Have { name, ty, just, body: vec![] }
+            }
         }
         "suffices" | "⇐" => {
             p.pos += 1;

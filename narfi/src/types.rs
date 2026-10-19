@@ -51,7 +51,11 @@ impl Ty {
         (i == toks.len()).then_some(t)
     }
 
+    /// 関数の型。引数がなければ値の型そのもの（{() | φ} は命題 φ）
     pub fn fun(args: Vec<Ty>, res: Ty) -> Ty {
+        if args.is_empty() {
+            return res;
+        }
         Ty::Fun(args, Box::new(res))
     }
 

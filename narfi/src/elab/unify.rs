@@ -470,8 +470,15 @@ impl<'a> Checker<'a> {
 
     /// 項の定義を1段展開して比べ直す（δ）
     fn ut_unfold(&mut self, a: &Term, b: &Term) -> bool {
-        let one = |c: &Self, t: &Term| -> Option<Term> {
+        fn one(c: &Checker, t: &Term) -> Option<Term> {
             use crate::kernel::env::{DefBody, KDef};
+            // 値が関数の定義を、さらに適用したもの：mmul(A, B, n)(i, j)
+            if let Term::App(at, xs) = t {
+                if at == "@" && !xs.is_empty() {
+                    let head = one(c, &xs[0])?;
+                    return Some(crate::syntax::apply_term(&head, &xs[1..]));
+                }
+            }
             let (f, args) = match t {
                 Term::App(f, args) => (f, args.clone()),
                 Term::Var(f) => (f, vec![]),
@@ -484,7 +491,7 @@ impl<'a> Checker<'a> {
                 }
                 _ => None,
             }
-        };
+        }
         if let Some(x) = one(self, a) {
             return self.ut(&x, b);
         }

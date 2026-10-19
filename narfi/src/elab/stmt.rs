@@ -441,9 +441,15 @@ impl<'a> Checker<'a> {
                 }
                 Ok(at(Proof::ExE { p: pf.b(), x: var.clone(), h: inner, body: body_p.b() }))
             }
-            StmtKind::Have { name, ty, just } => {
+            StmtKind::Have { name, ty, just, body } => {
                 let ty = self.infer_written(&ctx, ty)?;
-                let p = self.check_just(&ctx, just, &ty)?;
+                let p = if body.is_empty() {
+                    self.check_just(&ctx, just, &ty)?
+                } else {
+                    let p = self.block(ctx.clone(), body, ty.clone(), line)?;
+                    self.line = line;
+                    p
+                };
                 self.fresh_name(&ctx, name)?;
                 self.push(&mut ctx, Entry::Hyp(name.clone(), ty.clone()));
                 let r = self.seq(ctx, rest, goal, Some(ty.clone()), line)?;

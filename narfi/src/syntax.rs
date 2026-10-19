@@ -546,6 +546,15 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                 ("neg", [a]) => (format!("-{}", show_term(a, 3)), 3),
                 ("^", [a, Term::Num(2)]) => (format!("{}²", show_term(a, 5)), 4),
                 ("^", [a, b]) => (format!("{}^{}", show_term(a, 5), show_term(b, 5)), 4),
+                // 行列 [[a, b], [c, d]]
+                (m @ ("mat2" | "mat3"), xs) if xs.len() == if m == "mat2" { 4 } else { 9 } => {
+                    let n = if m == "mat2" { 2 } else { 3 };
+                    let rows: Vec<String> = xs
+                        .chunks(n)
+                        .map(|r| format!("[{}]", r.iter().map(|x| show_term(x, 0)).collect::<Vec<_>>().join(", ")))
+                        .collect();
+                    (format!("[{}]", rows.join(", ")), 9)
+                }
                 ("abs", [a]) => {
                     // `|-x|` は `|-`（⊢）と読まれるので、空白を入れて `| -x|` と書く
                     let inner = show_term(a, 0);
@@ -889,6 +898,11 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::Lam(ps, b) => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
         Term::App(f, args) if f == "@" && !args.is_empty() => {
             let a: Vec<String> = args[1..].iter().map(|a| show_term_latex(a, 0)).collect();
+            // 行列の式の成分は (AB)_{ij} と書く
+            let is_matrix = matches!(&args[0], Term::App(g, _) if ["mmul", "madd", "msmul", "mat2", "mat3"].contains(&g.as_str()));
+            if is_matrix && a.len() == 2 {
+                return format!("\\left({}\\right)_{{{} {}}}", show_term_latex(&args[0], 0), a[0], a[1]);
+            }
             format!("{}({})", show_term_latex(&args[0], 5), a.join(", "))
         }
         Term::Set(ps, phi) => format!(
@@ -942,6 +956,20 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     4,
                 ),
                 ("abs", [a]) => (format!("\\left| {} \\right|", show_term_latex(a, 0)), 5),
+                (m @ ("mat2" | "mat3"), xs) if xs.len() == if m == "mat2" { 4 } else { 9 } => {
+                    let n = if m == "mat2" { 2 } else { 3 };
+                    let rows: Vec<String> = xs
+                        .chunks(n)
+                        .map(|r| r.iter().map(|x| show_term_latex(x, 0)).collect::<Vec<_>>().join(" & "))
+                        .collect();
+                    (format!("\\begin{{pmatrix}} {} \\end{{pmatrix}}", rows.join(" \\\\ ")), 9)
+                }
+                // 行列の演算（lib/algebra/matrix）
+                ("det2", [a]) => (format!("\\det {}", show_term_latex(a, 6)), 5),
+                ("mtr", [a, _]) => (format!("\\operatorname{{tr}} {}", show_term_latex(a, 6)), 5),
+                ("mmul", [a, b, _]) => (format!("{} {}", show_term_latex(a, 3), show_term_latex(b, 3)), 2),
+                ("madd", [a, b]) => (format!("{} + {}", show_term_latex(a, 1), show_term_latex(b, 2)), 1),
+                ("msmul", [c, a]) => (format!("{} {}", show_term_latex(c, 3), show_term_latex(a, 3)), 2),
                 // 有限和 sum(a, n)（lib/algebra/sum）は Σ_{k<n} a_k と書く
                 ("sum", [a, n]) => {
                     let (k, body) = match a {

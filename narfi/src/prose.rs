@@ -261,7 +261,15 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                     ),
                 });
             }
-            StmtKind::Have { name, ty, just } => {
+            StmtKind::Have { name, ty, just, body } if !body.is_empty() => {
+                out.push(ProseBlock {
+                    depth,
+                    text: format!("まず ${}$ を示す（${}$）。", ty.to_latex(), ident_to_latex(name)),
+                });
+                stmts_to_prose(body, steps, depth + 1, out);
+                let _ = just;
+            }
+            StmtKind::Have { name, ty, just, .. } => {
                 out.push(ProseBlock {
                     depth,
                     text: format!(
@@ -617,7 +625,13 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
                 just_str(just)
             ));
         }
-        StmtKind::Have { name, ty, just } => {
+        StmtKind::Have { name, ty, body, .. } if !body.is_empty() => {
+            out.push_str(&format!("{pad}{name} : {ty} を示す\n"));
+            for c in body {
+                stmt_to_japanese_sugar(c, indent + 1, out);
+            }
+        }
+        StmtKind::Have { name, ty, just, .. } => {
             out.push_str(&format!(
                 "{pad}{} より {name} : {ty} が成り立つ\n",
                 just_str(just)
@@ -809,7 +823,13 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                 just_str(just)
             ));
         }
-        StmtKind::Have { name, ty, just } => {
+        StmtKind::Have { name, ty, body, .. } if !body.is_empty() => {
+            out.push_str(&format!("{pad}have {name} : {ty}\n"));
+            for c in body {
+                stmt_to_standard(c, indent + 1, out);
+            }
+        }
+        StmtKind::Have { name, ty, just, .. } => {
             out.push_str(&format!("{pad}have {name} : {ty} := {}\n", just_str(just)));
         }
         StmtKind::Suffices { ty, just } => {
