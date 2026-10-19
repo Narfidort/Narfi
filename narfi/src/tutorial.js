@@ -25,7 +25,7 @@ window.NARFI_TUTORIAL = [
         ["h : ∀x. φ", "h(t)（x に t を入れる）"],
         ["h : φ → ψ", "h(p)（p は φ の根拠）"]
       ] },
-      { p: "**途中で示したことを増やす**：`have k : φ := 根拠`、または `have k : φ` の下に字下げして φ の証明。示すものを書いておきたいときは `φ by 根拠`。" },
+      { p: "**途中で示したことを増やす**：`k : φ by 根拠`（名前は省略できる）。証明が長ければ `k : φ` の下に字下げして書きます。根拠を書かずに `φ` だけ書くとエラーになり、見つかった根拠が候補として出ます（Tab で入る）。" },
       { p: "書き方の完全な一覧は [docs/v2/syntax.md](https://github.com/Narfidort/Narfi/blob/main/narfi/docs/v2/syntax.md) にあります。" }
     ]
   },
@@ -96,7 +96,7 @@ window.NARFI_TUTORIAL = [
       { p: "仮定 $h$ が $\\forall \\varepsilon > 0.\\ \\cdots$ の形なら、`h(eps, h_eps)` のように引数と条件の根拠を渡して使えます。$(n \\mapsto a_{n+1})$ は「$n$ を $a_{n+1}$ に移す数列」（λ）で、`|->` か `\\mapsto` で ↦ が入ります。" }
     ],
     exercise: "-- 練習 6：a が α に収束するなら、1 つずらした数列も α に収束する\n\ndef is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nsorry\n",
-    answer: "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    have k : n + 1 >= N := linarith\n    hN(n + 1, k)\n"
+    answer: "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
   },
   {
     title: "7. 場合分け・背理法・帰納法",

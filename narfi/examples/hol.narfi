@@ -39,7 +39,7 @@ thm forall_and :
   ⊢ ∀x:ℕ. P(x)
 
 Fix x
-  have hx : P(x) ∧ Q(x) := h(x)
+  hx : P(x) ∧ Q(x) by h(x)
   hx.left
 
 

@@ -484,3 +484,133 @@ fn motive_f(p: &Formula, g: &Formula, x: &Term, y: &Term, z: &str) -> Formula {
 fn is_higher(s: &str) -> bool {
     matches!(Ty::parse(s), Some(Ty::Fun(..)) | Some(Ty::Prop))
 }
+
+// ================================================================ 根拠の探索（書かれていない根拠の候補）
+//
+// 根拠を省いた行はエラーにし、ここで見つけた根拠を直し方（Tab で入る）として示す。
+// 勝手に補うことはしない：使われた根拠は、必ずソースに書かれる。
+
+thread_local! {
+    static SEARCH_CACHE: std::cell::RefCell<std::collections::HashMap<String, Vec<String>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// 1 回の探索で試す根拠の数の上限（重くならないように）
+const SEARCH_BUDGET: usize = 2000;
+const SEARCH_WANT: usize = 4;
+
+type SearchSaved = (Vec<Option<Term>>, Vec<Option<String>>, Vec<(Option<Term>, String)>, Vec<(Vec<(String, String)>, String, Term)>, u32, usize, (Ctx, Option<Formula>), usize);
+
+impl Checker<'_> {
+    fn save_all(&self) -> SearchSaved {
+        (
+            self.metas.clone(),
+            self.sort_metas.clone(),
+            self.fn_metas.clone(),
+            self.pending.clone(),
+            self.fresh,
+            self.line,
+            self.snapshot.clone(),
+            self.sorries.len(),
+        )
+    }
+
+    fn restore_all(&mut self, s: SearchSaved) {
+        self.metas = s.0;
+        self.sort_metas = s.1;
+        self.fn_metas = s.2;
+        self.pending = s.3;
+        self.fresh = s.4;
+        self.line = s.5;
+        self.snapshot = s.6;
+        self.sorries.truncate(s.7);
+    }
+
+    /// 根拠 j で f が示せるか（状態は元に戻す）
+    fn try_just(&mut self, ctx: &Ctx, j: &Term, f: &Formula) -> bool {
+        let saved = self.save_all();
+        let ok = self.check_just(ctx, std::slice::from_ref(j), f).is_ok();
+        self.restore_all(saved);
+        ok
+    }
+
+    /// f を示せる根拠の候補（見つかった順）
+    pub(super) fn search_just(&mut self, ctx: &Ctx, f: &Formula) -> Vec<String> {
+        let key = format!("{}|{}", self.zonk_f(f), ctx.show().join(";"));
+        if let Some(v) = SEARCH_CACHE.with(|c| c.borrow().get(&key).cloned()) {
+            return v;
+        }
+        let hyps: Vec<(String, Formula)> = ctx
+            .entries
+            .iter()
+            .rev()
+            .filter_map(|e| match e {
+                Entry::Hyp(h, phi) if !h.starts_with('#') => Some((h.clone(), phi.clone())),
+                _ => None,
+            })
+            .collect();
+        let mut cands: Vec<Term> = Vec::new();
+        for (h, _) in &hyps {
+            cands.push(Term::Var(h.clone()));
+        }
+        for (h, phi) in &hyps {
+            if let Formula::And(..) = self.whnf(phi) {
+                cands.push(Term::Var(format!("{h}.left")));
+                cands.push(Term::Var(format!("{h}.right")));
+            }
+        }
+        cands.push(Term::Var("refl".into()));
+        // 仮定（∀・→）を、ほかの仮定に当てる
+        for (h, phi) in &hyps {
+            if matches!(self.whnf(phi), Formula::Forall(..) | Formula::Imp(..)) {
+                for (k, _) in &hyps {
+                    if k != h {
+                        cands.push(Term::App(h.clone(), vec![Term::Var(k.clone())]));
+                    }
+                }
+            }
+        }
+        for b in ["linarith", "ring", "decide"] {
+            cands.push(Term::Var(b.into()));
+        }
+        // 定理（そのまま・仮定に当てる）
+        let mut thms: Vec<String> = self.env.kernel.thms.keys().cloned().collect();
+        thms.sort();
+        for t in &thms {
+            cands.push(Term::Var(t.clone()));
+        }
+        for t in &thms {
+            for (k, _) in &hyps {
+                cands.push(Term::App(t.clone(), vec![Term::Var(k.clone())]));
+            }
+        }
+        let mut found = Vec::new();
+        for c in cands.into_iter().take(SEARCH_BUDGET) {
+            if self.try_just(ctx, &c, f) {
+                found.push(c.to_string());
+                if found.len() >= SEARCH_WANT {
+                    break;
+                }
+            }
+        }
+        SEARCH_CACHE.with(|c| c.borrow_mut().insert(key, found.clone()));
+        found
+    }
+
+    /// 根拠のない事実の行：エラーにして、見つかった根拠を直し方として示す
+    pub(super) fn missing_just<T>(&mut self, ctx: &Ctx, f: &Formula) -> CResult<T> {
+        self.snapshot.0 = ctx.clone();
+        let found = self.search_just(ctx, f);
+        let fz = self.zonk_f(f);
+        let msg = if found.is_empty() {
+            format!("「{fz}」の根拠が書かれていない\n  help: 自動では見つからなかった。`by 根拠` を書くか、下に字下げして証明を書く")
+        } else {
+            let list: Vec<String> = found.iter().map(|j| format!("`by {j}`")).collect();
+            format!("「{fz}」の根拠が書かれていない\n  help: 見つかった根拠：{}（エディタでは行末で Tab）", list.join("、"))
+        };
+        let mut err = self.err::<T>(msg).err().unwrap();
+        err.fix = found.first().map(|j| format!(" by {j}"));
+        err.alts = found.iter().skip(1).map(|j| format!(" by {j}")).collect();
+        Err(err)
+    }
+}

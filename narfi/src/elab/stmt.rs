@@ -345,24 +345,59 @@ impl<'a> Checker<'a> {
                 Ok(at(if on_var { Proof::AllE(ind.b(), Term::Var(var.clone())) } else { ind }))
             }
             StmtKind::Close(j) => {
+                // `Q` のように、証拠の名前でなく命題として読めるなら、根拠のない事実の行
+                if j.len() == 1 && !self.is_proof(&ctx, &j[0]) {
+                    let as_formula = match &j[0] {
+                        Term::Var(n) => Some(Formula::Atom(n.clone(), vec![])),
+                        Term::App(n, args) => Some(Formula::Atom(n.clone(), args.clone())),
+                        _ => None,
+                    };
+                    if let Some(f) = as_formula {
+                        if let Ok(f) = self.infer_written(&ctx, &f) {
+                            if rest.is_empty() && !self.unify(&ctx, &f, &g) {
+                                let gz = self.zonk_f(&g);
+                                return self.err(format!("最後の行で示した「{f}」が goal「{gz}」と一致しない"));
+                            }
+                            let target = if rest.is_empty() { g.clone() } else { f };
+                            return self.missing_just(&ctx, &target);
+                        }
+                    }
+                }
                 let p = self.check_just(&ctx, j, &g)?;
                 self.after_closed(&ctx, rest, &g)?;
                 Ok(at(p))
             }
-            StmtKind::Show { ty, just } => {
+            StmtKind::Show { name, ty, just, body } => {
                 let f = self.infer_written(&ctx, ty)?;
-                if rest.is_empty() {
-                    if !self.unify(&ctx, &f, &g) {
-                        return self.err(format!("示そうとしている「{f}」が goal「{g}」と一致しない"));
-                    }
-                    let p = self.check_just(&ctx, just, &g)?;
+                // 最後の行なら goal を示すもの。φ が goal と一致することを先に確かめる（goal の穴も埋まる）
+                let last_line = rest.is_empty();
+                if last_line && !self.unify(&ctx, &f, &g) {
+                    let gz = self.zonk_f(&g);
+                    return self.err(format!(
+                        "最後の行で示した「{f}」が goal「{gz}」と一致しない\n  help: goal を示す行にするか、この後に goal を示す行を書く"
+                    ));
+                }
+                let target = if last_line { g.clone() } else { f.clone() };
+                let p = if !body.is_empty() {
+                    let p = self.block(ctx.clone(), body, target, line)?;
+                    self.line = line;
+                    p
+                } else if let Some(j) = just {
+                    self.check_just(&ctx, j, &target)?
+                } else {
+                    return self.missing_just(&ctx, &target);
+                };
+                if last_line {
                     return Ok(at(p));
                 }
-                // 後ろに続く：this として仮定に加える（∴ で受けられる）
-                let p = self.check_just(&ctx, just, &f)?;
-                self.push(&mut ctx, Entry::Hyp("this".into(), f.clone()));
+                // 後ろに続く：名前（なければ this）で仮定に加える（∴ で受けられる）
+                let h = name.clone().unwrap_or_else(|| "this".into());
+                if name.is_some() {
+                    self.fresh_name(&ctx, &h)?;
+                }
+                self.push(&mut ctx, Entry::Hyp(h.clone(), f.clone()));
                 let r = self.seq(ctx, rest, goal, Some(f.clone()), line)?;
-                Ok(at(Proof::Cut { h: "this".into(), phi: f, p: p.b(), body: r.b() }))
+                Ok(at(Proof::Cut { h, phi: f, p: p.b(), body: r.b() }))
             }
             StmtKind::Chain { start, steps } if rest.is_empty() => {
                 let (result, cp) = self.chain(&ctx, start, steps)?;
@@ -440,20 +475,6 @@ impl<'a> Checker<'a> {
                     body_p = Proof::Cut { h: h.clone(), phi: phi.clone(), p: proj.b(), body: body_p.b() };
                 }
                 Ok(at(Proof::ExE { p: pf.b(), x: var.clone(), h: inner, body: body_p.b() }))
-            }
-            StmtKind::Have { name, ty, just, body } => {
-                let ty = self.infer_written(&ctx, ty)?;
-                let p = if body.is_empty() {
-                    self.check_just(&ctx, just, &ty)?
-                } else {
-                    let p = self.block(ctx.clone(), body, ty.clone(), line)?;
-                    self.line = line;
-                    p
-                };
-                self.fresh_name(&ctx, name)?;
-                self.push(&mut ctx, Entry::Hyp(name.clone(), ty.clone()));
-                let r = self.seq(ctx, rest, goal, Some(ty.clone()), line)?;
-                Ok(at(Proof::Cut { h: name.clone(), phi: ty, p: p.b(), body: r.b() }))
             }
             StmtKind::Suffices { ty, just } => {
                 let ty = self.infer_written(&ctx, ty)?;

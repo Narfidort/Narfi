@@ -190,6 +190,9 @@ fn main() -> ExitCode {
                 print_diag(&r);
             } else {
                 print_report(path, &r);
+                for (l, m, _) in &r.warnings {
+                    println!("      警告 {path}:{l}: {m}");
+                }
             }
             if r.err.is_some() {
                 failed += 1;

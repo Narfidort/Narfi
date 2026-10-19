@@ -35,9 +35,9 @@ thm cls.sound :
   h : a ~ b
   ⊢ cls(a) = cls(b)
 
-have i1 : ∀x:CauSeq. b ~ x → a ~ x := seq_eq.class(h)
-have i2 : ∀x:CauSeq. a ~ x → b ~ x := seq_eq.class(seq_eq.symm(h))
-have hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} := setext(i2, i1)
+i1 : ∀x:CauSeq. b ~ x → a ~ x by seq_eq.class(h)
+i2 : ∀x:CauSeq. a ~ x → b ~ x by seq_eq.class(seq_eq.symm(h))
+hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} by setext(i2, i1)
 cls(a)
   = RealC.abs({x : CauSeq | a ~ x})   by refl
   = RealC.abs({x : CauSeq | b ~ x})   by EQ2(hs, refl)
@@ -49,11 +49,11 @@ thm cls.exact :
   h : cls(a) = cls(b)
   ⊢ a ~ b
 
-have ra : RealC.rep(cls(a)) = {x : CauSeq | a ~ x} := RealC.rep_abs({x : CauSeq | a ~ x}, cls.in(a))
-have rb : RealC.rep(cls(b)) = {x : CauSeq | b ~ x} := RealC.rep_abs({x : CauSeq | b ~ x}, cls.in(b))
-have hr : RealC.rep(cls(a)) = RealC.rep(cls(b)) := EQ2(h, refl)
-have hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} := eq.trans(eq.symm(ra), eq.trans(hr, rb))
-have mem : b ~ a := set.eq_sub(hs, a, seq_eq.refl(a))
+ra : RealC.rep(cls(a)) = {x : CauSeq | a ~ x} by RealC.rep_abs({x : CauSeq | a ~ x}, cls.in(a))
+rb : RealC.rep(cls(b)) = {x : CauSeq | b ~ x} by RealC.rep_abs({x : CauSeq | b ~ x}, cls.in(b))
+hr : RealC.rep(cls(a)) = RealC.rep(cls(b)) by EQ2(h, refl)
+hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} by eq.trans(eq.symm(ra), eq.trans(hr, rb))
+mem : b ~ a by set.eq_sub(hs, a, seq_eq.refl(a))
 seq_eq.symm(mem)
 
 -- 商の性質 3（surjective）：どの実数も、ある列の同値類

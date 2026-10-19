@@ -13,7 +13,7 @@ Fix q
     choose 0
     Fix m | hm : m ≥ 0
       Fix n | hn : n ≥ 0
-        have z : |0| = 0 := abs.zero
+        z : |0| = 0 by abs.zero
         linarith
 
 -- コーシー列全体の型（定数列 0 があるので空でない）
@@ -33,7 +33,7 @@ Fix a
   Fix ε | hε : ε > 0
     choose 0
     Fix n | hn : n ≥ 0
-      have z : |0| = 0 := abs.zero
+      z : |0| = 0 by abs.zero
       linarith
 
 thm seq_eq.symm :

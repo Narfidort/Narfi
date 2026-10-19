@@ -40,7 +40,6 @@ thm conv.unfold :
   h : a ⟶ α
   ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
 
-unfold is_lim at h
 h
 
 

@@ -190,7 +190,7 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
                 .map(|g| json_str(&g.to_latex()))
                 .unwrap_or_else(|| "null".into());
             format!(
-                "{{\"line\":{},\"msg\":{},\"msg_latex\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{},\"fix\":{}}}",
+                "{{\"line\":{},\"msg\":{},\"msg_latex\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{},\"fix\":{},\"alts\":{}}}",
                 e.line,
                 json_str(&e.msg),
                 json_str(&crate::parser::msg_latex(&e.msg)),
@@ -198,7 +198,8 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
                 gl_str,
                 json_str_array(&e.ctx),
                 json_str_array(&e.ctx_latex),
-                e.fix.as_ref().map(|f| json_str(f)).unwrap_or_else(|| "null".into())
+                e.fix.as_ref().map(|f| json_str(f)).unwrap_or_else(|| "null".into()),
+                json_str_array(&e.alts)
             )
         }
         None => "null".to_string(),
@@ -252,7 +253,7 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
         .collect();
 
     format!(
-        "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{},\"tree\":{}}}",
+        "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{},\"tree\":{},\"warnings\":[{}]}}",
         json_str(&r.name),
         r.line,
         r.is_axiom,
@@ -266,7 +267,16 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
         steps_json.join(","),
         prose_json.join(","),
         json_str(&latex_env),
-        r.tree.as_deref().unwrap_or("null")
+        r.tree.as_deref().unwrap_or("null"),
+        r.warnings
+            .iter()
+            .map(|(l, m, rep)| format!(
+                "{{\"line\":{l},\"msg\":{},\"replace\":{}}}",
+                json_str(m),
+                rep.as_ref().map(|x| json_str(x)).unwrap_or_else(|| "null".into())
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
     )
 }
 

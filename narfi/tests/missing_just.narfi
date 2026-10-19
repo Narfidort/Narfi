@@ -1,0 +1,22 @@
+-- 根拠のない事実の行：エラーにして、見つかった根拠を直し方として示す
+
+thm m1 :
+  x : ℝ, h : x > 1
+  ⊢ 2x > 1
+
+k : x > 0
+2x > 1
+
+thm m2 :
+  P : Prop, Q : Prop, h : P ∧ Q
+  ⊢ Q ∧ P
+
+q : Q
+p : P
+Q ∧ P
+
+thm m3 :
+  P : Prop, Q : Prop, f : P → Q, a : P
+  ⊢ Q
+
+Q

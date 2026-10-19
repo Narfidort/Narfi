@@ -104,6 +104,15 @@ pub struct Stmt {
     pub line: usize,
     pub src: String,
     pub kind: StmtKind,
+    /// 古い書き方の警告（直し方つき）
+    pub warn: Option<Warn>,
+}
+
+/// 古い書き方の警告。replace はその行の書き換え先（空文字なら行を消す。None なら直し方は示すだけ）
+#[derive(Debug, Clone)]
+pub struct Warn {
+    pub msg: String,
+    pub replace: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -143,13 +152,6 @@ pub enum StmtKind {
         hyps: Vec<String>,
         just: Just,
     },
-    /// `have h : φ := j`、または `have h : φ` の下に字下げして φ の証明（body。このとき just は空）
-    Have {
-        name: String,
-        ty: Formula,
-        just: Just,
-        body: Vec<Stmt>,
-    },
     Suffices {
         ty: Formula,
         just: Just,
@@ -181,10 +183,13 @@ pub enum StmtKind {
         at: Vec<String>,
     },
     Close(Just),
-    /// `φ by j`：φ を j から示す（goal なら閉じる。後ろに続けば this として使える）
+    /// 事実の行 `h : φ by j`（名前は省略可）。φ が goal なら閉じ、後ろに続けば h（名前がなければ this）として使える。
+    /// `h : φ` の下に字下げして φ の証明を書くこともできる（body）。根拠がなければ（just が None）エラーにして候補を示す
     Show {
+        name: Option<String>,
         ty: Formula,
-        just: Just,
+        just: Option<Just>,
+        body: Vec<Stmt>,
     },
     Chain {
         start: Term,
@@ -340,8 +345,8 @@ pub fn normalize_japanese_sugar(raw: &str) -> String {
         if let Some(body) = s.strip_suffix(suffix) {
             if let Some((just, rest)) = body.split_once("より") {
                 let rest = rest.trim();
-                if rest.contains(':') {
-                    return format!("have {} := {}", rest, just.trim());
+                if !rest.is_empty() {
+                    return format!("{} by {}", rest, just.trim());
                 }
             }
         }
@@ -351,7 +356,7 @@ pub fn normalize_japanese_sugar(raw: &str) -> String {
     if let Some(body) = s.strip_suffix("を示す") {
         let body = body.trim();
         if body.contains(':') && !body.contains("より") {
-            return format!("have {body}");
+            return body.to_string();
         }
     }
 
@@ -784,15 +789,14 @@ impl SubScope {
             }
             StmtKind::ByContra { body, .. } => self.stmts(body),
             StmtKind::Obtain { just, .. } | StmtKind::Close(just) => *just = self.just(just),
-            StmtKind::Show { ty, just } => {
+            StmtKind::Show { ty, just, body, .. } => {
                 *ty = self.formula(ty);
-                *just = self.just(just);
-            }
-            StmtKind::Have { ty, just, body, .. } => {
-                *ty = self.formula(ty);
-                *just = self.just(just);
+                if let Some(j) = just {
+                    *j = self.just(j);
+                }
                 self.stmts(body);
             }
+
             StmtKind::Suffices { ty, just } => {
                 *ty = self.formula(ty);
                 *just = self.just(just);
@@ -2238,8 +2242,8 @@ fn expand_rec(text: &[String], line: usize) -> PResult<String> {
     out.push_str(&format!("Fix {}\n", fixes(Some(&m)).join(", ")));
     let core = format!("all.elim(and.right({ex}), {m})");
     if plus_one {
-        out.push_str(&format!("  have rec_h : {} = {step} := {core}\n", call(&format!("S({m})"))));
-        out.push_str(&format!("  have rec_e : S({m}) = {m} + 1 := ring\n"));
+        out.push_str(&format!("  rec_h : {} = {step} by {core}\n", call(&format!("S({m})"))));
+        out.push_str(&format!("  rec_e : S({m}) = {m} + 1 by ring\n"));
         out.push_str("  EQ2(rec_e, rec_h)\n");
     } else {
         out.push_str(&format!("  {core}\n"));
@@ -2444,6 +2448,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
         _ => String::new(),
     };
     let block = |p: &P| parse_block(&n.children, &p.tyenv);
+    let mut warn: Option<Warn> = None;
     let kind = match first.as_str() {
         "Fix" => {
             p.pos += 1;
@@ -2539,19 +2544,26 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             }
         }
         "have" => {
+            // 古い書き方：have h : φ := j は h : φ by j と同じ
             p.pos += 1;
             let name = p.ident()?;
             p.expect_sym(":")?;
             let ty = p.formula()?;
+            let rest = n.text.trim().strip_prefix("have").unwrap_or(&n.text).trim().to_string();
             if p.at_end() && !n.children.is_empty() {
-                // have h : φ の下に、φ の証明を字下げして書く
-                StmtKind::Have { name, ty, just: vec![], body: block(&p)? }
+                warn = Some(Warn { msg: "have は古い書き方。`h : φ` の下に証明を書く".into(), replace: Some(rest) });
+                StmtKind::Show { name: Some(name), ty, just: None, body: block(&p)? }
             } else {
                 p.expect_sym(":=")?;
                 let just = p.just()?;
                 p.expect_end()?;
                 no_children(n)?;
-                StmtKind::Have { name, ty, just, body: vec![] }
+                let new = match rest.rsplit_once(":=") {
+                    Some((a, b)) => format!("{} by {}", a.trim_end(), b.trim()),
+                    None => rest.clone(),
+                };
+                warn = Some(Warn { msg: format!("have は古い書き方。`{new}` と書く"), replace: Some(new) });
+                StmtKind::Show { name: Some(name), ty, just: Some(just), body: vec![] }
             }
         }
         "suffices" | "⇐" => {
@@ -2561,6 +2573,10 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             let just = p.just()?;
             p.expect_end()?;
             no_children(n)?;
+            warn = Some(Warn {
+                msg: "suffices は古い書き方。示したい命題を `ψ by …` で先に示し、最後に根拠（j(this) など）で閉じる".into(),
+                replace: None,
+            });
             StmtKind::Suffices { ty, just }
         }
         "choose" => {
@@ -2589,6 +2605,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             let b = p.ident()?;
             p.expect_end()?;
             no_children(n)?;
+            warn = Some(Warn { msg: format!("contradiction は古い書き方。`{b}({a})` と書く（¬φ は φ → ⊥ なので、{a} を {b} に渡す）"), replace: Some(format!("{b}({a})")) });
             StmtKind::Contradiction(a, b)
         }
         "let" => {
@@ -2616,6 +2633,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             }
             p.expect_end()?;
             no_children(n)?;
+            warn = Some(Warn { msg: "unfold は書かなくてよい（定義は必要な所で自動的に開かれる）。この行は消せる".into(), replace: Some(String::new()) });
             StmtKind::Unfold { names, at }
         }
         "∴" => {
@@ -2729,6 +2747,23 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                 }
             }
         }
+        // 事実の行 `h : φ by j` / `h : φ`（下に証明）/ `h : φ`（根拠なし：エラーにして候補を示す）
+        _ if matches!(p.toks.get(1), Some(Tok::Sym(c)) if c == ":") && matches!(p.toks.first(), Some(Tok::Ident(_))) => {
+            let name = p.ident()?;
+            p.expect_sym(":")?;
+            let ty = p.formula()?;
+            if p.is_ident("by") {
+                p.pos += 1;
+                let just = p.just()?;
+                p.expect_end()?;
+                no_children(n)?;
+                StmtKind::Show { name: Some(name), ty, just: Some(just), body: vec![] }
+            } else {
+                p.expect_end()?;
+                let body = if n.children.is_empty() { vec![] } else { block(&p)? };
+                StmtKind::Show { name: Some(name), ty, just: None, body }
+            }
+        }
         _ => {
             let starts_chain = n.children.first().is_some_and(|c| {
                 lex(&c.text, c.no)
@@ -2746,7 +2781,12 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                         let just = p.just()?;
                         p.expect_end()?;
                         no_children(n)?;
-                        return Ok(Stmt { line: n.no, src: n.text.clone(), kind: StmtKind::Show { ty: f, just } });
+                        return Ok(Stmt {
+                            line: n.no,
+                            src: n.text.clone(),
+                            kind: StmtKind::Show { name: None, ty: f, just: Some(just), body: vec![] },
+                            warn: None,
+                        });
                     }
                 }
                 p.pos = save;
@@ -2764,10 +2804,24 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                 }
                 StmtKind::Chain { start, steps }
             } else {
-                let j = p.just()?;
-                p.expect_end()?;
-                no_children(n)?;
-                StmtKind::Close(j)
+                // 根拠だけの行なら閉じる。根拠として読めず命題として読めるなら、根拠のない事実の行
+                let save = p.pos;
+                match p.just().and_then(|j| p.expect_end().map(|_| j)) {
+                    Ok(j) => {
+                        no_children(n)?;
+                        StmtKind::Close(j)
+                    }
+                    Err(e) => {
+                        p.pos = save;
+                        match p.formula() {
+                            Ok(ty) if p.at_end() => {
+                                let body = if n.children.is_empty() { vec![] } else { block(&p)? };
+                                StmtKind::Show { name: None, ty, just: None, body }
+                            }
+                            _ => return Err(e),
+                        }
+                    }
+                }
             }
         }
     };
@@ -2775,6 +2829,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
         line: n.no,
         src: n.text.clone(),
         kind,
+        warn,
     })
 }
 

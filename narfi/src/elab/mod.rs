@@ -150,6 +150,8 @@ pub struct CheckError {
     pub ctx_latex: Vec<String>,
     /// 直し方：この行の末尾に足せばよい文字列（エディタの Tab で入る）
     pub fix: Option<String>,
+    /// ほかの直し方の候補（同じく行末に足す）
+    pub alts: Vec<String>,
 }
 
 type CResult<T> = Result<T, CheckError>;
@@ -208,6 +210,7 @@ impl<'a> Checker<'a> {
             ctx: self.snapshot.0.show(),
             ctx_latex: self.snapshot.0.show_latex(),
             fix: None,
+            alts: vec![],
         })
     }
 
@@ -361,10 +364,33 @@ pub struct Report {
     pub steps: Vec<StepTrace>,
     /// 証明木（JSON。src/derivation.rs）
     pub tree: Option<String>,
+    /// 古い書き方の警告：(行, 文, 書き換え先)
+    pub warnings: Vec<(usize, String, Option<String>)>,
+}
+
+fn collect_warnings(stmts: &[crate::parser::Stmt], out: &mut Vec<(usize, String, Option<String>)>) {
+    use crate::parser::StmtKind::*;
+    for s in stmts {
+        if let Some(w) = &s.warn {
+            out.push((s.line, w.msg.clone(), w.replace.clone()));
+        }
+        match &s.kind {
+            Fix { body, .. } | Assume { body, .. } | ByContra { body, .. } | Show { body, .. } => collect_warnings(body, out),
+            Cases { left, right, .. } => {
+                collect_warnings(&left.1, out);
+                collect_warnings(&right.1, out);
+            }
+            Induction { zero, succ, .. } => {
+                collect_warnings(zero, out);
+                collect_warnings(&succ.3, out);
+            }
+            _ => {}
+        }
+    }
 }
 
 fn simple_err(line: usize, msg: String) -> CheckError {
-    CheckError { line, msg, goal: None, ctx: vec![], ctx_latex: vec![], fix: None }
+    CheckError { line, msg, goal: None, ctx: vec![], ctx_latex: vec![], fix: None, alts: vec![] }
 }
 
 /// 定理・公理の文の型を推論して、kernel に渡せる形にする
@@ -409,7 +435,9 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
         sorries: vec![],
         steps: vec![],
         tree: None,
+        warnings: vec![],
     };
+    collect_warnings(&d.body, &mut report.warnings);
     if env.kernel.thms.contains_key(&d.name) || env.failed.contains(&d.name) {
         report.err = Some(simple_err(
             d.line,
@@ -545,6 +573,7 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
                         sorries: vec![],
                         steps: vec![],
                         tree: None,
+                        warnings: vec![],
                     });
                 }
             }
@@ -559,6 +588,7 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
                 sorries: vec![],
                 steps: vec![],
                 tree: None,
+                warnings: vec![],
             }),
             Item::Notation { .. } | Item::Import { .. } => {}
         }

@@ -10,8 +10,8 @@ Fix n
     Case zero
       add.zero(0)
     Case succ k, IH : 0 + k = k
-      have h1 : 0 + S(k) = S(0 + k) := add.succ(0, k)
-      have h2 : S(0 + k) = S(k)     := congr.S(IH)
+      h1 : 0 + S(k) = S(0 + k) by add.succ(0, k)
+      h2 : S(0 + k) = S(k) by congr.S(IH)
       eq.trans(h1, h2)
 
 

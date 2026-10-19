@@ -140,3 +140,19 @@ fn matrices() {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }
+
+/// 事実の行（v2.6）：根拠がなければエラーにし、見つかった根拠を help に出す。古い書き方は警告
+#[test]
+fn fact_lines_and_old_forms() {
+    let out = run(&["tests/missing_just.narfi"]);
+    for (n, j) in [("m1", "by linarith"), ("m2", "by h.right"), ("m3", "by f(a)")] {
+        assert!(out.contains(&format!("✗ {n}")), "{out}");
+        assert!(out.contains(j), "{n} の候補 {j} がない\n{out}");
+    }
+    let dir = std::env::temp_dir().join(format!("narfi-old-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("old.narfi");
+    std::fs::write(&f, "thm t :\n  P : Prop, h : P\n  ⊢ P\n\nhave k : P := h\nk\n").unwrap();
+    let out = run(&[f.to_str().unwrap()]);
+    assert!(out.contains("✓ t") && out.contains("警告") && out.contains("k : P by h"), "{out}");
+}

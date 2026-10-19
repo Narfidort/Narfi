@@ -14,7 +14,7 @@ thm sub.chain :
   h : incr(a)
   |- a_1 <= a_{2}
 
-have k : a_1 <= a_{1+1} := h(1)
+k : a_1 <= a_{1+1} by h(1)
 a_1
   <= a_{1+1}   by k
   = a_2        by ring

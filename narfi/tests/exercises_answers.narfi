@@ -42,7 +42,7 @@ thm ex2.forall_and :
   ⊢ ∀x. P(x)
 
 Fix x
-  have hx : P(x) ∧ Q(x) := h(x)
+  hx : P(x) ∧ Q(x) by h(x)
   hx.left
 
 

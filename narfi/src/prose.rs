@@ -261,25 +261,6 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                     ),
                 });
             }
-            StmtKind::Have { name, ty, just, body } if !body.is_empty() => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!("まず ${}$ を示す（${}$）。", ty.to_latex(), ident_to_latex(name)),
-                });
-                stmts_to_prose(body, steps, depth + 1, out);
-                let _ = just;
-            }
-            StmtKind::Have { name, ty, just, .. } => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!(
-                        "${}$ より、${}$ が成り立つ（${}$）。",
-                        just_to_latex(just),
-                        ty.to_latex(),
-                        ident_to_latex(name)
-                    ),
-                });
-            }
             StmtKind::Suffices { ty, just } => {
                 out.push(ProseBlock {
                     depth,
@@ -398,11 +379,18 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                     text: format!("したがって、${}$ が成り立つ。$\\blacksquare$", f.to_latex()),
                 });
             }
-            StmtKind::Show { ty, just } => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!("${}$ より ${}$ が成り立つ。", just_to_latex(just), ty.to_latex()),
-                });
+            StmtKind::Show { name, ty, just, body } => {
+                let label = name.as_ref().map(|h| format!("（${}$）", ident_to_latex(h))).unwrap_or_default();
+                if !body.is_empty() {
+                    out.push(ProseBlock { depth, text: format!("まず ${}${label} を示す。", ty.to_latex()) });
+                    stmts_to_prose(body, steps, depth + 1, out);
+                } else {
+                    let text = match just {
+                        Some(j) => format!("${}$ より、${}$ が成り立つ{label}。", just_to_latex(j), ty.to_latex()),
+                        None => format!("${}$ が成り立つ{label}（根拠が書かれていない）。", ty.to_latex()),
+                    };
+                    out.push(ProseBlock { depth, text });
+                }
             }
             StmtKind::Close(j) => {
                 let text = match j.as_slice() {
@@ -627,18 +615,6 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
                 just_str(just)
             ));
         }
-        StmtKind::Have { name, ty, body, .. } if !body.is_empty() => {
-            out.push_str(&format!("{pad}{name} : {ty} を示す\n"));
-            for c in body {
-                stmt_to_japanese_sugar(c, indent + 1, out);
-            }
-        }
-        StmtKind::Have { name, ty, just, .. } => {
-            out.push_str(&format!(
-                "{pad}{} より {name} : {ty} が成り立つ\n",
-                just_str(just)
-            ));
-        }
         StmtKind::Suffices { ty, just } => {
             out.push_str(&format!(
                 "{pad}{} より {ty} を示せば十分である\n",
@@ -703,8 +679,19 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Close(j) => {
             out.push_str(&format!("{pad}{}\n", just_str(j)));
         }
-        StmtKind::Show { ty, just } => {
-            out.push_str(&format!("{pad}{ty} by {}\n", just_str(just)));
+        StmtKind::Show { name, ty, just, body } => {
+            let label = name.as_ref().map(|h| format!("{h} : ")).unwrap_or_default();
+            if !body.is_empty() {
+                out.push_str(&format!("{pad}{label}{ty} を示す\n"));
+                for c in body {
+                    stmt_to_japanese_sugar(c, indent + 1, out);
+                }
+            } else {
+                match just {
+                    Some(j) => out.push_str(&format!("{pad}{} より {label}{ty} が成り立つ\n", just_str(j))),
+                    None => out.push_str(&format!("{pad}{label}{ty}\n")),
+                }
+            }
         }
         StmtKind::Chain { start, steps } => {
             out.push_str(&format!("{pad}{start}\n"));
@@ -825,15 +812,6 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                 just_str(just)
             ));
         }
-        StmtKind::Have { name, ty, body, .. } if !body.is_empty() => {
-            out.push_str(&format!("{pad}have {name} : {ty}\n"));
-            for c in body {
-                stmt_to_standard(c, indent + 1, out);
-            }
-        }
-        StmtKind::Have { name, ty, just, .. } => {
-            out.push_str(&format!("{pad}have {name} : {ty} := {}\n", just_str(just)));
-        }
         StmtKind::Suffices { ty, just } => {
             out.push_str(&format!("{pad}suffices {ty} := {}\n", just_str(just)));
         }
@@ -895,8 +873,15 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Close(j) => {
             out.push_str(&format!("{pad}{}\n", just_str(j)));
         }
-        StmtKind::Show { ty, just } => {
-            out.push_str(&format!("{pad}{ty} by {}\n", just_str(just)));
+        StmtKind::Show { name, ty, just, body } => {
+            let label = name.as_ref().map(|h| format!("{h} : ")).unwrap_or_default();
+            match just {
+                Some(j) if body.is_empty() => out.push_str(&format!("{pad}{label}{ty} by {}\n", just_str(j))),
+                _ => out.push_str(&format!("{pad}{label}{ty}\n")),
+            }
+            for c in body {
+                stmt_to_standard(c, indent + 1, out);
+            }
         }
         StmtKind::Chain { start, steps } => {
             out.push_str(&format!("{pad}{start}\n"));

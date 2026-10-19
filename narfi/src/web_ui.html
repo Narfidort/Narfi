@@ -405,6 +405,9 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .mc-line.has-sorry .mc-gutter {
   color: var(--warn);
 }
+.mc-line.mc-therefore { opacity: 0.38; pointer-events: none; font-size: 0.9em; min-height: 0; }
+.mc-line.has-warn .mc-gutter { color: var(--warn); text-decoration: underline wavy var(--warn); }
+.warn-banner { padding: 8px 12px; border-left: 2px solid var(--warn); background: rgba(245, 158, 11, 0.08); color: var(--warn); font-size: 12.5px; margin-bottom: 14px; white-space: pre-wrap; }
 .mc-indent-guides {
   display: inline-flex;
   align-self: stretch;
@@ -2033,9 +2036,15 @@ function findSubstrIndexInItems(items, pat, fromIdx = 0) {
 function getInferredFixHypFormula(lineNo, rootSeq) {
   if (!lastCheckData || !lastCheckData.decls) return "";
   const items = rootSeq.items;
-  // 検査器が直し方を出していれば（仮定の中身が書かれていない など）それを使う
+  // 検査器が直し方を出していれば（仮定の中身・根拠が書かれていない など）それを使う
   for (const d of lastCheckData.decls) {
-    if (d.error && d.error.line === lineNo && d.error.fix) return d.error.fix.replace(/^\s*:\s*/, "");
+    if (d.error && d.error.line === lineNo && d.error.fix) return { append: d.error.fix };
+  }
+  // 古い書き方の警告：行ごと書き換える
+  for (const d of lastCheckData.decls) {
+    for (const w of (d.warnings || [])) {
+      if (w.line === lineNo && w.replace !== null && w.replace !== undefined) return { replace: w.replace };
+    }
   }
   if (!matchKeywordPrefix(items, "Fix ")) return "";
   const barIdx = findCharIndexInItems(items, "|", 4);
@@ -2052,7 +2061,7 @@ function getInferredFixHypFormula(lineNo, rootSeq) {
         for (const entry of nextCtx) {
           if (!curCtx.has(entry) && entry.includes(" : ") && !entry.endsWith("(Fix)") && !entry.endsWith("(Obtain)")) {
             const colonPos = entry.indexOf(" : ");
-            return entry.substring(colonPos + 3);
+            return { append: " : " + entry.substring(colonPos + 3) };
           }
         }
       }
@@ -2068,8 +2077,10 @@ function renderRootSeqWithLens(rootSeq, lineNo) {
   const isCursorInKeywordPrefix = (kwLen) => (cursor.seqId === rootSeq.id && cursor.offset <= kwLen);
   const atLineEnd = cursor.seqId === rootSeq.id && cursor.offset === items.length;
   const suggestHyp = atLineEnd ? getInferredFixHypFormula(lineNo, rootSeq) : "";
-  if (suggestHyp) pendingHypSuggestion = { seqId: rootSeq.id, text: suggestHyp };
-  const badgeHtml = suggestHyp ? `<span class="mc-ghost">: ${escHtml(suggestHyp)}<span class="mc-ghost-key">Tab</span></span>` : "";
+  if (suggestHyp) pendingHypSuggestion = { seqId: rootSeq.id, ...suggestHyp };
+  const badgeHtml = !suggestHyp ? "" : suggestHyp.replace !== undefined
+    ? `<span class="mc-ghost">→ ${escHtml(suggestHyp.replace || "（この行を消す）")}<span class="mc-ghost-key">Tab</span></span>`
+    : `<span class="mc-ghost">${escHtml(suggestHyp.append)}<span class="mc-ghost-key">Tab</span></span>`;
 
   if (!jpSugarLens) {
     return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">${renderItemsSliceHtml(rootSeq, 0, items.length)}${badgeHtml}</span>`;
@@ -2546,15 +2557,40 @@ function renderEditor() {
   selHL = selHighlights();
   const errLines = new Set();
   const sorryLines = new Set();
+  const warnLines = new Set();
   if (lastCheckData) {
     if (lastCheckData.parse_error && lastCheckData.parse_error.line) {
       errLines.add(lastCheckData.parse_error.line);
     }
     for (const d of (lastCheckData.decls || [])) {
+      for (const w of (d.warnings || [])) warnLines.add(w.line);
       if (d.error && d.error.line) errLines.add(d.error.line);
       for (const sr of (d.sorries || [])) {
         if (sr.line) sorryLines.add(sr.line);
       }
+    }
+  }
+
+  // ブロック（Fix・assume など）の終わりに、そのブロックで示したことを薄く出す（表示だけ。ファイルには入らない）
+  const thereforeAfter = new Map();
+  if (lastCheckData) {
+    const stepAt = new Map();
+    for (const d of (lastCheckData.decls || [])) for (const st of (d.steps || [])) if (!stepAt.has(st.line)) stepAt.set(st.line, st);
+    const text = (j) => serializeSeqToAscii(docLines[j].rootSeq).trim();
+    for (let j = 0; j < docLines.length; j++) {
+      if (!/^(Fix|assume|by_contra|cases|induction)\b/.test(text(j))) continue;
+      const st = stepAt.get(j + 1);
+      if (!st || !st.goal_latex) continue;
+      const base = docLines[j].indent;
+      let k = j + 1, last = j;
+      while (k < docLines.length && (docLines[k].indent > base || text(k) === "")) {
+        if (text(k) !== "") last = k;
+        k++;
+      }
+      if (last - j < 2) continue;
+      if (k < docLines.length && /^(∴|therefore)/.test(text(k))) continue;
+      if (!thereforeAfter.has(last)) thereforeAfter.set(last, []);
+      thereforeAfter.get(last).push({ indent: base, latex: st.goal_latex });
     }
   }
 
@@ -2566,6 +2602,7 @@ function renderEditor() {
     if (i === cursor.lineIdx) cls.push("active");
     if (errLines.has(lineNo)) cls.push("has-err");
     else if (sorryLines.has(lineNo)) cls.push("has-sorry");
+    else if (warnLines.has(lineNo)) cls.push("has-warn");
 
     let guides = "";
     for (let g = 0; g < ln.indent; g++) {
@@ -2577,6 +2614,11 @@ function renderEditor() {
       `<div class="mc-indent-guides">${guides}</div>` +
       `<div class="mc-content" data-line-idx="${i}">${renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
       `</div>`;
+    for (const g of (thereforeAfter.get(i) || []).reverse()) {
+      html += `<div class="mc-line mc-therefore" title="このブロックで示したこと（表示だけ）"><div class="mc-gutter"></div>` +
+        `<div class="mc-indent-guides">${'<span class="mc-indent-guide"></span>'.repeat(g.indent)}</div>` +
+        `<div class="mc-content">∴ ${renderKatex(g.latex, false)}</div></div>`;
+    }
   }
   editorSurface.innerHTML = html;
   document.getElementById("curLineLabel").textContent = `Ln ${cursor.lineIdx + 1}`;
@@ -3202,8 +3244,25 @@ editorSurface.addEventListener("keydown", (e) => {
       onDocMutated(true);
       return;
     }
+    if (!e.shiftKey && pendingHypSuggestion && pendingHypSuggestion.seqId === seq.id && cursor.offset === seq.items.length && pendingHypSuggestion.replace !== undefined) {
+      // 古い書き方：行ごと書き換える（空なら行を消す）
+      const text = pendingHypSuggestion.replace;
+      if (text === "") {
+        docLines.splice(cursor.lineIdx, 1);
+        const li = Math.min(cursor.lineIdx, docLines.length - 1);
+        const r = docLines[li].rootSeq;
+        setCursor(r.id, r.items.length, li);
+      } else {
+        const ins = parseAsciiToItems(text);
+        for (const it of ins) it.parentSeq = seq;
+        seq.items = ins;
+        cursor.offset = seq.items.length;
+      }
+      onDocMutated();
+      return;
+    }
     if (!e.shiftKey && pendingHypSuggestion && pendingHypSuggestion.seqId === seq.id && cursor.offset === seq.items.length) {
-      const ins = parseAsciiToItems(" : " + pendingHypSuggestion.text);
+      const ins = parseAsciiToItems(pendingHypSuggestion.append);
       for (const it of ins) it.parentSeq = seq;
       // `Case succ k, IH:` のように行末が「:」なら、その前に入れる
       let at = seq.items.length;
@@ -3479,6 +3538,15 @@ function renderGoalInspector() {
     let html = "";
     if (activeDecl.error) {
       html += `<div class="err-banner">Ln ${activeDecl.error.line}: ${msgHtml(activeDecl.error)}</div>`;
+      // 根拠の候補（行末に足す）
+      const fixes = [activeDecl.error.fix, ...(activeDecl.error.alts || [])].filter((f) => f && /^\s*by\s/.test(f));
+      if (fixes.length && activeDecl.error.line === curLine) {
+        html += `<div class="hints"><span class="hints-label">根拠の候補</span>` +
+          fixes.map((f) => `<button class="hint" data-append="${escHtml(f)}">${escHtml(f.trim())}</button>`).join("") + `</div>`;
+      }
+    }
+    for (const w of (activeDecl.warnings || [])) {
+      if (w.line === curLine) html += `<div class="warn-banner">Ln ${w.line}: ${escHtml(w.msg)}${w.replace !== null ? "（行末で Tab）" : ""}</div>`;
     }
 
     const ctxL = (bestStep && bestStep.ctx_latex) ? bestStep.ctx_latex : (activeDecl.error && activeDecl.error.ctx_latex ? activeDecl.error.ctx_latex : []);
@@ -3643,8 +3711,23 @@ function depsHtml(d) {
 
 document.getElementById("goalViewArea").addEventListener("click", (e) => {
   const b = e.target.closest(".hint");
-  if (b) insertHint(b.getAttribute("data-code"));
+  if (!b) return;
+  if (b.hasAttribute("data-append")) appendToLine(b.getAttribute("data-append"));
+  else insertHint(b.getAttribute("data-code"));
 });
+
+// カーソルの行の末尾に足す（根拠の候補）
+function appendToLine(text) {
+  const ln = docLines[cursor.lineIdx];
+  const seq = ln.rootSeq;
+  while (seq.items.length && seq.items[seq.items.length - 1].kind === "char" && seq.items[seq.items.length - 1].ch === " ") seq.items.pop();
+  const ins = parseAsciiToItems(text);
+  for (const it of ins) it.parentSeq = seq;
+  seq.items.push(...ins);
+  setCursor(seq.id, seq.items.length, cursor.lineIdx);
+  onDocMutated();
+  editorSurface.focus();
+}
 
 function insertHint(code) {
   const lines = serializeDocToAscii().split("\n");
