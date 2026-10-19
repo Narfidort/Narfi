@@ -78,11 +78,79 @@ html, body {
   border-bottom: 1px solid var(--border);
   user-select: none;
 }
-.topbar-left, .topbar-right {
+.topbar { justify-content: flex-start; gap: 10px; padding: 0 10px 0 14px; }
+.topbar-right {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
+/* File メニュー */
+.menu-wrap { position: relative; flex-shrink: 0; }
+.menu-btn {
+  display: flex; align-items: center; gap: 4px;
+  background: transparent; color: var(--text-dim); border: 1px solid transparent; border-radius: 3px;
+  padding: 3px 8px; font-size: 12px; font-family: inherit; cursor: pointer;
+}
+.menu-btn:hover, .menu-btn.open { color: var(--text); background: var(--bg-hover); border-color: var(--border); }
+.menu-btn .chev { width: 10px; height: 10px; }
+.menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; min-width: 220px;
+  display: flex; flex-direction: column; padding: 4px;
+  background: var(--bg-elev); border: 1px solid var(--border); box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+.menu[hidden] { display: none; }
+.menu-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 24px;
+  background: transparent; color: var(--text); border: 0; border-radius: 2px;
+  padding: 5px 10px 5px 24px; font-size: 12.5px; font-family: inherit; text-align: left; cursor: pointer; position: relative;
+}
+.menu-item:hover { background: var(--bg-active); }
+.menu-item .kbd { color: var(--text-faint); font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.menu-item.check.active::before { content: "✓"; position: absolute; left: 8px; color: var(--accent); }
+.menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+/* 開いたファイルのタブ */
+.tab-strip {
+  flex: 1; min-width: 0; height: 100%; display: flex; align-items: stretch;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 220px;
+  padding: 0 6px 0 12px; border-right: 1px solid var(--border); cursor: pointer;
+  color: var(--text-dim); font-size: 12px; font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+}
+.tab:first-child { border-left: 1px solid var(--border); }
+.tab:hover { background: var(--bg-hover); color: var(--text); }
+.tab.active { color: var(--text); background: var(--bg-elev); box-shadow: inset 0 -2px 0 var(--accent); }
+.tab .tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab .tab-name.ro { font-style: italic; }
+.tab .tab-close {
+  width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+  border-radius: 2px; color: var(--text-faint); font-size: 13px; line-height: 1; visibility: hidden;
+}
+.tab:hover .tab-close, .tab.active .tab-close { visibility: visible; }
+.tab .tab-close:hover { background: var(--bg-active); color: var(--text); }
+.tab.dirty .tab-close::before { content: "●"; font-size: 9px; color: var(--warn); }
+.tab.dirty .tab-close { visibility: visible; font-size: 0; }
+.tab.dirty .tab-close:hover { font-size: 13px; }
+.tab.dirty .tab-close:hover::before { content: none; }
+/* 下のステータスバー（Zed 風：アイコンだけ） */
+.statusbar {
+  height: 24px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 6px; border-top: 1px solid var(--border); background: var(--bg); user-select: none;
+}
+.sbar-left, .sbar-right { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.icon-btn {
+  width: 22px; height: 20px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 3px; color: var(--text-faint); cursor: pointer; padding: 0;
+}
+.icon-btn svg { width: 14px; height: 14px; }
+.icon-btn.text { width: auto; padding: 0 5px; font-size: 10.5px; font-weight: 600; font-family: "JetBrains Mono", monospace; }
+.icon-btn:hover { color: var(--text); background: var(--bg-hover); }
+.icon-btn.active { color: var(--accent); }
+.statusbar .file-label { margin-left: 6px; font-size: 11px; color: var(--text-dim); max-width: 50vw; }
 .logo {
   font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
   font-weight: 700;
@@ -208,7 +276,7 @@ html, body {
 /* Split Workspace with Resizable Right Pane */
 .workspace {
   display: flex;
-  height: calc(100vh - 38px);
+  height: calc(100vh - 38px - 24px);
   width: 100vw;
   overflow: hidden;
 }
@@ -755,23 +823,25 @@ html, body {
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-left">
-    <span class="logo">NARFI</span>
-    <button id="btnFiles" class="ctrl-btn active" onclick="toggleSidebar()" title="ファイル一覧の表示・非表示">Files</button>
-    <span id="fileLabel" class="file-label">untitled.narfi</span>
-    <button class="ctrl-btn" onclick="newFile()" title="新しいファイル">New</button>
-    <button class="ctrl-btn" onclick="openFileDialog()" title="ファイルを開く（⌘O）">Open</button>
-    <button class="ctrl-btn" onclick="saveFile()" title="保存（⌘S）">Save</button>
-    <button class="ctrl-btn" onclick="saveAs()" title="名前を付けて保存（⇧⌘S）">Save As</button>
-    <button id="btnAutosave" class="ctrl-btn" onclick="toggleAutosave()" title="編集が止まって約1秒後に自動で保存する">Auto Save: ON</button>
-    <button id="btnJpLens" class="ctrl-btn" onclick="toggleJpLens()" title="エディタ上の表示を日本語シュガーレンズに切り替え（裏のASCIIコードは不変）">JP Sugar View: OFF</button>
+  <span class="logo">NARFI</span>
+  <div class="menu-wrap">
+    <button id="btnFileMenu" class="menu-btn" onclick="toggleFileMenu(event)" title="ファイルの操作">File<svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+    <div id="fileMenu" class="menu" hidden>
+      <button class="menu-item" onclick="newFile()"><span class="mi-label">New</span><span class="kbd"></span></button>
+      <button class="menu-item" onclick="openFileDialog()"><span class="mi-label">Open…</span><span class="kbd">⌘O</span></button>
+      <button class="menu-item" onclick="openFolder()"><span class="mi-label">Open Folder…</span><span class="kbd">⇧⌘O</span></button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" onclick="saveFile()"><span class="mi-label">Save</span><span class="kbd">⌘S</span></button>
+      <button class="menu-item" onclick="saveAs()"><span class="mi-label">Save As…</span><span class="kbd">⇧⌘S</span></button>
+      <button id="btnAutosave" class="menu-item check" onclick="toggleAutosave()" title="編集が止まって約1秒後に自動で保存する"><span class="mi-label">Auto Save</span><span class="kbd"></span></button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" onclick="exportPdf()"><span class="mi-label">PDF (LaTeX)</span><span class="kbd">⇧⌘P</span></button>
+      <button class="menu-item" onclick="printDocument()"><span class="mi-label">Print</span><span class="kbd">⌘P</span></button>
+    </div>
   </div>
+  <div id="tabStrip" class="tab-strip"></div>
   <div class="topbar-right">
-    <button class="ctrl-btn" onclick="exportPdf()" title="LaTeX で組版した PDF を作る（⇧⌘P）">PDF</button>
-    <button class="ctrl-btn" onclick="printDocument()" title="証明文を印刷する・PDF として保存する（⌘P）">Print</button>
     <span id="statusPill" class="status-pill ok">READY</span>
-    <button id="btnInspector" class="ctrl-btn active" onclick="toggleInspector()" title="Toggle Right Pane">Inspector</button>
-    <button id="btnTheme" class="ctrl-btn" onclick="toggleTheme()">Light / Dark</button>
   </div>
 </div>
 
@@ -876,6 +946,18 @@ html, body {
     </div>
   </div>
 </div>
+<div class="statusbar">
+  <div class="sbar-left">
+    <button id="btnFiles" class="icon-btn active" onclick="toggleSidebar()" title="ファイル一覧の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M6 2.5v11" stroke="currentColor"/></svg></button>
+    <span id="fileLabel" class="file-label">untitled.narfi</span>
+  </div>
+  <div class="sbar-right">
+    <button id="btnJpLens" class="icon-btn text" onclick="toggleJpLens()" title="日本語シュガーの表示（裏の ASCII コードは変わらない）">JP</button>
+    <button id="btnTheme" class="icon-btn" onclick="toggleTheme()" title="ライト／ダーク"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
+    <button id="btnInspector" class="icon-btn active" onclick="toggleInspector()" title="右側（Goal・Prose・LaTeX など）の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/></svg></button>
+  </div>
+</div>
+
 <script>
 // ================================================================
 // 1. Mathcha-style Structured AST & Command Dictionary
@@ -3166,7 +3248,6 @@ function renderLatexTab(data) {
 function toggleJpLens() {
   jpSugarLens = !jpSugarLens;
   const btn = document.getElementById("btnJpLens");
-  btn.textContent = `JP Sugar View: ${jpSugarLens ? "ON" : "OFF"}`;
   btn.classList.toggle("active", jpSugarLens);
   renderEditor();
 }
@@ -3291,11 +3372,11 @@ function updateFileLabel() {
   el.classList.toggle("dirty", docDirty);
   el.classList.toggle("readonly", currentReadOnly);
   document.title = `${docDirty ? "● " : ""}${displayName(currentFilePath)} — Narfi`;
+  if (typeof renderTabs === "function" && tabs.length) renderTabs();
 }
 
 function updateAutosaveButton() {
   const b = document.getElementById("btnAutosave");
-  b.textContent = `Auto Save: ${autosaveOn ? "ON" : "OFF"}`;
   b.classList.toggle("active", autosaveOn);
 }
 
@@ -3305,6 +3386,27 @@ function toggleAutosave() {
   updateAutosaveButton();
   if (autosaveOn) scheduleAutosave();
 }
+
+// ---- File メニュー（項目を押すか、外を押すと閉じる）
+
+function toggleFileMenu(e) {
+  e.stopPropagation();
+  const m = document.getElementById("fileMenu");
+  m.hidden = !m.hidden;
+  document.getElementById("btnFileMenu").classList.toggle("open", !m.hidden);
+}
+function closeFileMenu() {
+  document.getElementById("fileMenu").hidden = true;
+  document.getElementById("btnFileMenu").classList.remove("open");
+}
+document.addEventListener("click", (e) => {
+  const m = document.getElementById("fileMenu");
+  if (m.hidden) return;
+  // Auto Save の切り替えではメニューを閉じない（状態が見えるように）
+  if (e.target.closest("#btnAutosave")) return;
+  if (!e.target.closest("#fileMenu") || e.target.closest(".menu-item")) closeFileMenu();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeFileMenu(); });
 
 function toggleSidebar() {
   const sb = document.getElementById("sidebar");
@@ -3376,41 +3478,168 @@ function renderSidebar() {
   document.getElementById("sbLibs").innerHTML = libs;
 }
 
-document.getElementById("sidebar").addEventListener("click", (e) => {
-  const item = e.target.closest(".sb-item");
-  if (item) openPath(item.getAttribute("data-path"));
+// ---- タブ：開いたファイルが上に並ぶ。切り替えても、保存していない変更はタブの中に残る
+
+let tabs = [];        // [{ path, src, dirty }]（src が null のタブは、まだ読み込んでいない）
+let activeTab = -1;
+
+function tabIndex(path) {
+  return path ? tabs.findIndex((t) => t.path === path) : -1;
+}
+
+function tabDirty(i) {
+  return i === activeTab ? docDirty : tabs[i].dirty;
+}
+
+function anyDirty() {
+  return tabs.some((_, i) => tabDirty(i));
+}
+
+function persistTabs() {
+  localStorage.setItem("narfi.tabs", JSON.stringify({ paths: tabs.filter((t) => t.path).map((t) => t.path), active: currentFilePath }));
+}
+
+function renderTabs() {
+  const strip = document.getElementById("tabStrip");
+  strip.innerHTML = tabs.map((t, i) => {
+    const name = t.path ? displayName(t.path).split("/").pop() : "untitled.narfi";
+    const cls = `tab${i === activeTab ? " active" : ""}${tabDirty(i) ? " dirty" : ""}`;
+    const ro = t.path && t.path.startsWith("lib:") ? " ro" : "";
+    return `<div class="${cls}" data-tab="${i}" title="${escHtml(t.path ? displayName(t.path) : "保存されていない文書")}">` +
+      `<span class="tab-name${ro}">${escHtml(name)}</span><span class="tab-close" data-close="${i}" title="閉じる">×</span></div>`;
+  }).join("");
+  const act = strip.querySelector(".tab.active");
+  if (act) act.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+document.getElementById("tabStrip").addEventListener("mousedown", (e) => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  e.preventDefault(); // エディタのフォーカスを奪わない
+  const close = e.target.closest(".tab-close");
+  const i = Number(tab.getAttribute("data-tab"));
+  if (close || e.button === 1) closeTab(i);
+  else if (e.button === 0) activateTab(i);
 });
 
-// Web 版：クラウドから別の端末の変更が届いた（web_static.js）。一覧を更新し、開いているファイルが変わって
-// いて手元に保存していない変更がなければ読み直す
+// 今のエディタの中身を今のタブに書き戻す。自動保存が有効なら、そのタブを保存しておく
+function stashCurrent() {
+  const t = tabs[activeTab];
+  if (!t) return;
+  t.src = serializeDocToAscii();
+  t.dirty = docDirty;
+  if (t.dirty && autosaveOn && t.path && !currentReadOnly) {
+    if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    const src = t.src;
+    fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: t.path, src }) })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok && t.src === src) { t.dirty = false; renderTabs(); } })
+      .catch(() => {});
+  }
+}
+
+// タブ i をエディタに出す（中身は読み込み済みであること）
+function showTab(i) {
+  activeTab = i;
+  const t = tabs[i];
+  loadSourceIntoDoc(t.src);
+  currentFilePath = t.path;
+  currentReadOnly = !!t.path && t.path.startsWith("lib:");
+  docDirty = t.dirty;
+  if (t.path && !currentReadOnly) localStorage.setItem("narfi.lastFile", t.path);
+  updateFileLabel();
+  renderSidebar();
+  persistTabs();
+  refreshAfterEdit();
+}
+
+async function activateTab(i) {
+  if (i === activeTab || !tabs[i]) return;
+  const t = tabs[i];
+  if (t.src == null) {
+    const data = await (await fetch(`/api/file?path=${encodeURIComponent(t.path)}`)).json();
+    if (!data.ok) {
+      alert(data.error || "開けなかった");
+      closeTab(i, true);
+      return;
+    }
+    t.src = data.src;
+  }
+  stashCurrent();
+  showTab(i);
+}
+
+function closeTab(i, force = false) {
+  if (!tabs[i]) return;
+  if (!force && tabDirty(i) && !confirm(`${tabs[i].path ? displayName(tabs[i].path) : "untitled.narfi"} の保存していない変更を破棄してよいですか？`)) return;
+  if (!tabs[i].path) localStorage.removeItem("narfi.draft");
+  if (i !== activeTab) {
+    tabs.splice(i, 1);
+    if (activeTab > i) activeTab--;
+    renderTabs();
+    persistTabs();
+    return;
+  }
+  tabs.splice(i, 1);
+  activeTab = -1;
+  docDirty = false;
+  if (tabs.length === 0) {
+    tabs.push({ path: "", src: "", dirty: false });
+    showTab(0);
+  } else {
+    const j = Math.min(i, tabs.length - 1);
+    if (tabs[j].src == null) activateTab(j);
+    else showTab(j);
+  }
+}
+
+// ソースを、path のタブとしてエディタに入れる（そのファイルのタブがなければ作る）。
+// 構文木を経由する変換（/api/convert）は通さない：コメントが消え、自動保存でファイルから失われるため。
+async function loadSrc(src, path, opts = {}) {
+  let i = tabIndex(path);
+  if (i >= 0) {
+    if (i !== activeTab) stashCurrent();
+    tabs[i].src = src;
+    tabs[i].dirty = false;
+  } else {
+    stashCurrent();
+    const cur = tabs[activeTab];
+    const t = { path: path || "", src, dirty: false };
+    if (cur && !opts.newTab && !cur.path && !docDirty && (cur.example || !serializeDocToAscii().trim())) {
+      // 空の untitled・最初の例は置き換える
+      i = activeTab;
+      tabs[i] = t;
+    } else {
+      i = activeTab + 1;
+      tabs.splice(i, 0, t);
+    }
+  }
+  activeTab = -1;
+  showTab(i);
+}
+
+// Web 版：クラウドから別の端末の変更が届いた（web_static.js）。一覧を更新し、変わったファイルのタブは読み直す
+// （開いているタブは、保存していない変更がなければ）
 window.addEventListener("narfi:files-changed", async (e) => {
   await loadWorkspace();
   const paths = (e.detail && e.detail.paths) || [];
+  tabs.forEach((t, i) => {
+    if (i !== activeTab && paths.includes(t.path) && !t.dirty) t.src = null;
+  });
   if (currentFilePath && paths.includes(currentFilePath) && !docDirty) {
     const data = await (await fetch(`/api/file?path=${encodeURIComponent(currentFilePath)}`)).json();
     if (data.ok && data.src !== serializeDocToAscii()) await loadSrc(data.src, data.path);
   }
 });
 
-function confirmDiscard() {
-  return !docDirty || confirm("保存していない変更があります。破棄してよいですか？");
-}
-
-// 読み込んだソースをエディタに入れる。
-// 構文木を経由する変換（/api/convert）は通さない：コメントが消え、自動保存でファイルから失われるため。
-async function loadSrc(src, path) {
-  loadSourceIntoDoc(src);
-  currentFilePath = path || "";
-  currentReadOnly = !!path && path.startsWith("lib:");
-  docDirty = false;
-  if (path && !currentReadOnly) localStorage.setItem("narfi.lastFile", path);
-  updateFileLabel();
-  renderSidebar();
-  refreshAfterEdit();
-}
+document.getElementById("sidebar").addEventListener("click", (e) => {
+  const item = e.target.closest(".sb-item");
+  if (item) openPath(item.getAttribute("data-path"));
+});
 
 async function openPath(path) {
-  if (!confirmDiscard()) return;
+  const i = tabIndex(path);
+  if (i >= 0) return activateTab(i);
   const resp = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
   const data = await resp.json();
   if (!data.ok) { alert(data.error || "開けなかった"); return; }
@@ -3418,7 +3647,6 @@ async function openPath(path) {
 }
 
 async function openFileDialog() {
-  if (!confirmDiscard()) return;
   const data = await (await fetch("/api/open-file", { method: "POST", body: "{}" })).json();
   if (data.cancelled) return;
   if (!data.ok) { alert(data.error || "開けなかった"); return; }
@@ -3427,7 +3655,7 @@ async function openFileDialog() {
 }
 
 async function openFolder() {
-  if (!confirmDiscard()) return;
+  if (anyDirty() && !confirm("保存していない変更があるタブがあります。破棄してフォルダを開いてよいですか？")) return;
   let body = "{}";
   if (workspaceInfo && !workspaceInfo.dialogs) {
     const p = prompt("作業フォルダのパス:", workspaceInfo.root);
@@ -3439,13 +3667,20 @@ async function openFolder() {
   if (!data.ok) { alert(data.error || "開けなかった"); return; }
   workspaceInfo = data;
   localStorage.removeItem("narfi.lastFile");
-  await loadSrc("", "");
+  // フォルダが変わったので、タブは閉じる（ただし Web 版の Import は同じ保存領域に足すだけなので残す）
+  if (!window.NARFI_WEB) {
+    tabs = [];
+    activeTab = -1;
+    docDirty = false;
+    await loadSrc("", "");
+  } else {
+    renderSidebar();
+  }
 }
 
 function newFile() {
-  if (!confirmDiscard()) return;
   localStorage.removeItem("narfi.draft");
-  loadSrc("", "");
+  loadSrc("", "", { newTab: true });
 }
 
 async function saveFile(opts = {}) {
@@ -3486,9 +3721,17 @@ async function saveAs() {
     if (data.cancelled) return;
   }
   if (!data.ok) { alert(data.error || "保存できなかった"); return; }
+  // 同じファイルのタブがほかにあれば閉じる（上書きしたので）
+  const other = tabIndex(data.path);
+  if (other >= 0 && other !== activeTab) {
+    tabs.splice(other, 1);
+    if (activeTab > other) activeTab--;
+  }
   currentFilePath = data.path;
   currentReadOnly = false;
   docDirty = false;
+  if (tabs[activeTab]) Object.assign(tabs[activeTab], { path: data.path, src, dirty: false });
+  persistTabs();
   localStorage.setItem("narfi.lastFile", currentFilePath);
   localStorage.removeItem("narfi.draft");
   await loadWorkspace();
@@ -3559,7 +3802,8 @@ document.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("beforeunload", (e) => {
-  if (docDirty && (!autosaveOn || !currentFilePath || currentReadOnly)) {
+  const unsaved = tabs.some((t, i) => tabDirty(i) && (!autosaveOn || !t.path || t.path.startsWith("lib:")));
+  if (unsaved) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -3571,22 +3815,33 @@ async function startup() {
   if (localStorage.getItem("narfi.sidebar") === "off") toggleSidebar();
   updateAutosaveButton();
   await loadWorkspace();
+  // 前回のタブを並べ直す（中身は開いたときに読む）
+  const files = new Set((workspaceInfo && workspaceInfo.files) || []);
+  const exists = (p) => p.startsWith("lib:") || files.has(p);
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("narfi.tabs") || "null"); } catch (_) {}
   const last = localStorage.getItem("narfi.lastFile");
-  if (last && workspaceInfo && (workspaceInfo.files || []).includes(last)) {
-    const data = await (await fetch(`/api/file?path=${encodeURIComponent(last)}`)).json();
-    if (data.ok) { await loadSrc(data.src, data.path); return; }
-  }
+  const paths = saved ? (saved.paths || []).filter(exists) : (last && exists(last) ? [last] : []);
+  tabs = paths.map((p) => ({ path: p, src: null, dirty: false }));
   const draft = localStorage.getItem("narfi.draft");
   if (draft && draft.trim()) {
-    await loadSrc(draft, "");
-    docDirty = true;
-    updateFileLabel();
-    return;
+    tabs.push({ path: "", src: draft, dirty: true });
   }
-  loadSourceIntoDoc(DEFAULT_ASCII_DOC);
-  currentFilePath = "";
-  updateFileLabel();
-  refreshAfterEdit();
+  if (tabs.length === 0) {
+    tabs.push({ path: "", src: DEFAULT_ASCII_DOC, dirty: false, example: true });
+  }
+  let i = saved ? tabIndex(saved.active || "") : 0;
+  if (saved && !saved.active && draft && draft.trim()) i = tabs.length - 1;
+  if (i < 0) i = 0;
+  if (tabs[i].src == null) {
+    await activateTab(i);
+    if (activeTab < 0 && tabs.length) {
+      const j = tabs.findIndex((t) => t.src != null);
+      if (j >= 0) showTab(j); else { tabs.push({ path: "", src: "", dirty: false }); showTab(tabs.length - 1); }
+    }
+  } else {
+    showTab(i);
+  }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {

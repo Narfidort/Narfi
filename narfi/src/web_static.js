@@ -529,14 +529,16 @@
   window.addEventListener("DOMContentLoaded", () => {
     const set = (sel, text, title) => {
       for (const b of document.querySelectorAll(sel)) {
-        b.textContent = text;
+        // File メニューの項目は名前の部分だけ（右のショートカットは残す）
+        const label = b.querySelector(".mi-label");
+        (label || b).textContent = text;
         if (title) b.title = title;
       }
     };
-    set('button[onclick="openFolder()"]', "Import", "フォルダの中の .narfi をまとめてブラウザ内に読み込む");
+    set('button[onclick="openFolder()"]', "Import…", "フォルダの中の .narfi をまとめてブラウザ内に読み込む");
     set('button[onclick="revealDir(\'workspace\')"]', "Export", "ブラウザ内の全ファイルを zip で書き出す（バックアップ・持ち出し用）");
     set('button[onclick="revealDir(\'lib\')"]', "lib/ について");
-    set('button[onclick="openFileDialog()"]', "Open", "パソコンの .narfi ファイルをブラウザ内に読み込む（⌘O）");
-    set('button[onclick="exportPdf()"]', "PDF", "Web 版では使えない。Print から「PDF として保存」を使う");
+    set('button[onclick="openFileDialog()"]', "Open…", "パソコンの .narfi ファイルをブラウザ内に読み込む（⌘O）");
+    set('button[onclick="exportPdf()"]', "PDF（Web 版では使えない）", "Web 版では使えない。Print から「PDF として保存」を使う");
   });
 })();
