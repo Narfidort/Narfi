@@ -78,7 +78,7 @@ pub fn check_json(src: &str, cursor_line: Option<usize>, load: &dyn Fn(&str) -> 
     // カーソル行を sorry に置き換えたフォールバックも試して Goal 表示を維持する。
     // 試すたびに環境と記法の表を作り直す（load）。
     let (decls, reports, parse_err) = match load(src) {
-        Ok((_, m, r)) => (m.decls().cloned().collect::<Vec<Decl>>(), r, None),
+        Ok((_, m, r)) => (m.decls_for(&r), r, None),
         Err(e) => {
             let mut lines = vec![];
             lines.extend(cursor_line);
@@ -88,7 +88,7 @@ pub fn check_json(src: &str, cursor_line: Option<usize>, load: &dyn Fn(&str) -> 
                 .filter_map(|l| load(&patch_line_with_sorry(src, l)).ok())
                 .find(|(_, m, _)| m.decls().next().is_some());
             match recovered {
-                Some((_, m, r)) => (m.decls().cloned().collect(), r, Some(e)),
+                Some((_, m, r)) => (m.decls_for(&r), r, Some(e)),
                 None => (vec![], vec![], Some(e)),
             }
         }
@@ -225,14 +225,15 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
             let g = st.goal.as_ref().map(|x| json_str(x)).unwrap_or_else(|| "null".into());
             let gl = st.goal_latex.as_ref().map(|x| json_str(x)).unwrap_or_else(|| "null".into());
             format!(
-                "{{\"line\":{},\"depth\":{},\"src\":{},\"ctx\":{},\"ctx_latex\":{},\"goal\":{},\"goal_latex\":{}}}",
+                "{{\"line\":{},\"depth\":{},\"src\":{},\"ctx\":{},\"ctx_latex\":{},\"goal\":{},\"goal_latex\":{},\"hints\":[{}]}}",
                 st.line,
                 st.depth,
                 json_str(&st.src),
                 json_str_array(&st.ctx),
                 json_str_array(&st.ctx_latex),
                 g,
-                gl
+                gl,
+                st.hints.iter().map(|(c, w)| format!("[{},{}]", json_str(c), json_str(w))).collect::<Vec<_>>().join(",")
             )
         })
         .collect();

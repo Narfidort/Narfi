@@ -57,6 +57,8 @@ pub enum Item {
     /// notation 宣言（読み込み時に記法の表へ登録済み）。src は元の行
     Notation { src: String },
     Import { path: String },
+    /// 構文エラーで読めなかった宣言（ほかの宣言は読み続ける）
+    Broken { name: String, line: usize, msg: String, src: String },
 }
 
 /// 1ファイル分。宣言を書かれた順に持つ。
@@ -71,6 +73,26 @@ impl Module {
             Item::Decl(d) => Some(d),
             _ => None,
         })
+    }
+    /// 検査の報告（check_module の返り値）と同じ順の宣言。通らなかった def・読めなかった宣言には中身のない宣言を置く
+    pub fn decls_for(&self, reports: &[crate::elab::Report]) -> Vec<Decl> {
+        let all: Vec<&Decl> = self.decls().collect();
+        reports
+            .iter()
+            .map(|r| match all.iter().find(|d| d.name == r.name && d.line == r.line) {
+                Some(d) => (*d).clone(),
+                None => Decl {
+                    is_axiom: false,
+                    name: r.name.clone(),
+                    line: r.line,
+                    ctx: vec![],
+                    concl: Formula::Bot,
+                    body: vec![],
+                    typedef: None,
+                    generated: false,
+                },
+            })
+            .collect()
     }
 }
 
@@ -1633,6 +1655,153 @@ fn subscript_apps(decl: &mut Decl) {
     sc.stmts(&mut decl.body);
 }
 
+/// トップレベルの宣言を 1 つ読む（i は次の宣言の行へ進む）
+fn parse_item(
+    lines: &[Line],
+    i: &mut usize,
+    items: &mut Vec<Item>,
+    on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
+) -> PResult<()> {
+    let mut i_ = *i;
+    let r = parse_item_at(lines, &mut i_, items, on_import);
+    *i = i_.max(*i + 1).min(lines.len().max(*i + 1));
+    r
+}
+
+fn parse_item_at(
+    lines: &[Line],
+    i: &mut usize,
+    items: &mut Vec<Item>,
+    on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
+) -> PResult<()> {
+    let l = &lines[*i];
+    if l.indent != 0 || !starts_decl(&l.text) {
+        return Err(ParseError {
+            line: l.no,
+            msg: "トップレベルには thm・axiom・def・notation・import のどれかを書く".into(),
+        });
+    }
+    match decl_keyword(&l.text).as_str() {
+        "import" => {
+            let path = parse_import(&l.text, l.no)?;
+            on_import(&path, l.no)?;
+            items.push(Item::Import { path });
+            *i += 1;
+            return Ok(());
+        }
+        "notation" => {
+            let n = parse_notation(&l.text, l.no)?;
+            with_syntax(|t| t.notations.push(n));
+            items.push(Item::Notation {
+                src: l.text.clone(),
+            });
+            *i += 1;
+            return Ok(());
+        }
+        "rec" => {
+            // 原始再帰の定義：見出しの行と、字下げした 2 つの等式
+            let no = l.no;
+            let mut text = vec![l.text.clone()];
+            while *i + 1 < lines.len() && lines[*i + 1].indent > 0 {
+                *i += 1;
+                text.push(lines[*i].text.clone());
+            }
+            *i += 1;
+            let generated = expand_rec(&text, no)?;
+            // 行番号が rec の行に合うよう、前を空行で埋めて読む
+            let padded = format!("{}{}", "\n".repeat(no.saturating_sub(1)), generated);
+            let sub = parse_module(&padded, &mut |_, line| {
+                Err(ParseError { line, msg: "rec の中では import は使えない".into() })
+            })?;
+            let src = format!("{}\n{}", text[0], text[1..].iter().map(|t| format!("  {t}")).collect::<Vec<_>>().join("\n"));
+            for it in sub.items {
+                match it {
+                    Item::Def(mut d) => {
+                        d.src = src.clone();
+                        items.push(Item::Def(d));
+                    }
+                    Item::Decl(mut d) => {
+                        d.generated = true;
+                        d.line = no;
+                        items.push(Item::Decl(d));
+                    }
+                    other => items.push(other),
+                }
+            }
+            return Ok(());
+        }
+        "def" => {
+            // 字下げされた続きの行も定義の本体
+            let mut text = l.text.clone();
+            let no = l.no;
+            while *i + 1 < lines.len() && lines[*i + 1].indent > 0 {
+                *i += 1;
+                text.push(' ');
+                text.push_str(&lines[*i].text);
+            }
+            *i += 1;
+            let d = parse_def(&text, no)?;
+            register_def(&d)?;
+            items.push(Item::Def(d));
+            return Ok(());
+        }
+        _ => {}
+    }
+    let is_axiom = is_axiom_decl(&l.text);
+    let is_typedef = decl_keyword(&l.text) == "typedef";
+    // 見出し：thm は ⊢ を含む行まで、axiom は字下げされた続きの行まで、typedef は1行
+    let mut header = vec![*i];
+    if is_typedef {
+        // 1行だけ
+    } else if is_axiom {
+        while *i + 1 < lines.len() && lines[*i + 1].indent > 0 {
+            *i += 1;
+            header.push(*i);
+        }
+    } else {
+        while !lines[*i].text.contains('⊢')
+            && !lines[*i].text.contains("|-")
+            && !lines[*i].text.contains("\\vdash")
+        {
+            *i += 1;
+            if *i >= lines.len() || starts_decl(&lines[*i].text) && lines[*i].indent == 0 {
+                return Err(ParseError {
+                    line: l.no,
+                    msg: "thm の見出しに ⊢ がない".into(),
+                });
+            }
+            header.push(*i);
+        }
+    }
+    *i += 1;
+    let htext: Vec<&str> = header.iter().map(|&k| lines[k].text.as_str()).collect();
+    let mut decl = if is_typedef {
+        parse_typedef(&htext.join(" "), l.no)?
+    } else {
+        parse_header(&htext.join(" "), l.no, is_axiom)?
+    };
+    if !is_axiom {
+        let st = *i;
+        while *i < lines.len() && !(lines[*i].indent == 0 && starts_decl(&lines[*i].text)) {
+            *i += 1;
+        }
+        let body = join_continuations(&lines[st..*i]);
+        let tree = build_tree(&body);
+        let tyenv: Vec<(String, String)> = decl
+            .ctx
+            .iter()
+            .filter_map(|c| match c {
+                CtxItem::Var(x, t) => Some((x.clone(), t.clone())),
+                _ => None,
+            })
+            .collect();
+        decl.body = parse_block(&tree, &tyenv)?;
+    }
+    subscript_apps(&mut decl);
+    items.push(Item::Decl(decl));
+    Ok(())
+}
+
 pub fn parse_module(
     src: &str,
     on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
@@ -1661,131 +1830,26 @@ pub fn parse_module(
     let mut items = Vec::new();
     let mut i = 0;
     while i < lines.len() {
-        let l = &lines[i];
-        if l.indent != 0 || !starts_decl(&l.text) {
-            return Err(ParseError {
-                line: l.no,
-                msg: "トップレベルには thm・axiom・def・notation・import のどれかを書く".into(),
-            });
-        }
-        match decl_keyword(&l.text).as_str() {
-            "import" => {
-                let path = parse_import(&l.text, l.no)?;
-                on_import(&path, l.no)?;
-                items.push(Item::Import { path });
-                i += 1;
-                continue;
+        let start = i;
+        if let Err(e) = parse_item(&lines, &mut i, &mut items, on_import) {
+            // import の失敗はファイル全体の失敗。それ以外は、その宣言だけを「通らない」として次の宣言へ進む
+            if e.msg.starts_with("import ") || e.msg.starts_with("循環 import") {
+                return Err(e);
             }
-            "notation" => {
-                let n = parse_notation(&l.text, l.no)?;
-                with_syntax(|t| t.notations.push(n));
-                items.push(Item::Notation {
-                    src: l.text.clone(),
-                });
-                i += 1;
-                continue;
-            }
-            "rec" => {
-                // 原始再帰の定義：見出しの行と、字下げした 2 つの等式
-                let no = l.no;
-                let mut text = vec![l.text.clone()];
-                while i + 1 < lines.len() && lines[i + 1].indent > 0 {
-                    i += 1;
-                    text.push(lines[i].text.clone());
-                }
-                i += 1;
-                let generated = expand_rec(&text, no)?;
-                // 行番号が rec の行に合うよう、前を空行で埋めて読む
-                let padded = format!("{}{}", "\n".repeat(no.saturating_sub(1)), generated);
-                let sub = parse_module(&padded, &mut |_, line| {
-                    Err(ParseError { line, msg: "rec の中では import は使えない".into() })
-                })?;
-                let src = format!("{}\n{}", text[0], text[1..].iter().map(|t| format!("  {t}")).collect::<Vec<_>>().join("\n"));
-                for it in sub.items {
-                    match it {
-                        Item::Def(mut d) => {
-                            d.src = src.clone();
-                            items.push(Item::Def(d));
-                        }
-                        Item::Decl(mut d) => {
-                            d.generated = true;
-                            d.line = no;
-                            items.push(Item::Decl(d));
-                        }
-                        other => items.push(other),
-                    }
-                }
-                continue;
-            }
-            "def" => {
-                // 字下げされた続きの行も定義の本体
-                let mut text = l.text.clone();
-                let no = l.no;
-                while i + 1 < lines.len() && lines[i + 1].indent > 0 {
-                    i += 1;
-                    text.push(' ');
-                    text.push_str(&lines[i].text);
-                }
-                i += 1;
-                let d = parse_def(&text, no)?;
-                register_def(&d)?;
-                items.push(Item::Def(d));
-                continue;
-            }
-            _ => {}
-        }
-        let is_axiom = is_axiom_decl(&l.text);
-        let is_typedef = decl_keyword(&l.text) == "typedef";
-        // 見出し：thm は ⊢ を含む行まで、axiom は字下げされた続きの行まで、typedef は1行
-        let mut header = vec![i];
-        if is_typedef {
-            // 1行だけ
-        } else if is_axiom {
-            while i + 1 < lines.len() && lines[i + 1].indent > 0 {
-                i += 1;
-                header.push(i);
-            }
-        } else {
-            while !lines[i].text.contains('⊢')
-                && !lines[i].text.contains("|-")
-                && !lines[i].text.contains("\\vdash")
-            {
-                i += 1;
-                if i >= lines.len() || starts_decl(&lines[i].text) && lines[i].indent == 0 {
-                    return Err(ParseError {
-                        line: l.no,
-                        msg: "thm の見出しに ⊢ がない".into(),
-                    });
-                }
-                header.push(i);
-            }
-        }
-        i += 1;
-        let htext: Vec<&str> = header.iter().map(|&k| lines[k].text.as_str()).collect();
-        let mut decl = if is_typedef {
-            parse_typedef(&htext.join(" "), l.no)?
-        } else {
-            parse_header(&htext.join(" "), l.no, is_axiom)?
-        };
-        if !is_axiom {
-            let st = i;
+            let name = lines[start]
+                .text
+                .split_whitespace()
+                .nth(1)
+                .map(|w| w.trim_end_matches([':', '(']).split('(').next().unwrap_or("").to_string())
+                .filter(|w| !w.is_empty())
+                .unwrap_or_else(|| "（構文エラー）".into());
+            i = start + 1;
             while i < lines.len() && !(lines[i].indent == 0 && starts_decl(&lines[i].text)) {
                 i += 1;
             }
-            let body = join_continuations(&lines[st..i]);
-            let tree = build_tree(&body);
-            let tyenv: Vec<(String, String)> = decl
-                .ctx
-                .iter()
-                .filter_map(|c| match c {
-                    CtxItem::Var(x, t) => Some((x.clone(), t.clone())),
-                    _ => None,
-                })
-                .collect();
-            decl.body = parse_block(&tree, &tyenv)?;
+            let src = lines[start..i].iter().map(|l| format!("{}{}", "  ".repeat(l.indent), l.text)).collect::<Vec<_>>().join("\n");
+            items.push(Item::Broken { name, line: e.line, msg: e.msg, src });
         }
-        subscript_apps(&mut decl);
-        items.push(Item::Decl(decl));
     }
     Ok(Module { items })
 }

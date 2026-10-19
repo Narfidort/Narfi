@@ -678,7 +678,8 @@ static PDF_SEQ: AtomicU64 = AtomicU64::new(0);
 fn api_pdf(src: &str, path: &str) -> Result<Vec<u8>, String> {
     let file = safe_resolve_path(path).unwrap_or_else(|| workspace_root().join("untitled.narfi"));
     let (_, m, reports) = load_and_check(src, Some(&file)).map_err(|e| format!("{}行目：{}", e.line, e.msg))?;
-    let decls: Vec<&Decl> = m.decls().collect();
+    let owned = m.decls_for(&reports);
+    let decls: Vec<&Decl> = owned.iter().collect();
     let items: Vec<(&Decl, &[crate::elab::StepTrace])> =
         decls.iter().zip(reports.iter()).map(|(d, r)| (*d, r.steps.as_slice())).collect();
     let title = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();

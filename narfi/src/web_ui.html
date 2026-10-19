@@ -282,7 +282,7 @@ html, body {
 }
 .t-row.error .t-input { border-color: var(--err); }
 /* 右クリックのメニュー */
-.ctx-menu { position: fixed; top: 0; left: 0; min-width: 190px; }
+.ctx-menu { position: fixed; top: 0; left: 0; min-width: 190px; z-index: 300; }
 .ctx-menu .menu-item { padding-left: 12px; }
 .menu-item.danger { color: var(--err); }
 /* 確認・名前の入力 */
@@ -871,6 +871,10 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .fitch .fj { color: var(--text-dim); font-size: 0.85em; }
 .err-banner .katex { color: var(--text); font-size: 1.08em; margin: 0 0.15em; }
 /* Learn（チュートリアル） */
+.hints { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -4px 0 14px; }
+.hints-label { font-size: 10.5px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; margin-right: 2px; }
+.hint { font-family: "JetBrains Mono", monospace; font-size: 11.5px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-elev); color: var(--text); cursor: pointer; }
+.hint:hover { border-color: var(--accent); color: var(--accent); }
 .deps { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: "JetBrains Mono", monospace; }
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
 .learn-nav select { flex: 1; min-width: 0; }
@@ -884,6 +888,9 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .learn-body td { padding: 4px 12px 4px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
 .learn-body td:first-child { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--accent); white-space: nowrap; }
 .learn-actions { display: flex; gap: 8px; margin: 16px 0 12px; }
+.prose-err { margin: 6px 0 14px; padding: 6px 10px; border-left: 2px solid var(--err); background: rgba(239, 68, 68, 0.06); color: var(--err); font-size: 12.5px; white-space: pre-wrap; cursor: pointer; }
+.prose-err .katex { color: var(--text); }
+.prose-thm.prose-broken { border-left-color: var(--err); }
 .prose-doc {
   line-height: 1.85;
   font-size: 14px;
@@ -2342,6 +2349,69 @@ function pasteText(text) {
   last.items.push(...tail);
 }
 
+// ---- 単語：名前（英数字・_・.・'）とそれに付いた添字・上付きを 1 つのまとまりとする。
+// 分数・絶対値などの入力欄や記号（≤ など）は、それだけで 1 つ。空白は区切り。
+function itemClass(it) {
+  if (!it) return "";
+  if (it.kind === "char") {
+    if (it.ch === " ") return "s";
+    return /[A-Za-z0-9_'.]/.test(it.ch) ? "w" : "p";
+  }
+  if (it.kind === "sub" || it.kind === "sup") return "w";
+  if (it.kind === "sym") return /^[α-ωΑ-Ω]$/.test(it.display) ? "w" : "p";
+  return "n";
+}
+
+// offset の位置の単語の範囲 [from, to)
+function wordRangeAt(seq, offset) {
+  const items = seq.items;
+  let k = offset < items.length ? offset : offset - 1;
+  if (k < 0) return [offset, offset];
+  // 空白の上なら左の単語
+  if (itemClass(items[k]) === "s" && k > 0 && itemClass(items[k - 1]) !== "s") k--;
+  const c = itemClass(items[k]);
+  if (c !== "w" && c !== "s") return [k, k + 1];
+  let a = k, b = k + 1;
+  while (a > 0 && itemClass(items[a - 1]) === c) a--;
+  while (b < items.length && itemClass(items[b]) === c) b++;
+  return [a, b];
+}
+
+function moveWordRight() {
+  const seq = seqMap.get(cursor.seqId);
+  if (!seq) return;
+  const items = seq.items;
+  let o = cursor.offset;
+  if (o >= items.length) { moveCursorRight(); return; }
+  while (o < items.length && itemClass(items[o]) === "s") o++;
+  if (o < items.length) {
+    const c = itemClass(items[o]);
+    if (c === "w") { while (o < items.length && itemClass(items[o]) === "w") o++; }
+    else o++;
+  }
+  setCursor(seq.id, o);
+}
+
+function moveWordLeft() {
+  const seq = seqMap.get(cursor.seqId);
+  if (!seq) return;
+  const items = seq.items;
+  let o = cursor.offset;
+  if (o <= 0) { moveCursorLeft(); return; }
+  while (o > 0 && itemClass(items[o - 1]) === "s") o--;
+  if (o > 0) {
+    const c = itemClass(items[o - 1]);
+    if (c === "w") { while (o > 0 && itemClass(items[o - 1]) === "w") o--; }
+    else o--;
+  }
+  setCursor(seq.id, o);
+}
+
+function moveLineEdge(toEnd) {
+  const root = docLines[cursor.lineIdx].rootSeq;
+  setCursor(root.id, toEnd ? root.items.length : 0, cursor.lineIdx);
+}
+
 // 選択を伸ばしながら（shift）、または選択を畳みながらカーソルを動かす
 function moveWithSelection(fn, key, shift) {
   if (shift) {
@@ -2576,6 +2646,8 @@ function setCursorExtending(p) {
 // Mouse click / shift+click / drag
 editorSurface.addEventListener("mousedown", (e) => {
   editorSurface.focus();
+  // ダブル・トリプルクリックは、上の単語・行の選択に任せる
+  if (e.button === 0 && e.detail >= 2) { e.preventDefault(); return; }
   const p = hitTestPos(e.target, e.clientX);
   if (!p) return;
   e.preventDefault();
@@ -2588,9 +2660,37 @@ editorSurface.addEventListener("mousedown", (e) => {
   if (e.button === 0) dragStart = { seqId: p.seqId, offset: p.offset };
 });
 
+// ダブルクリックで単語、トリプルクリックで行を選ぶ
+editorSurface.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || e.detail < 2) return;
+  const p = hitTestPos(e.target, e.clientX);
+  if (!p) return;
+  const seq = seqMap.get(p.seqId);
+  if (!seq) return;
+  if (e.detail === 2) {
+    const [a, b] = wordRangeAt(seq, p.offset);
+    if (a === b) return;
+    selAnchor = { seqId: seq.id, offset: a };
+    extendingSel = true;
+    try { setCursor(seq.id, b, p.lineIdx ?? null); } finally { extendingSel = false; }
+  } else {
+    const li = p.lineIdx ?? cursor.lineIdx;
+    const root = docLines[li].rootSeq;
+    selAnchor = { seqId: root.id, offset: 0 };
+    extendingSel = true;
+    try { setCursor(root.id, root.items.length, li); } finally { extendingSel = false; }
+  }
+  dragStart = null;
+  renderEditor();
+});
+
+
 // 右クリック：その行の証明木など
 editorSurface.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+  // 補完の候補は閉じる（メニューと重ならないように）
+  acPopup.style.display = "none";
+  acMatches = [];
   const line = cursor.lineIdx + 1;
   const decl = declAtLine(line);
   const items = [];
@@ -3092,6 +3192,16 @@ editorSurface.addEventListener("keydown", (e) => {
     e.preventDefault();
     const seq = seqMap.get(cursor.seqId);
     if (!seq) return;
+    // 複数行を選んでいるときは、まとめて字下げ（Shift+Tab で戻す）。選択はそのまま
+    const sel = normalizeSel();
+    if (sel && sel.mode === "lines") {
+      const last = sel.o2 === 0 && sel.l2 > sel.l1 ? sel.l2 - 1 : sel.l2;
+      for (let l = sel.l1; l <= last; l++) {
+        docLines[l].indent = e.shiftKey ? Math.max(0, docLines[l].indent - 1) : docLines[l].indent + 1;
+      }
+      onDocMutated(true);
+      return;
+    }
     if (!e.shiftKey && pendingHypSuggestion && pendingHypSuggestion.seqId === seq.id && cursor.offset === seq.items.length) {
       const ins = parseAsciiToItems(" : " + pendingHypSuggestion.text);
       for (const it of ins) it.parentSeq = seq;
@@ -3137,6 +3247,17 @@ editorSurface.addEventListener("keydown", (e) => {
     return;
   }
 
+  // 単語ごと：⌥ または Ctrl + ←→。行の端：⌘ + ←→（Mac の標準）
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && (e.altKey || (e.ctrlKey && !e.metaKey))) {
+    e.preventDefault();
+    moveWithSelection(e.key === "ArrowRight" ? moveWordRight : moveWordLeft, e.shiftKey ? "" : e.key, e.shiftKey);
+    return;
+  }
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && e.metaKey) {
+    e.preventDefault();
+    moveWithSelection(() => moveLineEdge(e.key === "ArrowRight"), e.shiftKey ? "" : e.key, e.shiftKey);
+    return;
+  }
   const moves = { ArrowLeft: moveCursorLeft, ArrowRight: moveCursorRight, ArrowUp: moveCursorUp, ArrowDown: moveCursorDown };
   if (moves[e.key]) { e.preventDefault(); moveWithSelection(moves[e.key], e.key, e.shiftKey); return; }
   if (e.key === "Backspace") {
@@ -3227,8 +3348,8 @@ document.addEventListener("paste", (e) => {
 // ================================================================
 
 // 編集のたびに呼ぶ：選択を解除し、履歴に積み、再描画して検査を予約する
-function onDocMutated() {
-  selAnchor = null;
+function onDocMutated(keepSel = false) {
+  if (!keepSel) selAnchor = null;
   pushHistory();
   refreshAfterEdit();
   noteEdited();
@@ -3367,6 +3488,12 @@ function renderGoalInspector() {
       html += `<div class="hyp-row">${renderKatex(c, false)}</div>`;
     }
     html += `<div class="goal-panel">${renderKatex("\\vdash\\; " + (goalL || ""), true)}</div>`;
+    // 次の一手：goal と仮定の形から（押すと、sorry の行なら置き換え、そうでなければ下の行に入る）
+    if (bestStep && bestStep.hints && bestStep.hints.length && !activeDecl.is_axiom) {
+      html += `<div class="hints"><span class="hints-label">次の一手</span>` +
+        bestStep.hints.map(([code, why]) => `<button class="hint" title="${escHtml(why)}" data-code="${escHtml(code)}">${escHtml(code.split("\n")[0])}</button>`).join("") +
+        `</div>`;
+    }
 
     if (activeDecl.sorries && activeDecl.sorries.length > 0) {
       for (const s of activeDecl.sorries) {
@@ -3514,6 +3641,37 @@ function depsHtml(d) {
   return `<div class="deps">${parts.join(" ／ ")}</div>`;
 }
 
+document.getElementById("goalViewArea").addEventListener("click", (e) => {
+  const b = e.target.closest(".hint");
+  if (b) insertHint(b.getAttribute("data-code"));
+});
+
+function insertHint(code) {
+  const lines = serializeDocToAscii().split("\n");
+  const idx = Math.min(cursor.lineIdx, lines.length - 1);
+  const cur = lines[idx] || "";
+  const pad = cur.match(/^\s*/)[0];
+  let parts = code.split("\n").map((p) => pad + p);
+  // ブロックを開く文には、中身の sorry を付ける（続けて「次の一手」を選べるように）
+  const c = code.trim();
+  let m;
+  if (/^(Fix|assume|by_contra)\b/.test(c)) parts.push(pad + "  sorry");
+  else if ((m = c.match(/^cases (\S+)/))) parts.push(pad + "  Case left h1", pad + "    sorry", pad + "  Case right h2", pad + "    sorry");
+  else if (/^(choose|Obtain)\b/.test(c)) parts.push(pad + "sorry");
+  let at = idx;
+  if (cur.trim() === "sorry" || cur.trim() === "") {
+    lines.splice(idx, 1, ...parts);
+  } else {
+    lines.splice(idx + 1, 0, ...parts);
+    at = idx + 1;
+  }
+  loadSourceIntoDoc(lines.join("\n"));
+  const ln = docLines[Math.min(at, docLines.length - 1)];
+  setCursor(ln.rootSeq.id, ln.rootSeq.items.length, Math.min(at, docLines.length - 1));
+  onDocMutated();
+  editorSurface.focus();
+}
+
 function jumpToLine(idx) {
   const clamped = Math.max(0, Math.min(idx, docLines.length - 1));
   const ln = docLines[clamped];
@@ -3541,12 +3699,18 @@ function renderProseTab(data) {
       const d = it.decl;
       if (d.is_axiom) {
         html += `<div class="prose-thm" style="border-left-color:var(--text-dim);overflow-x:auto;"><strong>公理 ${escHtml(d.name)}</strong>: ${renderKatex(d.header_latex, false)}</div>`;
+      } else if (d.error && /^構文エラー/.test(d.error.msg)) {
+        // 読めなかった定理：名前とエラーだけ（ほかの定理はそのまま出す）
+        html += `<div class="prose-thm prose-broken"><strong>定理 ${escHtml(d.name)}</strong></div>`;
+        html += `<div class="prose-err" onclick="jumpToLine(${d.error.line - 1})">${d.error.line} 行目：${msgHtml(d.error)}</div>`;
       } else {
         html += `<div class="prose-thm"><div><strong>定理 ${escHtml(d.name)}</strong></div><div style="margin-top:6px;overflow-x:auto;">${renderKatex(d.header_latex, false)}</div></div>`;
         html += `<div class="prose-proof">`;
         for (const p of (d.prose || [])) {
           html += `<div style="padding-left:${p.depth * 16}px;margin:8px 0;line-height:1.75;">${renderInlineMarkdownMath(p.text)}</div>`;
         }
+        // 通らなかった所は、その定理の中だけに示す
+        if (d.error) html += `<div class="prose-err" onclick="jumpToLine(${d.error.line - 1})">${d.error.line} 行目で止まっている：${msgHtml(d.error)}</div>`;
         html += `</div>`;
       }
     }
@@ -3587,7 +3751,9 @@ function inlineMd(text) {
     if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) return `<code>${escHtml(part.slice(1, -1))}</code>`;
     return part.split("$").map((q, k) => {
       if (k % 2) return renderKatex(q, false);
-      return escHtml(q).replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return escHtml(q)
+        .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     }).join("");
   }).join("");
 }

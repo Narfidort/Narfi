@@ -137,6 +137,8 @@ pub struct StepTrace {
     pub ctx_latex: Vec<String>,
     pub goal: Option<String>,
     pub goal_latex: Option<String>,
+    /// 次の一手の候補（goal と仮定の形から。src は書くもの、why は理由）
+    pub hints: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -218,7 +220,68 @@ impl<'a> Checker<'a> {
             ctx_latex: ctx.show_latex(),
             goal: goal.as_ref().map(|g| g.to_string()),
             goal_latex: goal.as_ref().map(|g| g.to_latex()),
+            hints: goal.as_ref().map(|g| self.hints(ctx, g)).unwrap_or_default(),
         });
+    }
+
+    /// goal と仮定の形から、次に書けるもの（docs/v2/syntax.md の早見表と同じ考え方）
+    fn hints(&self, ctx: &Ctx, goal: &Formula) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        let g = self.whnf(goal);
+        // 仮定がそのまま goal なら、その名前で閉じられる
+        for e in ctx.entries.iter().rev() {
+            if let Entry::Hyp(h, f) = e {
+                if !h.starts_with('#') && (f == goal || self.whnf(f) == g) {
+                    out.push((h.clone(), format!("仮定 {h} がそのまま goal")));
+                    break;
+                }
+            }
+        }
+        let hname = |x: &str| format!("h{x}");
+        match &g {
+            Formula::Forall(x, _, b) => match &**b {
+                Formula::Imp(c, _) => out.push((format!("Fix {x} | {} : {c}", hname(x)), "goal が ∀（条件つき）".into())),
+                _ => out.push((format!("Fix {x}"), "goal が ∀".into())),
+            },
+            Formula::Imp(a, b) if **b == Formula::Bot => out.push((format!("assume h : {a}"), "goal が ¬（→ ⊥）".into())),
+            Formula::Imp(a, _) => out.push((format!("assume h : {a}"), "goal が →".into())),
+            Formula::And(..) => out.push(("根拠1, 根拠2".into(), "goal が ∧：両側を並べる".into())),
+            Formula::Or(..) => {
+                out.push(("choose left".into(), "goal が ∨：左を示す".into()));
+                out.push(("choose right".into(), "goal が ∨：右を示す".into()));
+            }
+            Formula::Exists(x, _, _) => out.push((format!("choose 項"), format!("goal が ∃：{x} として何をとるか"))),
+            Formula::Atom(r, _) if r == "=" => {
+                out.push(("ring".into(), "式の計算で等しい".into()));
+                out.push(("左辺\n  = …   by 根拠".into(), "等式の連鎖".into()));
+            }
+            Formula::Atom(r, _) if ["<", "≤", ">", "≥", "≠"].contains(&r.as_str()) => {
+                out.push(("linarith".into(), "仮定からの一次不等式".into()));
+                out.push(("左辺\n  ≤ …   by 根拠".into(), "不等式の連鎖".into()));
+            }
+            _ => {}
+        }
+        // 仮定の形
+        for e in ctx.entries.iter().rev() {
+            if out.len() >= 5 {
+                break;
+            }
+            if let Entry::Hyp(h, f) = e {
+                if h == "this" || h.starts_with('#') {
+                    continue;
+                }
+                match self.whnf(f) {
+                    Formula::Exists(x, _, _) => out.push((format!("Obtain {x}, h{x} : {h}"), format!("仮定 {h} が ∃：取り出す"))),
+                    Formula::Or(..) => out.push((format!("cases {h}"), format!("仮定 {h} が ∨：場合分け"))),
+                    Formula::And(..) => out.push((format!("{h}.left / {h}.right"), format!("仮定 {h} が ∧：片側を使う"))),
+                    _ => {}
+                }
+            }
+        }
+        if !matches!(g, Formula::Bot) && out.len() < 6 {
+            out.push(("by_contra h".into(), "背理法（どんな goal でも）".into()));
+        }
+        out
     }
 
     fn push(&self, ctx: &mut Ctx, e: Entry) {
@@ -486,6 +549,17 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
                 }
             }
             Item::Decl(d) => reports.push(check_decl(env, d, trace, core)),
+            Item::Broken { name, line, msg, .. } => reports.push(Report {
+                name: name.clone(),
+                line: *line,
+                is_axiom: false,
+                err: Some(simple_err(*line, format!("構文エラー：{msg}"))),
+                axioms: BTreeSet::new(),
+                oracles: BTreeSet::new(),
+                sorries: vec![],
+                steps: vec![],
+                tree: None,
+            }),
             Item::Notation { .. } | Item::Import { .. } => {}
         }
     }

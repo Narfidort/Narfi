@@ -100,7 +100,8 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let decls: Vec<&parser::Decl> = m.decls().collect();
+            let owned = m.decls_for(&reports);
+            let decls: Vec<&parser::Decl> = owned.iter().collect();
 
             if mode == "prose" {
                 for (d, r) in decls.iter().zip(reports.iter()) {

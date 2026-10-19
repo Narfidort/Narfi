@@ -4,6 +4,32 @@
 
 window.NARFI_TUTORIAL = [
   {
+    title: "0. 早見表：goal の形から書き方を選ぶ",
+    blocks: [
+      { p: "証明は「いま示すべきもの（Goal）」の形を見て、1 行ずつ書きます。迷ったら右の Goal タブを見てください。Goal の下の「次の一手」に、いま書けるものが出ます（押すと入ります）。" },
+      { p: "**Goal の形で選ぶ**（Goal を小さくする）" },
+      { keys: [
+        ["∀x. φ", "Fix x（条件つき ∀ε>0 なら Fix ε | hε : ε > 0）"],
+        ["φ → ψ、¬φ", "assume h : φ"],
+        ["φ ∧ ψ", "根拠1, 根拠2"],
+        ["φ ∨ ψ", "choose left / choose right"],
+        ["∃x. φ", "choose 項"],
+        ["= < ≤", "ring・linarith・連鎖（下に = … by 根拠 を並べる）"],
+        ["何でも", "by_contra h（背理法）・根拠 1 つで閉じる（h、h(t)、定理）"]
+      ] },
+      { p: "**仮定の形で選ぶ**（仮定を使う）" },
+      { keys: [
+        ["h : ∃x. φ", "Obtain x, hx : h"],
+        ["h : φ ∨ ψ", "cases h（下に Case left h1 と Case right h2）"],
+        ["h : φ ∧ ψ", "h.left・h.right"],
+        ["h : ∀x. φ", "h(t)（x に t を入れる）"],
+        ["h : φ → ψ", "h(p)（p は φ の根拠）"]
+      ] },
+      { p: "**途中で示したことを増やす**：`have k : φ := 根拠`、または `have k : φ` の下に字下げして φ の証明。示すものを書いておきたいときは `φ by 根拠`。" },
+      { p: "書き方の完全な一覧は [docs/v2/syntax.md](https://github.com/Narfidort/Narfi/blob/main/narfi/docs/v2/syntax.md) にあります。" }
+    ]
+  },
+  {
     title: "1. はじめての証明",
     blocks: [
       { p: "Narfi では、定理を `thm 名前 :` の下に「仮定 ⊢ 結論」の形で書き、その下に証明を書きます。証明は 1 行ずつ検査され、右上に結果が出ます。" },

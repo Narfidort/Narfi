@@ -504,6 +504,8 @@ fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
         Item::Def(d) => out.push_str(&d.src),
         Item::Notation { src, .. } => out.push_str(src),
         Item::Import { path, .. } => out.push_str(&format!("import {path}")),
+        // 読めなかった宣言は、そのまま書き戻す
+        Item::Broken { src, .. } => out.push_str(src),
     }
     out.push_str("\n\n");
     None
