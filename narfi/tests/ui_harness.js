@@ -38,6 +38,7 @@ module.exports = function load(htmlPath) {
     documentElement: stub, body: stub,
   };
   global.document = doc;
+  global.NARFI_LOCAL = true;
   global.window = new Proxy({ addEventListener() {} }, { get: (t, k) => (k in t ? t[k] : stub), set: () => true });
   global.localStorage = { getItem: () => null, setItem() {} };
   global.navigator = stub;

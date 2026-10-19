@@ -1,17 +1,8 @@
-mod arith;
-mod assets;
-mod elab;
-mod kernel;
-mod module;
-mod parser;
-mod prose;
-mod sorts;
-mod syntax;
-mod types;
-mod web;
+//! コマンド `narfi`（check・web・prose・latex・convert）。検査器の本体は src/lib.rs のライブラリ。
 
-use elab::{Report, check_module};
-use module::Loader;
+use narfi::elab::{self, Report, check_module};
+use narfi::module::Loader;
+use narfi::{parser, prose, syntax, web};
 use std::path::Path;
 use std::process::ExitCode;
 

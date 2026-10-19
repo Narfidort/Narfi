@@ -33,7 +33,7 @@ v2.1 で関数型・Prop・λ・集合を実装した。
 | v2.1.1 | kernel の健全性のバグ（同時代入の仮の名前の衝突で ⊥ が証明できた）の修正 | 修正済み |
 | v2.2 | typedef（新しい型の定義）・一般の適用・商。ℝ = コーシー列/~ を型として構成（sound・exact・surjective） | 実装済み |
 | v2.3 | エディタ：作業フォルダ・Mac のダイアログ・自動保存・印刷・LaTeX の PDF・ライブラリの置き場所・KaTeX の同梱、ローカルサーバーを他サイトから使わせない | 実装済み |
-| v2.4 | Web 版：検査器を WebAssembly にしてブラウザで動かし、Cloudflare Pages に自動デプロイ | 未着手 |
+| v2.4 | Web 版：検査器を WebAssembly にしてブラウザで動かし、Cloudflare Pages に自動デプロイ（GitHub Actions） | 実装済み |
 | v2.5 | ℝ の演算（加法・乗法の well-definedness）と順序 | 未着手 |
 | v2.6 | ℤ・ℚ をペアノから商で構成 | 未着手 |
 | v2.7 | 外部の検査器（Lean 4 など）への書き出しによる再検査 | 未着手 |
@@ -64,5 +64,5 @@ v2.1 で関数型・Prop・λ・集合を実装した。
 
 ```sh
 cargo test                       # すべて
-cargo test --bin narfi kernel::  # kernel 単体（手で組み立てた誤った証明項を拒否するか）
+cargo test --lib kernel::        # kernel 単体（手で組み立てた誤った証明項を拒否するか）
 ```

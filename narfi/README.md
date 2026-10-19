@@ -37,6 +37,30 @@ cargo test                                           # 正しい証明は通り�
 | `import analysis.limits` | `analysis/limits.narfi` を、同じディレクトリ → `NARFI_PATH` → `narfi/lib/` の順に探して読み込む。循環 import はエラー |
 | `unfold is_lim` / `unfold is_lim at h` | 定義を明示的に展開する（goal / 仮定）。定義の同値 `is_lim.def : is_lim(a, α) ↔ φ` も使える |
 
+## Web 版（インストール不要）
+
+ブラウザで開くだけで使える版。検査器を WebAssembly にしてブラウザの中で動かすので、
+証明の内容がサーバーに送られることはない。`main` に push すると GitHub Actions がテストを回し、
+Cloudflare Pages に自動で置く（`.github/workflows/web.yml`）。
+
+| | ローカル版（`narfi web`） | Web 版 |
+|---|---|---|
+| ファイル | パソコンのフォルダ | ブラウザ内の保存領域（この PC のこのブラウザ）。`Open`・`Import` で読み込み、`Export` で zip に書き出す |
+| 自分用ライブラリ | `~/.narfi/lib` | 保存領域の `lib/`（`lib/mydefs.narfi` は `import mydefs`） |
+| PDF | LaTeX で組版 | `Print` から「PDF として保存」 |
+| AI 補助 | 使える | 使えない |
+
+ブラウザの保存領域は、ブラウザのデータを消すと消える。大事なファイルは `Export` で書き出しておく。
+
+手元で組み立てて確かめる：
+
+```
+rustup target add wasm32-unknown-unknown
+./scripts/build-site.sh                                # site/ にできる
+node tests/wasm_smoke.mjs site/narfi.wasm target/debug/narfi   # ローカル版と結果が同じか
+python3 -m http.server -d site 8000                    # http://127.0.0.1:8000 で開く
+```
+
 ## Web エディタの操作
 
 ```
