@@ -155,6 +155,11 @@ pub enum StmtKind {
         at: Vec<String>,
     },
     Close(Just),
+    /// `φ by j`：φ を j から示す（goal なら閉じる。後ろに続けば this として使える）
+    Show {
+        ty: Formula,
+        just: Just,
+    },
     Chain {
         start: Term,
         steps: Vec<ChainStep>,
@@ -741,6 +746,10 @@ impl SubScope {
             }
             StmtKind::ByContra { body, .. } => self.stmts(body),
             StmtKind::Obtain { just, .. } | StmtKind::Close(just) => *just = self.just(just),
+            StmtKind::Show { ty, just } => {
+                *ty = self.formula(ty);
+                *just = self.just(just);
+            }
             StmtKind::Have { ty, just, .. } | StmtKind::Suffices { ty, just } => {
                 *ty = self.formula(ty);
                 *just = self.just(just);
@@ -2356,6 +2365,21 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                     .and_then(|t| t.first().cloned())
                     .is_some_and(|t| matches!(t, Tok::Sym(s) if RELS.contains(&s.as_str())))
             });
+            // `Q ∧ P by j`：関係（= ≤ など）でない命題を根拠で示す。関係なら連鎖として読む（意味は同じ）
+            if !starts_chain && p.find_by().is_some() {
+                let save = p.pos;
+                if let Ok(f) = p.formula() {
+                    let is_rel = matches!(&f, Formula::Atom(r, _) if RELS.contains(&r.as_str()));
+                    if !is_rel && p.is_ident("by") {
+                        p.pos += 1;
+                        let just = p.just()?;
+                        p.expect_end()?;
+                        no_children(n)?;
+                        return Ok(Stmt { line: n.no, src: n.text.clone(), kind: StmtKind::Show { ty: f, just } });
+                    }
+                }
+                p.pos = save;
+            }
             if starts_chain || p.find_by().is_some() {
                 let start = p.term()?;
                 let mut steps = Vec::new();

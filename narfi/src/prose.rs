@@ -383,6 +383,12 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                     text: format!("したがって、${}$ が成り立つ。$\\blacksquare$", f.to_latex()),
                 });
             }
+            StmtKind::Show { ty, just } => {
+                out.push(ProseBlock {
+                    depth,
+                    text: format!("${}$ より ${}$ が成り立つ。", just_to_latex(just), ty.to_latex()),
+                });
+            }
             StmtKind::Close(j) => {
                 let text = match j.as_slice() {
                     [Term::Var(s)] if s == "sorry" => "（※ ここは未完成 `sorry`）".to_string(),
@@ -672,6 +678,9 @@ fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Close(j) => {
             out.push_str(&format!("{pad}{}\n", just_str(j)));
         }
+        StmtKind::Show { ty, just } => {
+            out.push_str(&format!("{pad}{ty} by {}\n", just_str(just)));
+        }
         StmtKind::Chain { start, steps } => {
             out.push_str(&format!("{pad}{start}\n"));
             for st in steps {
@@ -854,6 +863,9 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
         }
         StmtKind::Close(j) => {
             out.push_str(&format!("{pad}{}\n", just_str(j)));
+        }
+        StmtKind::Show { ty, just } => {
+            out.push_str(&format!("{pad}{ty} by {}\n", just_str(just)));
         }
         StmtKind::Chain { start, steps } => {
             out.push_str(&format!("{pad}{start}\n"));

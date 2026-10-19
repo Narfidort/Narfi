@@ -21,6 +21,7 @@ window.NARFI_TUTORIAL = [
       { p: "$P \\to Q$ を示すには、`assume h : P` で $P$ を仮定し、その下（字下げした所）で $Q$ を示します。仮定の中身 `: P` は省略できません（書かないと、入れるべき式がエラーに出て、行末で Tab を押すと入ります）。" },
       { p: "$P \\land Q$ の仮定 $h$ からは `h.left` で $P$、`h.right` で $Q$ が取り出せます。$P \\land Q$ を示すには、根拠を 2 つカンマで並べます。" },
       { code: "assume h : P and Q\n  h.right, h.left" },
+      { p: "何を示したのかを書いておきたいときは、命題を書いて `by` の後に根拠を書けます：`Q and P by h.right, h.left`。書いた命題が Goal と違えばエラーになります。" },
       { p: "記号は英単語でも打てます：`->`（→）、`and`（∧）、`or`（∨）、`not`（¬）。" }
     ],
     exercise: "-- 練習 2：P ∧ Q ならば Q ∧ P\n\nthm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q -> Q and P\n\nsorry\n",

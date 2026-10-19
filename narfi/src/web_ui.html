@@ -1816,6 +1816,15 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
           word += items[j].ch;
           j++;
         }
+        // h.left・h.right（∧ の取り出し）は、h を変数として描き、.left だけを立体にする
+        const proj = word.match(/^([^.]+)\.(left|right)$/);
+        if (proj && !DECL_KWS.has(proj[1])) {
+          const head = proj[1];
+          const headCls = (UPRIGHT_FNS.has(head) || head.includes("_") || head.length > 3 || declNames.has(head)) ? "mc-ident-fn" : "mc-var";
+          for (let k = i; k < j; k++) charClasses[k] = k < i + head.length ? headCls : "mc-ident-fn";
+          i = j;
+          continue;
+        }
         let cls = "mc-var";
         if (DECL_KWS.has(word)) cls = "mc-kw-decl";
         else if (STEP_KWS.has(word)) cls = "mc-kw-step";

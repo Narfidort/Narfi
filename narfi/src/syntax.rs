@@ -766,6 +766,12 @@ pub fn ident_to_latex(s: &str) -> String {
                 let d = (cs[2] as u32 - '₀' as u32) as u8 + b'0';
                 return format!("h_{{N_{}}}", d as char);
             }
+            // h.left・h.right（∧ の取り出し）：h は変数として、.left は立体で
+            if let Some((head, field)) = s.rsplit_once('.') {
+                if (field == "left" || field == "right") && !head.contains('.') && !head.is_empty() {
+                    return format!("{}.\\mathrm{{{field}}}", ident_to_latex(head));
+                }
+            }
             // ドットを含む識別子 (例: ge.max.left)
             if s.contains('.') {
                 return format!("\\mathrm{{{}}}", s);

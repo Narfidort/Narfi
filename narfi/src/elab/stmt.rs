@@ -349,6 +349,21 @@ impl<'a> Checker<'a> {
                 self.after_closed(&ctx, rest, &g)?;
                 Ok(at(p))
             }
+            StmtKind::Show { ty, just } => {
+                let f = self.infer_written(&ctx, ty)?;
+                if rest.is_empty() {
+                    if !self.unify(&ctx, &f, &g) {
+                        return self.err(format!("示そうとしている「{f}」が goal「{g}」と一致しない"));
+                    }
+                    let p = self.check_just(&ctx, just, &g)?;
+                    return Ok(at(p));
+                }
+                // 後ろに続く：this として仮定に加える（∴ で受けられる）
+                let p = self.check_just(&ctx, just, &f)?;
+                self.push(&mut ctx, Entry::Hyp("this".into(), f.clone()));
+                let r = self.seq(ctx, rest, goal, Some(f.clone()), line)?;
+                Ok(at(Proof::Cut { h: "this".into(), phi: f, p: p.b(), body: r.b() }))
+            }
             StmtKind::Chain { start, steps } if rest.is_empty() => {
                 let (result, cp) = self.chain(&ctx, start, steps)?;
                 self.line = line;

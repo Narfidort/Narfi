@@ -95,7 +95,7 @@ fn omitted_hypothesis_is_an_error() {
 #[test]
 fn sequence_subscripts() {
     let out = run(&["tests/subscript.narfi"]);
-    for n in ["sub.basic", "sub.chain", "sub.name"] {
+    for n in ["sub.basic", "sub.chain", "sub.name", "show.and_swap", "show.then"] {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }

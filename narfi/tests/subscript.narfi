@@ -28,3 +28,18 @@ refl
 
 -- 絶対値の中のマイナス
 axiom abs.neg : x : Real |- | -x| = |x|
+
+-- 命題 by 根拠
+thm show.and_swap :
+  P : Prop, Q : Prop
+  |- P and Q -> Q and P
+
+assume h : P and Q
+  Q and P by h.right, h.left
+
+thm show.then :
+  P : Prop, Q : Prop, h : P and Q
+  |- Q
+
+P by h.left
+h.right
