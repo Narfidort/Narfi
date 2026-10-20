@@ -567,7 +567,7 @@
     const body = bodyOf(opts);
     switch (path) {
       case "/api/check":
-        return json(call({ op: "check", src: body.src || "", path: body.path && !body.path.startsWith("lib:") ? body.path : "", cursor_line: body.cursor_line || 0 }));
+        return json(call({ op: "check", src: body.src || "", path: body.path && !body.path.startsWith("lib:") ? body.path : "", cursor_line: body.cursor_line || 0, locale: body.locale || "ja" }));
       case "/api/convert":
         return json(call({ op: "convert", src: body.src || "", mode: body.mode || "" }));
       case "/api/workspace":

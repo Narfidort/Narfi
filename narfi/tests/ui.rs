@@ -101,7 +101,7 @@ fn source_conversion_preserves_proofs() {
     files.extend(["tests/unsound_typedef.narfi", "tests/regress/subst_placeholder.narfi"]);
     for f in files {
         let f = Path::new(f);
-        for mode in ["--jp", "--std"] {
+        for mode in ["--jp", "--en", "--std"] {
             let out = Command::new(env!("CARGO_BIN_EXE_narfi")).args(["convert", mode]).arg(f).output().unwrap();
             let converted = String::from_utf8(out.stdout).unwrap();
             let tmp = f.with_file_name(format!(".convert-{}{}.narfi", std::process::id(), mode));

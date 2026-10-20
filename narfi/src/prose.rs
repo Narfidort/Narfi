@@ -12,13 +12,23 @@ pub struct ProseBlock {
 }
 
 fn just_to_latex(j: &Just) -> String {
+    let lc = crate::locale::current();
+    let word = |k: &str| format!("\\text{{{}}}", lc.t(k, &[]));
+    // 訳名のある定理は訳名で書く（和の線形性(a, b)）
+    let named = |f: &str, args: &[Term]| -> Option<String> {
+        let n = crate::syntax::display_name(f, lc.name)?;
+        let a: Vec<String> = args.iter().map(|x| x.to_latex()).collect();
+        Some(if a.is_empty() { format!("\\text{{{n}}}") } else { format!("\\text{{{n}}}({})", a.join(", ")) })
+    };
     j.iter()
         .map(|t| match t {
-            Term::Var(s) if s == "ring" => "\\text{式変形(ring)}".to_string(),
-            Term::Var(s) if s == "linarith" => "\\text{不等式評価(linarith)}".to_string(),
-            Term::Var(s) if s == "refl" => "\\text{反射律}".to_string(),
-            Term::Var(s) if s == "decide" => "\\text{計算}".to_string(),
-            Term::Var(s) if s == "sorry" => "\\text{未完(sorry)}".to_string(),
+            Term::Var(s) if s == "ring" => word("just_ring"),
+            Term::Var(s) if s == "linarith" => word("just_linarith"),
+            Term::Var(s) if s == "refl" => word("just_refl"),
+            Term::Var(s) if s == "decide" => word("just_decide"),
+            Term::Var(s) if s == "sorry" => word("just_sorry"),
+            Term::Var(f) => named(f, &[]).unwrap_or_else(|| t.to_latex()),
+            Term::App(f, args) => named(f, args).unwrap_or_else(|| t.to_latex()),
             _ => t.to_latex(),
         })
         .collect::<Vec<_>>()
@@ -91,348 +101,199 @@ pub fn decl_header_latex(d: &Decl) -> String {
     }
 }
 
+/// 宣言の証明を、いまのロケール（既定は日本語。locale::set_current）の文章にする
 pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> {
+    decl_to_prose(d, steps, crate::locale::current())
+}
+
+/// 宣言の証明を、ロケール（ja・en）の文章にする。文の型紙は src/locale/*.txt の [prose]
+pub fn decl_to_prose(d: &Decl, steps: &[StepTrace], lc: &crate::locale::Locale) -> Vec<ProseBlock> {
     let mut out = Vec::new();
+    let il = |x: &str| ident_to_latex(x);
     if d.generated {
-        out.push(ProseBlock {
-            depth: 0,
-            text: format!("**定義の等式 `{}`**: ${}$（再帰による定義から、再帰定理で示される）", d.name, d.concl.to_latex()),
-        });
+        out.push(ProseBlock { depth: 0, text: lc.t("decl_generated", &[("name", &d.name), ("f", &d.concl.to_latex())]) });
         return out;
     }
     if d.is_axiom {
-        out.push(ProseBlock {
-            depth: 0,
-            text: format!("**公理 `{}`**: ${}$", d.name, decl_header_latex(d)),
-        });
+        out.push(ProseBlock { depth: 0, text: lc.t("decl_axiom", &[("name", &d.name), ("f", &decl_header_latex(d))]) });
         return out;
     }
-
-    // 前提条件の説明
     let mut hyp_items = Vec::new();
     for c in &d.ctx {
         match c {
             CtxItem::Var(x, t) if t.contains('→') => {
-                hyp_items.push(format!("関数 ${} {}$", ident_to_latex(x), sort_decl_latex(t)));
+                hyp_items.push(lc.t("ctx_fun", &[("x", &format!("{} {}", il(x), sort_decl_latex(t)))]))
             }
-            CtxItem::Var(x, t) => {
-                hyp_items.push(format!("変数 ${} {}$", ident_to_latex(x), sort_decl_latex(t)));
-            }
-            CtxItem::Hyp(h, f) => {
-                hyp_items.push(format!(
-                    "仮定 ${}$：${}$",
-                    ident_to_latex(h),
-                    f.to_latex()
-                ));
-            }
+            CtxItem::Var(x, t) => hyp_items.push(lc.t("ctx_var", &[("x", &format!("{} {}", il(x), sort_decl_latex(t)))])),
+            CtxItem::Hyp(h, f) => hyp_items.push(lc.t("ctx_hyp", &[("h", &il(h)), ("f", &f.to_latex())])),
         }
     }
-
     if !hyp_items.is_empty() {
-        out.push(ProseBlock {
-            depth: 0,
-            text: "**【前提】**".to_string(),
-        });
+        out.push(ProseBlock { depth: 0, text: lc.t("premises", &[]) });
         for item in hyp_items {
-            out.push(ProseBlock {
-                depth: 1,
-                text: item,
-            });
+            out.push(ProseBlock { depth: 1, text: item });
         }
     }
-    out.push(ProseBlock {
-        depth: 0,
-        text: format!("**【目標】** ${}$ を示す。", d.concl.to_latex()),
-    });
-
-    stmts_to_prose(&d.body, steps, 0, &mut out);
+    out.push(ProseBlock { depth: 0, text: lc.t("goal", &[("f", &d.concl.to_latex())]) });
+    stmts_to_prose(&d.body, steps, 0, &mut out, lc);
     out
 }
 
-fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut Vec<ProseBlock>) {
+fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut Vec<ProseBlock>, lc: &crate::locale::Locale) {
+    let il = |x: &str| ident_to_latex(x);
     for s in stmts {
         match &s.kind {
             StmtKind::Fix { vars, hyp, body } => {
                 let vs: Vec<String> = vars
                     .iter()
                     .map(|(x, ty)| match ty {
-                        Some(t) if t != "?" => {
-                            format!("{} \\in {}", ident_to_latex(x), ident_to_latex(t))
-                        }
-                        _ => ident_to_latex(x),
+                        Some(t) if t != "?" => format!("{} \\in {}", il(x), il(t)),
+                        _ => il(x),
                     })
                     .collect();
                 let vs_str = vs.join(",\\ ");
                 let text = match hyp {
-                    Some((h, Some(f))) => {
-                        format!(
-                            "${}$ を満たす ${}$ を任意にとって固定する（仮定 ${}$）。",
-                            f.to_latex(),
-                            vs_str,
-                            ident_to_latex(h)
-                        )
-                    }
-                    Some((h, None)) => {
-                        if let Some(fl) = find_hyp_formula_latex(steps, s.line, h) {
-                            format!(
-                                "${}$ を満たす ${}$ を任意にとって固定する（仮定 ${}$）。",
-                                fl,
-                                vs_str,
-                                ident_to_latex(h)
-                            )
-                        } else {
-                            format!(
-                                "条件（仮定 ${}$）を満たす ${}$ を任意にとって固定する。",
-                                ident_to_latex(h),
-                                vs_str
-                            )
+                    Some((h, f)) => {
+                        let fl = f.as_ref().map(|f| f.to_latex()).or_else(|| find_hyp_formula_latex(steps, s.line, h));
+                        match fl {
+                            Some(fl) => lc.t("fix_hyp", &[("f", &fl), ("x", &vs_str), ("h", &il(h))]),
+                            None => lc.t("fix_hyp_unknown", &[("x", &vs_str), ("h", &il(h))]),
                         }
                     }
-                    None => format!("任意の ${}$ をとって固定する。", vs_str),
+                    None => lc.t("fix", &[("x", &vs_str)]),
                 };
                 out.push(ProseBlock { depth, text });
-                stmts_to_prose(body, steps, depth + 1, out);
+                stmts_to_prose(body, steps, depth + 1, out, lc);
             }
             StmtKind::Assume { name, ty, body } => {
-                let fl = match ty {
-                    Some(f) => Some(f.to_latex()),
-                    None => find_hyp_formula_latex(steps, s.line, name),
-                };
+                let fl = ty.as_ref().map(|f| f.to_latex()).or_else(|| find_hyp_formula_latex(steps, s.line, name));
                 let text = match fl {
-                    Some(f) => format!("${}$ と仮定する（仮定 ${}$）。", f, ident_to_latex(name)),
-                    None => format!("仮定 ${}$ をおく。", ident_to_latex(name)),
+                    Some(f) => lc.t("assume", &[("f", &f), ("h", &il(name))]),
+                    None => lc.t("assume_unknown", &[("h", &il(name))]),
                 };
                 out.push(ProseBlock { depth, text });
-                stmts_to_prose(body, steps, depth + 1, out);
+                stmts_to_prose(body, steps, depth + 1, out, lc);
             }
             StmtKind::ByContra { name, body } => {
-                let fl = find_hyp_formula_latex(steps, s.line, name);
-                let text = match fl {
-                    Some(f) => format!(
-                        "背理法による。結論の否定 ${}$ と仮定する（仮定 ${}$）。",
-                        f,
-                        ident_to_latex(name)
-                    ),
-                    None => format!(
-                        "背理法により、結論の否定（仮定 ${}$）を仮定する。",
-                        ident_to_latex(name)
-                    ),
+                let text = match find_hyp_formula_latex(steps, s.line, name) {
+                    Some(f) => lc.t("by_contra", &[("f", &f), ("h", &il(name))]),
+                    None => lc.t("by_contra_unknown", &[("h", &il(name))]),
                 };
                 out.push(ProseBlock { depth, text });
-                stmts_to_prose(body, steps, depth + 1, out);
+                stmts_to_prose(body, steps, depth + 1, out, lc);
             }
-            StmtKind::Obtain {
-                var,
-                deps,
-                hyps,
-                just,
-            } => {
+            StmtKind::Obtain { var, deps, hyps, just } => {
                 let dep_note = match deps {
                     Some(ds) if !ds.is_empty() => {
-                        let dl: Vec<String> = ds.iter().map(|d| ident_to_latex(d)).collect();
-                        format!("（${}$ に依存する）", dl.join(", "))
+                        let dl: Vec<String> = ds.iter().map(|d| il(d)).collect();
+                        lc.t("obtain_dep", &[("d", &dl.join(", "))])
                     }
                     _ => String::new(),
                 };
-                let mut h_descs = Vec::new();
-                for h in hyps {
-                    if let Some(fl) = find_hyp_formula_latex(steps, s.line + 1, h) {
-                        h_descs.push(format!("${}$（仮定 ${}$）", fl, ident_to_latex(h)));
-                    } else {
-                        h_descs.push(format!("仮定 ${}$", ident_to_latex(h)));
-                    }
-                }
-                let text = format!(
-                    "${}$ より、{} を満たす{} ${}$ をとる。",
-                    just_to_latex(just),
-                    h_descs.join(" かつ "),
-                    dep_note,
-                    ident_to_latex(var)
+                let h_descs: Vec<String> = hyps
+                    .iter()
+                    .map(|h| match find_hyp_formula_latex(steps, s.line + 1, h) {
+                        Some(fl) => lc.t("obtain_hyp", &[("f", &fl), ("h", &il(h))]),
+                        None => lc.t("obtain_hyp_unknown", &[("h", &il(h))]),
+                    })
+                    .collect();
+                let text = lc.t(
+                    "obtain",
+                    &[("j", &just_to_latex(just)), ("hs", &h_descs.join(&lc.t("and", &[]))), ("dep", &dep_note), ("x", &il(var))],
                 );
                 out.push(ProseBlock { depth, text });
             }
             StmtKind::Let { name, term } => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!(
-                        "ここで、${} := {}$ とおく。",
-                        ident_to_latex(name),
-                        term.to_latex()
-                    ),
-                });
+                out.push(ProseBlock { depth, text: lc.t("let", &[("x", &il(name)), ("t", &term.to_latex())]) });
             }
             StmtKind::Suffices { ty, just } => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!(
-                        "${}$ より、${}$ を示せば十分である。",
-                        just_to_latex(just),
-                        ty.to_latex()
-                    ),
-                });
+                out.push(ProseBlock { depth, text: lc.t("suffices", &[("j", &just_to_latex(just)), ("f", &ty.to_latex())]) });
             }
             StmtKind::Choose { choice, just } => {
                 let text = match (choice, just) {
-                    (Choice::Term(t), Some(j)) => {
-                        format!(
-                            "${}$ をとればよい（条件は ${}$ より従う）。",
-                            t.to_latex(),
-                            just_to_latex(j)
-                        )
-                    }
-                    (Choice::Term(t), None) => {
-                        format!("${}$ をとればよい。", t.to_latex())
-                    }
-                    (Choice::Left, _) => "選言の左側を示す。".to_string(),
-                    (Choice::Right, _) => "選言の右側を示す。".to_string(),
+                    (Choice::Term(t), Some(j)) => lc.t("choose_cond", &[("t", &t.to_latex()), ("j", &just_to_latex(j))]),
+                    (Choice::Term(t), None) => lc.t("choose", &[("t", &t.to_latex())]),
+                    (Choice::Left, _) => lc.t("choose_left", &[]),
+                    (Choice::Right, _) => lc.t("choose_right", &[]),
                 };
                 out.push(ProseBlock { depth, text });
             }
             StmtKind::Contradiction(a, b) => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!(
-                        "これは ${}$ と ${}$ に矛盾する。$\\blacksquare$",
-                        ident_to_latex(a),
-                        ident_to_latex(b)
-                    ),
-                });
+                out.push(ProseBlock { depth, text: lc.t("contradiction", &[("a", &il(a)), ("b", &il(b))]) });
             }
             StmtKind::Cases { hyp, left, right } => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!("${}$ について場合分けを行う。", ident_to_latex(hyp)),
-                });
-                let l_fl = find_hyp_formula_latex(steps, s.line, &left.0);
-                out.push(ProseBlock {
-                    depth: depth + 1,
-                    text: match l_fl {
-                        Some(f) => format!(
-                            "**(場合 1)** ${}$ （仮定 ${}$）のとき：",
-                            f,
-                            ident_to_latex(&left.0)
-                        ),
-                        None => format!("**(場合 1)** 仮定 ${}$ のとき：", ident_to_latex(&left.0)),
-                    },
-                });
-                stmts_to_prose(&left.1, steps, depth + 2, out);
-
-                let r_fl = find_hyp_formula_latex(steps, s.line, &right.0);
-                out.push(ProseBlock {
-                    depth: depth + 1,
-                    text: match r_fl {
-                        Some(f) => format!(
-                            "**(場合 2)** ${}$ （仮定 ${}$）のとき：",
-                            f,
-                            ident_to_latex(&right.0)
-                        ),
-                        None => {
-                            format!("**(場合 2)** 仮定 ${}$ のとき：", ident_to_latex(&right.0))
-                        }
-                    },
-                });
-                stmts_to_prose(&right.1, steps, depth + 2, out);
+                out.push(ProseBlock { depth, text: lc.t("cases", &[("h", &il(hyp))]) });
+                for (n, (h, body)) in [("1", left), ("2", right)] {
+                    let text = match find_hyp_formula_latex(steps, s.line, h) {
+                        Some(f) => lc.t("case", &[("n", n), ("f", &f), ("h", &il(h))]),
+                        None => lc.t("case_unknown", &[("n", n), ("h", &il(h))]),
+                    };
+                    out.push(ProseBlock { depth: depth + 1, text });
+                    stmts_to_prose(body, steps, depth + 2, out, lc);
+                }
             }
-            StmtKind::Induction {
-                var, zero, succ, ..
-            } => {
-                let vl = ident_to_latex(var);
-                out.push(ProseBlock {
-                    depth,
-                    text: format!("${vl}$ に関する数学的帰納法で示す。"),
-                });
-                out.push(ProseBlock {
-                    depth: depth + 1,
-                    text: format!("**(基底段階)** ${vl} = 0$ のとき："),
-                });
-                stmts_to_prose(zero, steps, depth + 2, out);
-
+            StmtKind::Induction { var, zero, succ, .. } => {
+                let vl = il(var);
+                out.push(ProseBlock { depth, text: lc.t("induction", &[("n", &vl)]) });
+                out.push(ProseBlock { depth: depth + 1, text: lc.t("induction_zero", &[("n", &vl)]) });
+                stmts_to_prose(zero, steps, depth + 2, out, lc);
                 let (k, ih, ih_ty, body) = succ;
-                let kl = ident_to_latex(k);
-                let ihl = ident_to_latex(ih);
-                let ih_str = match ih_ty {
-                    Some(f) => format!("（帰納法の仮定 ${ihl} : {}$）", f.to_latex()),
-                    None => match find_hyp_formula_latex(steps, s.line, ih) {
-                        Some(f) => format!("（帰納法の仮定 ${ihl} : {f}$）"),
-                        None => format!("（帰納法の仮定 ${ihl}$）"),
-                    },
+                let (kl, ihl) = (il(k), il(ih));
+                let ihf = ih_ty.as_ref().map(|f| f.to_latex()).or_else(|| find_hyp_formula_latex(steps, s.line, ih));
+                let ih_str = match ihf {
+                    Some(f) => lc.t("induction_ih", &[("h", &ihl), ("f", &f)]),
+                    None => lc.t("induction_ih_unknown", &[("h", &ihl)]),
                 };
-                out.push(ProseBlock {
-                    depth: depth + 1,
-                    text: format!("**(帰納段階)** ${vl} = {kl}$ で成り立つと仮定し{ih_str}、$S({kl})$ のときを示す："),
-                });
-                stmts_to_prose(body, steps, depth + 2, out);
+                out.push(ProseBlock { depth: depth + 1, text: lc.t("induction_succ", &[("n", &vl), ("k", &kl), ("ih", &ih_str)]) });
+                stmts_to_prose(body, steps, depth + 2, out, lc);
             }
             StmtKind::Unfold { names, at } => {
-                let ns: Vec<String> = names.iter().map(|n| format!("${}$", ident_to_latex(n))).collect();
+                let ns: Vec<String> = names.iter().map(|n| format!("${}$", il(n))).collect();
                 let text = if at.is_empty() {
-                    format!("{} の定義を展開する。", ns.join("、"))
+                    lc.t("unfold", &[("n", &ns.join(", "))])
                 } else {
-                    let hs: Vec<String> = at.iter().map(|h| format!("${}$", ident_to_latex(h))).collect();
-                    format!("{} において {} の定義を展開する。", hs.join("、"), ns.join("、"))
+                    let hs: Vec<String> = at.iter().map(|h| format!("${}$", il(h))).collect();
+                    lc.t("unfold_at", &[("h", &hs.join(", ")), ("n", &ns.join(", "))])
                 };
                 out.push(ProseBlock { depth, text });
             }
             StmtKind::Therefore(f) => {
-                out.push(ProseBlock {
-                    depth,
-                    text: format!("したがって、${}$ が成り立つ。$\\blacksquare$", f.to_latex()),
-                });
+                out.push(ProseBlock { depth, text: lc.t("therefore", &[("f", &f.to_latex())]) });
             }
             StmtKind::Show { name, ty, just, body } => {
-                let label = name.as_ref().map(|h| format!("（${}$）", ident_to_latex(h))).unwrap_or_default();
+                let label = name.as_ref().map(|h| lc.t("label", &[("h", &il(h))])).unwrap_or_default();
                 if !body.is_empty() {
-                    out.push(ProseBlock { depth, text: format!("まず ${}${label} を示す。", ty.to_latex()) });
-                    stmts_to_prose(body, steps, depth + 1, out);
+                    out.push(ProseBlock { depth, text: lc.t("show_block", &[("f", &ty.to_latex()), ("label", &label)]) });
+                    stmts_to_prose(body, steps, depth + 1, out, lc);
                 } else {
                     let text = match just {
-                        Some(j) => format!("${}$ より、${}$ が成り立つ{label}。", just_to_latex(j), ty.to_latex()),
-                        None => format!("${}$ が成り立つ{label}（根拠が書かれていない）。", ty.to_latex()),
+                        Some(j) => lc.t("show", &[("j", &just_to_latex(j)), ("f", &ty.to_latex()), ("label", &label)]),
+                        None => lc.t("show_unjustified", &[("f", &ty.to_latex()), ("label", &label)]),
                     };
                     out.push(ProseBlock { depth, text });
                 }
             }
             StmtKind::Close(j) => {
                 let text = match j.as_slice() {
-                    [Term::Var(s)] if s == "sorry" => "（※ ここは未完成 `sorry`）".to_string(),
-                    [Term::Var(s)] if s == "refl" => {
-                        "反射律より直ちに成り立つ。$\\blacksquare$".to_string()
-                    }
-                    [Term::Var(s)] if s == "ring" => {
-                        "式変形（環の計算）より成り立つ。$\\blacksquare$".to_string()
-                    }
-                    [Term::Var(s)] if s == "linarith" => {
-                        "不等式の評価より成り立つ。$\\blacksquare$".to_string()
-                    }
-                    [Term::Var(s)] if s == "decide" => {
-                        "直接計算により成り立つ。$\\blacksquare$".to_string()
-                    }
-                    _ => format!("${}$ より成り立つ。$\\blacksquare$", just_to_latex(j)),
+                    [Term::Var(s)] if s == "sorry" => lc.t("sorry", &[]),
+                    [Term::Var(s)] if s == "refl" => lc.t("close_refl", &[]),
+                    [Term::Var(s)] if s == "ring" => lc.t("close_ring", &[]),
+                    [Term::Var(s)] if s == "linarith" => lc.t("close_linarith", &[]),
+                    [Term::Var(s)] if s == "decide" => lc.t("close_decide", &[]),
+                    _ => lc.t("close", &[("j", &just_to_latex(j))]),
                 };
                 out.push(ProseBlock { depth, text });
             }
-            StmtKind::Chain {
-                start,
-                steps: csteps,
-            } => {
+            StmtKind::Chain { start, steps: csteps } => {
                 let mut lines = Vec::new();
                 for (idx, st) in csteps.iter().enumerate() {
-                    let lhs = if idx == 0 {
-                        start.to_latex()
-                    } else {
-                        String::new()
-                    };
+                    let lhs = if idx == 0 { start.to_latex() } else { String::new() };
                     let rel = rel_to_latex(&st.rel);
                     let rhs = st.term.to_latex();
                     let j = just_to_latex(&st.just);
-                    lines.push(format!(
-                        "{lhs} &{rel} {rhs} && \\left(\\because {j}\\right)"
-                    ));
+                    lines.push(format!("{lhs} &{rel} {rhs} && \\left(\\because {j}\\right)"));
                 }
-                let math = format!(
-                    "$$\\begin{{aligned}}\n{}\n\\end{{aligned}}$$",
-                    lines.join(" \\\\\n")
-                );
+                let math = format!("$$\\begin{{aligned}}\n{}\n\\end{{aligned}}$$", lines.join(" \\\\\n"));
                 out.push(ProseBlock { depth, text: math });
             }
         }
@@ -465,8 +326,9 @@ pub fn latex_document(title: &str, items: &[(&Decl, &[StepTrace])]) -> String {
 pub fn decl_to_latex_env(d: &Decl, steps: &[StepTrace]) -> String {
     // 文は見出しの下に、別行の数式として置く（見出しの横に置くと上下中央にそろって間が空く）
     let statement = format!("\\leavevmode\n\\[\n{}\n\\]", decl_header_latex(d));
+    let title = crate::syntax::display_name(&d.name, crate::locale::current().name).unwrap_or_else(|| d.name.replace('_', "\\_"));
     if d.is_axiom {
-        return format!("\\begin{{axiom}}[{}]{statement}\n\\end{{axiom}}\n", d.name.replace('_', "\\_"));
+        return format!("\\begin{{axiom}}[{title}]{statement}\n\\end{{axiom}}\n");
     }
     let prose = decl_to_japanese_prose(d, steps);
     let mut body = String::new();
@@ -477,8 +339,7 @@ pub fn decl_to_latex_env(d: &Decl, steps: &[StepTrace]) -> String {
         body.push_str(&format!("{indent}{line}\n\n"));
     }
     format!(
-        "\\begin{{theorem}}[{}]{statement}\n\\end{{theorem}}\n\\begin{{proof}}\n{}\\end{{proof}}\n",
-        d.name.replace('_', "\\_"),
+        "\\begin{{theorem}}[{title}]{statement}\n\\end{{theorem}}\n\\begin{{proof}}\n{}\\end{{proof}}\n",
         body
     )
 }
@@ -489,7 +350,10 @@ fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
         // rec から自動で作った定理は書き戻さない（rec の行から作り直される）
         Item::Decl(d) if d.generated => return None,
         Item::Decl(d) => return Some(d),
-        Item::Def(d) => out.push_str(&d.src),
+        Item::Def(d) => {
+            out.push_str(&crate::syntax::display_name_lines(&d.name));
+            out.push_str(&d.src)
+        }
         Item::Notation { src, .. } => out.push_str(src),
         Item::Import { path, .. } => out.push_str(&format!("import {path}")),
         // 読めなかった宣言は、そのまま書き戻す
@@ -501,29 +365,49 @@ fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
 
 /// 標準 Narfi のソースコードを「日本語シュガー Narfi」に変換する（カーネルでそのまま実行可能）
 pub fn convert_source_to_japanese_sugar(src: &str) -> String {
+    convert_source_to_locale(src, "ja")
+}
+
+/// 標準の書き方を、ロケール（ja・en）での読みに変換する。対応は src/locale/ の表だけで決まる
+pub fn convert_source_to_locale(src: &str, locale: &str) -> String {
+    let Some(loc) = crate::locale::locale(locale) else {
+        return src.to_string();
+    };
     let Ok(m) = crate::module::parse_source(src, None) else {
         return src.to_string();
     };
+    let body = |stmts: &[Stmt], base: usize, out: &mut String| {
+        let mut tmp = String::new();
+        for st in stmts {
+            stmt_to_standard(st, base, &mut tmp);
+        }
+        for line in tmp.lines() {
+            let t = line.trim_start();
+            let pad = &line[..line.len() - t.len()];
+            out.push_str(pad);
+            out.push_str(&crate::locale::stmt_from_standard(loc, t));
+            out.push('\n');
+        }
+    };
     let mut out = String::new();
+    if let Some(e) = &m.edition {
+        out.push_str(&format!("edition {e}\n\n"));
+    }
     for it in &m.items {
         let Some(d) = emit_non_decl(it, &mut out) else {
             continue;
         };
-        // typedef T := {x : σ | φ}（文は ∃x:σ. φ として持っている）
         if let (Some(td), Formula::Exists(x, ty, phi)) = (&d.typedef, &d.concl) {
             let set = Term::Set(vec![(x.clone(), ty.clone())], phi.clone());
             out.push_str(&format!("typedef {} := {set}\n", td.name));
-            for st in &d.body {
-                stmt_to_japanese_sugar(st, 1, &mut out);
-            }
+            body(&d.body, 1, &mut out);
             out.push('\n');
             continue;
         }
-        if d.is_axiom {
-            out.push_str(&format!("公理 {} : ", d.name));
-        } else {
-            out.push_str(&format!("定理 {} :\n  ", d.name));
-        }
+        let kw = if d.is_axiom { "axiom" } else { "thm" };
+        out.push_str(&crate::syntax::display_name_lines(&d.name));
+        out.push_str(&crate::locale::decl_from_standard(loc, &format!("{kw} {} :", d.name)));
+        out.push_str(if d.is_axiom { " " } else { "\n  " });
         let mut ctx_parts = Vec::new();
         for c in &d.ctx {
             match c {
@@ -533,19 +417,13 @@ pub fn convert_source_to_japanese_sugar(src: &str) -> String {
         }
         if !ctx_parts.is_empty() {
             out.push_str(&ctx_parts.join(", "));
-            if d.is_axiom {
-                out.push_str(" ⊢ ");
-            } else {
-                out.push_str("\n  ⊢ ");
-            }
+            out.push_str(if d.is_axiom { " ⊢ " } else { "\n  ⊢ " });
         } else if !d.is_axiom {
             out.push_str("⊢ ");
         }
         out.push_str(&format!("{}\n\n", d.concl));
         if !d.is_axiom {
-            for s in &d.body {
-                stmt_to_japanese_sugar(s, 0, &mut out);
-            }
+            body(&d.body, 0, &mut out);
             out.push('\n');
         }
     }
@@ -559,160 +437,14 @@ fn just_str(j: &Just) -> String {
         .join(", ")
 }
 
-fn stmt_to_japanese_sugar(s: &Stmt, indent: usize, out: &mut String) {
-    let pad = "  ".repeat(indent);
-    match &s.kind {
-        StmtKind::Fix { vars, hyp, body } => {
-            let vs = vars
-                .iter()
-                .map(|(x, t)| match t {
-                    Some(ty) => format!("{x} : {ty}"),
-                    None => x.clone(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            match hyp {
-                Some((h, Some(f))) => out.push_str(&format!(
-                    "{pad}{h} : {f} を満たす {vs} を任意にとって固定する\n"
-                )),
-                Some((h, None)) => {
-                    out.push_str(&format!("{pad}{h} を満たす {vs} を任意にとって固定する\n"))
-                }
-                None => out.push_str(&format!("{pad}{vs} を任意にとって固定する\n")),
-            }
-            for c in body {
-                stmt_to_japanese_sugar(c, indent + 1, out);
-            }
-        }
-        StmtKind::Assume { name, ty, body } => {
-            match ty {
-                Some(f) => out.push_str(&format!("{pad}{name} : {f} と仮定する\n")),
-                None => out.push_str(&format!("{pad}{name} と仮定する\n")),
-            }
-            for c in body {
-                stmt_to_japanese_sugar(c, indent + 1, out);
-            }
-        }
-        StmtKind::ByContra { name, body } => {
-            out.push_str(&format!("{pad}背理法により {name} と仮定する\n"));
-            for c in body {
-                stmt_to_japanese_sugar(c, indent + 1, out);
-            }
-        }
-        StmtKind::Obtain {
-            var,
-            deps,
-            hyps,
-            just,
-        } => {
-            let v_str = match deps {
-                Some(ds) => format!("{var}({})", ds.join(", ")),
-                None => var.clone(),
-            };
-            let h_str = hyps.join(", ");
-            out.push_str(&format!(
-                "{pad}{} より {v_str}, {h_str} が存在する\n",
-                just_str(just)
-            ));
-        }
-        StmtKind::Suffices { ty, just } => {
-            out.push_str(&format!(
-                "{pad}{} より {ty} を示せば十分である\n",
-                just_str(just)
-            ));
-        }
-        StmtKind::Choose { choice, just } => {
-            let c_str = match choice {
-                Choice::Term(t) => match just {
-                    Some(j) => format!("{t}, {} をとればよい", just_str(j)),
-                    None => format!("{t} をとればよい"),
-                },
-                Choice::Left => "左を選ぶ".to_string(),
-                Choice::Right => "右を選ぶ".to_string(),
-            };
-            out.push_str(&format!("{pad}{c_str}\n"));
-        }
-        StmtKind::Contradiction(a, b) => {
-            out.push_str(&format!("{pad}{a} と {b} は矛盾\n"));
-        }
-        StmtKind::Cases { hyp, left, right } => {
-            out.push_str(&format!("{pad}{hyp} で場合分けする\n"));
-            out.push_str(&format!("{pad}  場合 左 {}\n", left.0));
-            for c in &left.1 {
-                stmt_to_japanese_sugar(c, indent + 2, out);
-            }
-            out.push_str(&format!("{pad}  場合 右 {}\n", right.0));
-            for c in &right.1 {
-                stmt_to_japanese_sugar(c, indent + 2, out);
-            }
-        }
-        StmtKind::Induction {
-            var, zero, succ, ..
-        } => {
-            out.push_str(&format!("{pad}{var} に関する帰納法\n"));
-            out.push_str(&format!("{pad}  基底段階\n"));
-            for c in zero {
-                stmt_to_japanese_sugar(c, indent + 2, out);
-            }
-            let (k, ih, ih_ty, body) = succ;
-            match ih_ty {
-                Some(f) => out.push_str(&format!("{pad}  帰納段階 {k}, {ih} : {f}\n")),
-                None => out.push_str(&format!("{pad}  帰納段階 {k}, {ih}\n")),
-            }
-            for c in body {
-                stmt_to_japanese_sugar(c, indent + 2, out);
-            }
-        }
-        StmtKind::Let { name, term } => {
-            out.push_str(&format!("{pad}{name} := {term} とする\n"));
-        }
-        StmtKind::Unfold { names, at } => {
-            if at.is_empty() {
-                out.push_str(&format!("{pad}{} を展開する\n", names.join(", ")));
-            } else {
-                out.push_str(&format!("{pad}{} の {} を展開する\n", at.join(", "), names.join(", ")));
-            }
-        }
-        StmtKind::Therefore(f) => {
-            out.push_str(&format!("{pad}したがって {f}\n"));
-        }
-        StmtKind::Close(j) => {
-            out.push_str(&format!("{pad}{}\n", just_str(j)));
-        }
-        StmtKind::Show { name, ty, just, body } => {
-            let label = name.as_ref().map(|h| format!("{h} : ")).unwrap_or_default();
-            if !body.is_empty() {
-                out.push_str(&format!("{pad}{label}{ty} を示す\n"));
-                for c in body {
-                    stmt_to_japanese_sugar(c, indent + 1, out);
-                }
-            } else {
-                match just {
-                    Some(j) => out.push_str(&format!("{pad}{} より {label}{ty} が成り立つ\n", just_str(j))),
-                    None => out.push_str(&format!("{pad}{label}{ty}\n")),
-                }
-            }
-        }
-        StmtKind::Chain { start, steps } => {
-            out.push_str(&format!("{pad}{start}\n"));
-            for st in steps {
-                out.push_str(&format!(
-                    "{pad}  {} {}   (∵ {})\n",
-                    st.rel,
-                    st.term,
-                    just_str(&st.just)
-                ));
-            }
-        }
-    }
-}
-
-/// 日本語シュガー等を含む Narfi ソースを標準の簡潔な Narfi 構文へ正規化する
 pub fn convert_source_to_standard_narfi(src: &str) -> String {
     let Ok(m) = crate::module::parse_source(src, None) else {
         return src.to_string();
     };
     let mut out = String::new();
+    if let Some(e) = &m.edition {
+        out.push_str(&format!("edition {e}\n\n"));
+    }
     for it in &m.items {
         let Some(d) = emit_non_decl(it, &mut out) else {
             continue;
@@ -727,6 +459,7 @@ pub fn convert_source_to_standard_narfi(src: &str) -> String {
             out.push('\n');
             continue;
         }
+        out.push_str(&crate::syntax::display_name_lines(&d.name));
         if d.is_axiom {
             out.push_str(&format!("axiom {} : ", d.name));
         } else {

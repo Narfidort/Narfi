@@ -1,0 +1,90 @@
+# English locale: standard form (left) and its reading (right). Same format as ja.txt.
+#   =  read and written (editor lens, conversion); the first one per standard form
+#   <  read only
+# {name} is any non-empty text, {name:id} a name without spaces, {name:rel} one of = < ≤ > ≥ ≠.
+# English readings end with a period or colon so that they never collide with standard lines.
+
+[statements]
+=	Fix {x} | {h:id} : {f}	Let {x} be arbitrary with {h} : {f}.
+=	Fix {x}	Let {x} be arbitrary.
+=	by_contra {h:id}	Suppose, for contradiction, {h}.
+=	assume {h:id} : {f}	Assume {h} : {f}.
+=	Obtain {v}, {h:id} : {j}	Obtain {v} with {h} from {j}.
+=	cases {h}	Split on {h}.
+=	Case left {h}	Left case ({h}):
+=	Case right {h}	Right case ({h}):
+=	induction {n}	Induction on {n}.
+=	Case zero	Base case:
+=	Case succ {k}, {h} : {f}	Step {k}, {h} : {f}:
+=	choose left	Show the left side.
+=	choose right	Show the right side.
+=	choose {t}	Take {t}.
+=	let {x} := {t}	Set {x} := {t}.
+=	{h:id} : {f} by {j}	{h} : {f} follows from {j}.
+=	{h:id} : {f}	We show {h} : {f}:
+=	{r:rel} {t} by {j}	{r} {t} (by {j})
+=	{f} by {j}	{f} follows from {j}.
+=	∴ {f}	Therefore {f}.
+=	sorry	To be done.
+
+[declarations]
+=	thm {rest}	Theorem {rest}
+=	axiom {rest}	Axiom {rest}
+
+[prose]
+# Proof text (Prose, LaTeX). Format: key <TAB> template ($…$ is math)
+decl_generated	**Defining equation `{name}`**: ${f}$ (from the recursive definition, by the recursion theorem)
+decl_axiom	**Axiom `{name}`**: ${f}$
+ctx_fun	function ${x}$
+ctx_var	variable ${x}$
+ctx_hyp	hypothesis ${h}$: ${f}$
+premises	**Assumptions.**
+goal	**Goal.** We show ${f}$.
+fix_hyp	Let ${x}$ be arbitrary with ${f}$ (hypothesis ${h}$).
+fix_hyp_unknown	Let ${x}$ be arbitrary satisfying hypothesis ${h}$.
+fix	Let ${x}$ be arbitrary.
+assume	Assume ${f}$ (hypothesis ${h}$).
+assume_unknown	Assume hypothesis ${h}$.
+by_contra	Suppose, for contradiction, ${f}$ (hypothesis ${h}$).
+by_contra_unknown	Suppose, for contradiction, the negation of the goal (hypothesis ${h}$).
+obtain_dep	 (depending on ${d}$)
+obtain_hyp	${f}$ (hypothesis ${h}$)
+obtain_hyp_unknown	hypothesis ${h}$
+and	 and 
+obtain	By ${j}$, there is ${x}${dep} with {hs}.
+let	Set ${x} := {t}$.
+suffices	By ${j}$, it suffices to show ${f}$.
+choose_cond	Take ${t}$ (the condition follows from ${j}$).
+choose	Take ${t}$.
+choose_left	We show the left disjunct.
+choose_right	We show the right disjunct.
+contradiction	This contradicts ${a}$ and ${b}$. $\blacksquare$
+cases	We distinguish cases on ${h}$.
+case	**(Case {n})** ${f}$ (hypothesis ${h}$):
+case_unknown	**(Case {n})** hypothesis ${h}$:
+induction	We proceed by induction on ${n}$.
+induction_zero	**(Base case)** ${n} = 0$:
+induction_ih	 (induction hypothesis ${h} : {f}$)
+induction_ih_unknown	 (induction hypothesis ${h}$)
+induction_succ	**(Inductive step)** Assume the claim for ${n} = {k}${ih}; we show it for $S({k})$:
+unfold	Unfold the definition of {n}.
+unfold_at	Unfold the definition of {n} in {h}.
+therefore	Therefore ${f}$. $\blacksquare$
+label	 (${h}$)
+show_block	First we show ${f}${label}.
+show	By ${j}$, ${f}${label}.
+show_unjustified	${f}${label} (no justification written).
+sorry	(※ unfinished: `sorry`)
+close_refl	This holds by reflexivity. $\blacksquare$
+close_ring	This holds by algebraic computation. $\blacksquare$
+close_linarith	This follows from the inequalities. $\blacksquare$
+close_decide	This holds by direct computation. $\blacksquare$
+close	This follows from ${j}$. $\blacksquare$
+theorem	Theorem
+axiom	Axiom
+proof	Proof
+just_ring	algebra (ring)
+just_linarith	inequalities (linarith)
+just_refl	reflexivity
+just_decide	computation
+just_sorry	unfinished (sorry)

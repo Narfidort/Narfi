@@ -9,12 +9,13 @@ Narfi（**N**atural **A**nnotated **R**easoning **F**orward **I**nteractive）�
 | [language/syntax.md](language/syntax.md) | 言語仕様：書き方の完全な一覧（文・根拠・規則の名前・日本語シュガー） |
 | [language/logic.md](language/logic.md) | 言語仕様：核の論理（型・推論規則・定義的等しさ・算術・定義・typedef） |
 | [language/library.md](language/library.md) | 標準ライブラリ（何がどの公理に頼るか） |
+| [language/locale.md](language/locale.md) | 自然言語での読み（日本語・英語のロケールの表、訳名） |
 | [system/architecture.md](system/architecture.md) | システム構成：parser → elab → kernel、ファイルの読み込み、WebAssembly |
 | [system/editor.md](system/editor.md) | エディタ（構造化された入力・表示の層・直し方） |
 | [system/web-and-cloud.md](system/web-and-cloud.md) | ローカルサーバー・Web 版・クラウド保存・CI/CD |
 | [system/testing.md](system/testing.md) | テストの種類と回し方 |
 | [notes/](notes/README.md) | 学習ノート（論理学・型理論の考え方を、このコードに沿って説明する） |
-| [proposals/](proposals/README.md) | 検討中の設計案（行列・自然言語の分離と定理の訳名） |
+| [proposals/](proposals/README.md) | 検討中の設計案（行列） |
 | [archived/](archived/README.md) | v1 時代の仕様書・計画書・ガイドブック |
 
 v1（タグ `v1.0`）は「黒板の答案をそのまま検査する」試作だった。v2 の目標は、
@@ -54,9 +55,10 @@ v2.1 で関数型・Prop・λ・集合を実装した。
 | v2.5 | 仮定の中身を省略できなくする（`Fix ε \| hε : ε > 0`。省略すると help つきのエラー）・Web 版のクラウド保存（GitHub でログイン、D1 と同期） | 実装済み |
 | v2.5.x | 書き方・エディタの改善、原始再帰（rec）・Σ・行列（2×2 ケイリー・ハミルトン）、自然演繹の証明木、コース「公理へ」第 0〜4 章 | 実装済み |
 | v2.6 | 証明の書き方の整理：事実の行 `h : φ by j`（have を置き換え）、根拠のない行はエラー＋根拠の探索（直し方として示す。勝手に補わない）、古い書き方は警告と書き換え、∴ の表示 | 実装済み |
-| v2.7 | ℝ の演算（加法・乗法の well-definedness）と順序 | 未着手 |
-| v2.8 | ℤ・ℚ をペアノから商で構成 | 未着手 |
-| v2.9 | 外部の検査器（Lean 4 など）への書き出しによる再検査 | 未着手 |
+| v2.7 | 言語の核と自然言語の分離：読みの表（ロケール ja・en）、エディタの読みの表示・変換・Prose を表から、訳名 `@name`、ファイルの版 `edition 2026` | 実装済み |
+| v2.8 | ℝ の演算（加法・乗法の well-definedness）と順序 | 未着手 |
+| v2.9 | ℤ・ℚ をペアノから商で構成 | 未着手 |
+| v2.10 | 外部の検査器（Lean 4 など）への書き出しによる再検査 | 未着手 |
 
 ## v1 からの書き方の違い
 

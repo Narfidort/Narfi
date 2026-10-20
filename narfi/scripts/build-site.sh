@@ -14,6 +14,7 @@ cp src/web_ui.html site/index.html
 cp src/web_static.js site/narfi-web.js
 cp src/tutorial.js site/tutorial.js
 cp src/course.js site/course.js
+node -e 'const fs = require("fs"); const o = {}; for (const n of ["ja", "en"]) o[n] = fs.readFileSync(`src/locale/${n}.txt`, "utf8"); fs.writeFileSync("site/locales.js", "window.NARFI_LOCALES = " + JSON.stringify(o) + ";\n");'
 cp -R assets/katex site/assets/katex
 # 404 はトップに戻す・キャッシュの設定（Cloudflare Pages の書式）
 cat > site/_headers <<'HDR'

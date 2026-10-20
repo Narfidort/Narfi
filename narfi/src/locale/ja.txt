@@ -1,0 +1,162 @@
+# 日本語のロケール：標準の書き方（左）とその読み（右）の対応表。
+# docs/proposals/i18n.md・docs/principles.md（言語の核は自然言語に依存しない）。
+#
+# 書式：  記号 <TAB> 標準の書き方 <TAB> この言語での書き方
+#   =  読みも書きも（エディタの表示・変換に使う。標準の書き方ごとに最初の 1 つ）
+#   <  読むだけ（古い言い回し・別の言い回し）
+# {名前} は空でない文字列。{名前:id} は空白を含まない名前。{名前:rel} は = < ≤ > ≥ ≠ のどれか。
+# 上から順に試す（長いもの・特殊なものを先に）。
+
+[statements]
+=	Fix {x} | {h:id} : {f}	{h} : {f} を満たす {x} を任意にとって固定する
+<	Fix {x} | {h:id} : {f}	{h} : {f} を満たす {x} を任意にとって固定
+<	Fix {x} | {h:id} : {f}	{h} : {f} を満たす {x} を任意にとる
+<	Fix {x} | {h:id} : {f}	{h} : {f} を満たす {x} を固定する
+=	Fix {x}	{x} を任意にとって固定する
+<	Fix {x}	任意の {x} をとって固定する
+<	Fix {x}	{x} を任意にとって固定
+<	Fix {x}	{x} を任意にとる
+<	Fix {x}	{x} を固定する
+<	Fix {x}	固定 {x}
+=	by_contra {h:id}	背理法により {h} と仮定する
+<	by_contra {h:id}	背理法で {h} と仮定する
+<	by_contra {h}	背理法 {h}
+=	assume {h:id} : {f}	{h} : {f} と仮定する
+<	assume {h:id} : {f}	{h} : {f} を仮定する
+<	assume {h}	仮定 {h}
+=	Obtain {v}, {h:id} : {j}	{j} より {v}, {h} が存在する
+<	Obtain {v}, {h:id} : {j}	{j} より {v}, {h} を得る
+<	Obtain {v}, {h:id} : {j}	{j} より {v}, {h} をとる
+<	Obtain {v}, {h:id} : {j}	{j} より {h} : {f} を満たす {v} が存在する
+<	Obtain {v} : {j}	{j} より {v} が存在する
+<	Obtain {v}	取得 {v}
+=	cases {h}	{h} で場合分けする
+<	cases {h}	{h} について場合分けする
+<	cases {h}	{h} で場合分け
+<	cases {h}	場合分け {h}
+=	Case left {h}	左の場合（{h}）
+<	Case left {h}	場合 左 {h}
+=	Case right {h}	右の場合（{h}）
+<	Case right {h}	場合 右 {h}
+=	induction {n}	{n} についての帰納法
+<	induction {n}	{n} に関する数学的帰納法
+<	induction {n}	{n} に関する帰納法
+<	induction {n}	{n} で帰納法を行う
+<	induction {n}	{n} で帰納法
+<	induction {n}	帰納法 {n}
+=	Case zero	基底段階
+<	Case zero	基底段階:
+=	Case succ {k}, {h} : {f}	帰納段階 {k}, {h} : {f}
+<	Case succ {rest}	帰納段階 {rest}
+=	choose left	左を示す
+<	choose left	左を選ぶ
+<	choose left	左を選べばよい
+=	choose right	右を示す
+<	choose right	右を選ぶ
+<	choose right	右を選べばよい
+=	choose {t}	{t} をとればよい
+<	choose {t}	{t} とすればよい
+<	choose {t}	{t} をうまく選べばよい
+<	choose {t}	{t} を選べばよい
+<	choose {t}	{t} をうまく選ぶ
+<	choose {t}	{t} を選ぶ
+<	choose {t}	{t} と選ぶ
+<	choose {t}	選ぶ {t}
+=	let {x} := {t}	{x} := {t} とおく
+<	let {x} := {t}	ここで {x} := {t} とおく
+<	let {x} := {t}	{x} := {t} とする
+<	let {x} := {t}	{x} := {t} と定義する
+<	let {rest}	とおく {rest}
+=	{h:id} : {f} by {j}	{j} より {h} : {f} が成り立つ
+<	{h:id} : {f} by {j}	{j} より {h} : {f} を得る
+=	{h:id} : {f}	{h} : {f} を示す
+=	{r:rel} {t} by {j}	{r} {t}（∵ {j}）
+<	{r:rel} {t} by {j}	{r} {t} (∵ {j})
+<	{r:rel} {t} by {j}	{r} {t} ∵ {j}
+=	{f} by {j}	{j} より {f} が成り立つ
+<	{f} by {j}	{f}（∵ {j}）
+<	{f} by {j}	{f} (∵ {j})
+<	{f} by {j}	{f} ∵ {j}
+=	∴ {f}	したがって {f}
+<	∴ {f}	よって {f}
+<	∴ {f}	ゆえに {f}
+=	sorry	未完
+<	sorry	後で
+# 古い書き方（読むだけ。警告になる）
+<	suffices {f} := {j}	{j} より {f} を示せば十分である
+<	suffices {f} := {j}	{j} より {f} を示せば十分
+<	suffices {f} := {j}	{j} より {f} を示せばよい
+<	unfold {n} at {h}	{h} の {n} の定義を展開する
+<	unfold {n} at {h}	{h} の {n} を展開する
+<	unfold {n}	{n} の定義を展開する
+<	unfold {n}	{n} を展開する
+<	contradiction {a:id} {b:id}	{a} と {b} は矛盾する
+<	contradiction {a:id} {b:id}	{a} と {b} は矛盾
+<	contradiction {a:id} {b:id}	{a} と {b} より矛盾
+<	contradiction {rest}	矛盾 {rest}
+
+[declarations]
+=	thm {rest}	定理 {rest}
+<	thm {rest}	補題 {rest}
+<	thm {rest}	命題 {rest}
+=	axiom {rest}	公理 {rest}
+<	def {rest}	定義 {rest}
+<	notation {rest}	記法 {rest}
+
+[prose]
+# 証明の文章（Prose・LaTeX）。書式：鍵 <TAB> 型紙（$…$ は数式）
+decl_generated	**定義の等式 `{name}`**: ${f}$（再帰による定義から、再帰定理で示される）
+decl_axiom	**公理 `{name}`**: ${f}$
+ctx_fun	関数 ${x}$
+ctx_var	変数 ${x}$
+ctx_hyp	仮定 ${h}$：${f}$
+premises	**【前提】**
+goal	**【目標】** ${f}$ を示す。
+fix_hyp	${f}$ を満たす ${x}$ を任意にとって固定する（仮定 ${h}$）。
+fix_hyp_unknown	条件（仮定 ${h}$）を満たす ${x}$ を任意にとって固定する。
+fix	任意の ${x}$ をとって固定する。
+assume	${f}$ と仮定する（仮定 ${h}$）。
+assume_unknown	仮定 ${h}$ をおく。
+by_contra	背理法による。結論の否定 ${f}$ と仮定する（仮定 ${h}$）。
+by_contra_unknown	背理法により、結論の否定（仮定 ${h}$）を仮定する。
+obtain_dep	（${d}$ に依存する）
+obtain_hyp	${f}$（仮定 ${h}$）
+obtain_hyp_unknown	仮定 ${h}$
+and	 かつ 
+obtain	${j}$ より、{hs} を満たす{dep} ${x}$ をとる。
+let	ここで、${x} := {t}$ とおく。
+suffices	${j}$ より、${f}$ を示せば十分である。
+choose_cond	${t}$ をとればよい（条件は ${j}$ より従う）。
+choose	${t}$ をとればよい。
+choose_left	選言の左側を示す。
+choose_right	選言の右側を示す。
+contradiction	これは ${a}$ と ${b}$ に矛盾する。$\blacksquare$
+cases	${h}$ について場合分けを行う。
+case	**(場合 {n})** ${f}$ （仮定 ${h}$）のとき：
+case_unknown	**(場合 {n})** 仮定 ${h}$ のとき：
+induction	${n}$ に関する数学的帰納法で示す。
+induction_zero	**(基底段階)** ${n} = 0$ のとき：
+induction_ih	（帰納法の仮定 ${h} : {f}$）
+induction_ih_unknown	（帰納法の仮定 ${h}$）
+induction_succ	**(帰納段階)** ${n} = {k}$ で成り立つと仮定し{ih}、$S({k})$ のときを示す：
+unfold	{n} の定義を展開する。
+unfold_at	{h} において {n} の定義を展開する。
+therefore	したがって、${f}$ が成り立つ。$\blacksquare$
+label	（${h}$）
+show_block	まず ${f}${label} を示す。
+show	${j}$ より、${f}$ が成り立つ{label}。
+show_unjustified	${f}$ が成り立つ{label}（根拠が書かれていない）。
+sorry	（※ ここは未完成 `sorry`）
+close_refl	反射律より直ちに成り立つ。$\blacksquare$
+close_ring	式変形（環の計算）より成り立つ。$\blacksquare$
+close_linarith	不等式の評価より成り立つ。$\blacksquare$
+close_decide	直接計算により成り立つ。$\blacksquare$
+close	${j}$ より成り立つ。$\blacksquare$
+theorem	定理
+axiom	公理
+proof	証明
+just_ring	式変形(ring)
+just_linarith	不等式評価(linarith)
+just_refl	反射律
+just_decide	計算
+just_sorry	未完(sorry)

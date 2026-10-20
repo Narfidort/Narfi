@@ -10,6 +10,7 @@
 <script src="/narfi-web.js"></script>
 <script src="/tutorial.js"></script>
 <script src="/course.js"></script>
+<script src="/locales.js"></script>
 <style>
 :root[data-theme="dark"] {
   --bg: #0a0a0c;
@@ -1023,7 +1024,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
 
     <div id="tab-prose" class="insp-body">
       <div class="sec-label">
-        <span>Japanese Proof View</span>
+        <span>Proof View</span>
         <button class="ctrl-btn" onclick="copyProseMd()">Copy Markdown</button>
       </div>
       <div id="proseDocArea" class="prose-doc"></div>
@@ -1413,7 +1414,7 @@ function splitTopLevelCommaArgs(str) {
 
 function parseAsciiToItems(str) {
   const trimmed = str.trimStart();
-  if (trimmed.startsWith("//") || trimmed.startsWith("--") || trimmed.startsWith("#")) {
+  if (trimmed.startsWith("//") || trimmed.startsWith("--") || trimmed.startsWith("#") || trimmed.startsWith("@name")) {
     return Array.from(str).map(makeChar);
   }
   const items = [];
@@ -1779,7 +1780,6 @@ Fix eps | h_{eps} : eps > 0
 
 let docLines = []; // [{ indent: number, rootSeq: Seq }]
 let cursor = { lineIdx: 0, seqId: 1, offset: 0 };
-let jpSugarLens = false;
 let currentFilePath = "";
 let lastCheckData = null;
 let checkDebounce = null;
@@ -2090,103 +2090,158 @@ function renderRootSeqWithLens(rootSeq, lineNo) {
     ? `<span class="mc-ghost">→ ${escHtml(suggestHyp.replace || "（この行を消す）")}<span class="mc-ghost-key">Tab</span></span>`
     : `<span class="mc-ghost">${escHtml(suggestHyp.append)}<span class="mc-ghost-key">Tab</span></span>`;
 
-  if (!jpSugarLens) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">${renderItemsSliceHtml(rootSeq, 0, items.length)}${badgeHtml}</span>`;
+  const plain = `<span class="mc-seq" data-slot-seq="${rootSeq.id}">${renderItemsSliceHtml(rootSeq, 0, items.length)}${badgeHtml}</span>`;
+  if (!lensLocale || isCommentLine(rootSeq)) return plain;
+  const rules = lensRules(lensLocale);
+  if (!rules) return plain;
+  const table = lensHeaderLines.has(lineNo) ? rules.decl : rules.stmt;
+  for (const r of table) {
+    if (!r.canonical) continue;
+    const m = matchItemParts(items, r.std);
+    if (!m) continue;
+    // カーソルが決まり文句の部分にあるときは、元の書き方で見せる（編集できるように）
+    if (cursor.seqId === rootSeq.id && m.lits.some(([a, b]) => cursor.offset >= a && cursor.offset <= b)) return plain;
+    let html = "";
+    for (const part of r.loc) {
+      if (part.lit !== undefined) html += `<span class="mc-kw-jp">${escHtml(part.lit)}</span>`;
+      else {
+        const rg = m.caps[part.name];
+        if (!rg) { html = null; break; }
+        html += renderItemsSliceHtml(rootSeq, rg[0], rg[1]);
+      }
+    }
+    if (html === null) continue;
+    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">${html}${badgeHtml}</span>`;
   }
+  return plain;
+}
 
-  if (matchKeywordPrefix(items, "thm ") && !isCursorInKeywordPrefix(4)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      `<span class="mc-kw-jp" onclick="setCursor(${rootSeq.id}, 0)">定理</span>` +
-      renderItemsSliceHtml(rootSeq, 4, items.length) +
-      `</span>`;
-  }
-  if (matchKeywordPrefix(items, "axiom ") && !isCursorInKeywordPrefix(6)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      `<span class="mc-kw-jp" onclick="setCursor(${rootSeq.id}, 0)">公理</span>` +
-      renderItemsSliceHtml(rootSeq, 6, items.length) +
-      `</span>`;
-  }
-  if (matchKeywordPrefix(items, "Fix ") && !isCursorInKeywordPrefix(4)) {
-    const barIdx = findCharIndexInItems(items, "|", 4);
-    if (barIdx > 4) {
-      return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-        renderItemsSliceHtml(rootSeq, barIdx + 1, items.length) +
-        `<span class="mc-kw-jp">を満たす</span>` +
-        renderItemsSliceHtml(rootSeq, 4, barIdx) +
-        `<span class="mc-kw-jp">を任意にとって固定する</span>` +
-        `</span>`;
-    } else {
-      return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-        `<span class="mc-kw-jp">任意の</span>` +
-        renderItemsSliceHtml(rootSeq, 4, items.length) +
-        `<span class="mc-kw-jp">をとって固定する</span>` +
-        `</span>`;
-    }
-  }
-  if (matchKeywordPrefix(items, "assume ") && !isCursorInKeywordPrefix(7)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      renderItemsSliceHtml(rootSeq, 7, items.length) +
-      `<span class="mc-kw-jp">と仮定する</span>` +
-      `</span>`;
-  }
-  if (matchKeywordPrefix(items, "by_contra ") && !isCursorInKeywordPrefix(10)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      `<span class="mc-kw-jp">背理法により</span>` +
-      renderItemsSliceHtml(rootSeq, 10, items.length) +
-      `<span class="mc-kw-jp">と仮定する</span>` +
-      `</span>`;
-  }
-  if (matchKeywordPrefix(items, "Obtain ") && !isCursorInKeywordPrefix(7)) {
-    const colonIdx = findCharIndexInItems(items, ":", 7);
-    if (colonIdx > 7) {
-      return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-        renderItemsSliceHtml(rootSeq, colonIdx + 1, items.length) +
-        `<span class="mc-kw-jp">より</span>` +
-        renderItemsSliceHtml(rootSeq, 7, colonIdx) +
-        `<span class="mc-kw-jp">が存在する</span>` +
-        `</span>`;
-    }
-  }
-  if (matchKeywordPrefix(items, "let ") && !isCursorInKeywordPrefix(4)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      renderItemsSliceHtml(rootSeq, 4, items.length) +
-      `<span class="mc-kw-jp">とおく</span>` +
-      `</span>`;
-  }
-  if (matchKeywordPrefix(items, "choose ") && !isCursorInKeywordPrefix(7)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      renderItemsSliceHtml(rootSeq, 7, items.length) +
-      `<span class="mc-kw-jp">をとればよい</span>` +
-      `</span>`;
-  }
-  if (matchKeywordPrefix(items, "have ") && !isCursorInKeywordPrefix(5)) {
-    const defIdx = findSubstrIndexInItems(items, ":=", 5);
-    if (defIdx > 5) {
-      return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-        renderItemsSliceHtml(rootSeq, defIdx + 2, items.length) +
-        `<span class="mc-kw-jp">より</span>` +
-        renderItemsSliceHtml(rootSeq, 5, defIdx) +
-        `<span class="mc-kw-jp">が成り立つ</span>` +
-        `</span>`;
-    }
-  }
-  if (items.length > 0 && items[0].kind === "sym" && items[0].ascii === "therefore" && !(cursor.seqId === rootSeq.id && cursor.offset === 0)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      `<span class="mc-kw-jp">したがって</span>` +
-      renderItemsSliceHtml(rootSeq, 1, items.length) +
-      `</span>`;
-  }
-  const byIdx = findSubstrIndexInItems(items, " by ", 0);
-  if (byIdx > 0 && !(cursor.seqId === rootSeq.id && cursor.offset >= byIdx && cursor.offset <= byIdx + 4)) {
-    return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">` +
-      renderItemsSliceHtml(rootSeq, 0, byIdx) +
-      `<span class="mc-kw-jp" style="margin-left:12px;">(∵</span>` +
-      renderItemsSliceHtml(rootSeq, byIdx + 4, items.length) +
-      `<span class="mc-kw-jp">)</span>` +
-      `</span>`;
-  }
+// ---- 読みの表示（レンズ）：src/locale/*.txt の表（/locales.js）で、行の構造を保ったまま読みに置き換える
 
-  return `<span class="mc-seq" data-slot-seq="${rootSeq.id}">${renderItemsSliceHtml(rootSeq, 0, items.length)}${badgeHtml}</span>`;
+let lensLocale = localStorage.getItem("narfi.lens") || "";
+let lensHeaderLines = new Set();
+const lensCache = {};
+
+function parseLocaleTemplate(t) {
+  const parts = [];
+  const re = /\{([^}]+)\}/g;
+  let last = 0, m;
+  while ((m = re.exec(t))) {
+    if (m.index > last) parts.push({ lit: t.slice(last, m.index) });
+    const [name, cls] = m[1].split(":");
+    parts.push({ name, cls: cls || "" });
+    last = re.lastIndex;
+  }
+  if (last < t.length) parts.push({ lit: t.slice(last) });
+  return parts;
+}
+
+function lensRules(name) {
+  if (lensCache[name]) return lensCache[name];
+  const src = (window.NARFI_LOCALES || {})[name];
+  if (!src) return null;
+  const out = { stmt: [], decl: [] };
+  let sec = "stmt";
+  for (const line of src.split("\n")) {
+    const l = line.replace(/\s+$/, "");
+    if (!l || l.startsWith("#")) continue;
+    if (l.startsWith("[")) { sec = l === "[declarations]" ? "decl" : "stmt"; continue; }
+    const cols = l.split("\t");
+    if (cols.length !== 3) continue;
+    out[sec].push({ canonical: cols[0] === "=", std: parseLocaleTemplate(cols[1]), loc: parseLocaleTemplate(cols[2]) });
+  }
+  return (lensCache[name] = out);
+}
+
+function isSpaceItem(it) { return it && it.kind === "char" && it.ch === " "; }
+
+// 文字どおりの部分 lit が items[i] から始まれば、その終わりの位置（空白は 1 つ以上の空白に合う）
+function litEnd(items, i, lit) {
+  let k = i;
+  for (let c = 0; c < lit.length; c++) {
+    const ch = lit[c];
+    if (ch === " ") {
+      if (!isSpaceItem(items[k])) {
+        if (c === 0 || c === lit.length - 1) continue; // 先頭・末尾の空白はなくてもよい
+        return -1;
+      }
+      while (isSpaceItem(items[k])) k++;
+      continue;
+    }
+    const it = items[k];
+    if (!it) return -1;
+    if (it.kind === "char" && it.ch === ch) { k++; continue; }
+    if (it.kind === "sym" && (it.display === ch || it.ascii === ch)) { k++; continue; }
+    return -1;
+  }
+  return k;
+}
+
+function trimRange(items, a, b) {
+  while (a < b && isSpaceItem(items[a])) a++;
+  while (b > a && isSpaceItem(items[b - 1])) b--;
+  return [a, b];
+}
+
+function classOk(items, [a, b], cls) {
+  if (b <= a) return false;
+  if (cls === "id") return items.slice(a, b).every((it) => !isSpaceItem(it));
+  if (cls === "rel") {
+    if (b - a !== 1) return false;
+    const it = items[a];
+    const t = it.kind === "char" ? it.ch : it.display;
+    return ["=", "<", "≤", ">", "≥", "≠"].includes(t);
+  }
+  return true;
+}
+
+function matchItemParts(items, parts) {
+  let end = items.length;
+  while (end > 0 && isSpaceItem(items[end - 1])) end--;
+  let start = 0;
+  while (start < end && isSpaceItem(items[start])) start++;
+  const go = (pi, i, caps, lits) => {
+    if (pi === parts.length) return i >= end ? { caps, lits } : null;
+    const p = parts[pi];
+    if (p.lit !== undefined) {
+      const e = litEnd(items, i, p.lit);
+      if (e < 0 || e > items.length) return null;
+      return go(pi + 1, e, caps, [...lits, [i, e]]);
+    }
+    const next = parts[pi + 1];
+    if (!next) {
+      const rg = trimRange(items, i, end);
+      return classOk(items, rg, p.cls) ? go(pi + 1, end, { ...caps, [p.name]: rg }, lits) : null;
+    }
+    for (let k = i + 1; k <= end; k++) {
+      if (litEnd(items, k, next.lit) < 0) continue;
+      const rg = trimRange(items, i, k);
+      if (!classOk(items, rg, p.cls)) continue;
+      const r = go(pi + 1, k, { ...caps, [p.name]: rg }, lits);
+      if (r) return r;
+    }
+    return null;
+  };
+  return go(0, start, {}, []);
+}
+
+// 宣言の見出し（thm … から ⊢ の行まで、axiom の行）。ここでは文の読みを使わない
+function computeHeaderLines() {
+  const set = new Set();
+  let inHead = false;
+  for (let i = 0; i < docLines.length; i++) {
+    const t = serializeSeqToAscii(docLines[i].rootSeq).trim();
+    if (/^(thm|axiom|def|rec|typedef|notation|import)\b/.test(t) && docLines[i].indent === 0) {
+      set.add(i + 1);
+      inHead = /^thm\b/.test(t) && !/\|-|⊢/.test(t);
+      continue;
+    }
+    if (inHead) {
+      set.add(i + 1);
+      if (/\|-|⊢/.test(t)) inHead = false;
+    }
+  }
+  lensHeaderLines = set;
 }
 </script>
 <script>
@@ -2579,6 +2634,7 @@ function renderEditor() {
     }
   }
 
+  if (lensLocale) computeHeaderLines();
   // ブロック（Fix・assume など）の終わりに、そのブロックで示したことを薄く出す（表示だけ。ファイルには入らない）
   const thereforeAfter = new Map();
   if (lastCheckData) {
@@ -2924,7 +2980,8 @@ function isCommentLine(seq) {
   for (let i = 0; i < Math.min(4, root.items.length); i++) {
     if (root.items[i].kind === "char") prefix += root.items[i].ch;
   }
-  return prefix.startsWith("//") || prefix.startsWith("--") || prefix.startsWith("#");
+  // コメントと、宣言の前の注釈（@name）は、数式にせず文字のまま
+  return prefix.startsWith("//") || prefix.startsWith("--") || prefix.startsWith("#") || prefix.startsWith("@");
 }
 
 function insertCharAtCursor(ch) {
@@ -3475,7 +3532,7 @@ async function runCheckApi() {
     const resp = await fetch("/api/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src, cursor_line, path: currentFilePath })
+      body: JSON.stringify({ src, cursor_line, path: currentFilePath, locale: lensLocale || "ja" })
     });
     const data = await resp.json();
     lastCheckData = data;
@@ -3795,7 +3852,9 @@ function renderProseTab(data) {
         html += `<div class="prose-thm prose-broken"><strong>定理 ${escHtml(d.name)}</strong></div>`;
         html += `<div class="prose-err" onclick="jumpToLine(${d.error.line - 1})">${d.error.line} 行目：${msgHtml(d.error)}</div>`;
       } else {
-        html += `<div class="prose-thm"><div><strong>定理 ${escHtml(d.name)}</strong></div><div style="margin-top:6px;overflow-x:auto;">${renderKatex(d.header_latex, false)}</div></div>`;
+        const thmWord = lensLocale === "en" ? "Theorem" : "定理";
+        const title = d.display_name ? `${escHtml(d.display_name)} <span style="color:var(--text-faint);font-weight:400">${escHtml(d.name)}</span>` : escHtml(d.name);
+        html += `<div class="prose-thm"><div><strong>${thmWord} ${title}</strong></div><div style="margin-top:6px;overflow-x:auto;">${renderKatex(d.header_latex, false)}</div></div>`;
         html += `<div class="prose-proof">`;
         for (const p of (d.prose || [])) {
           html += `<div style="padding-left:${p.depth * 16}px;margin:8px 0;line-height:1.75;">${renderInlineMarkdownMath(p.text)}</div>`;
@@ -3811,17 +3870,26 @@ function renderProseTab(data) {
 
 function renderLatexTab(data) {
   const decls = data.decls || [];
-  let tex = "\\documentclass[a4paper,11pt]{ltjsarticle}\n\\usepackage{amsmath,amssymb,amsthm}\n\\newtheorem{theorem}{定理}\n\\newtheorem{axiom}{公理}\n\\begin{document}\n\n";
+  const en = lensLocale === "en";
+  let tex = `\\documentclass[a4paper,11pt]{${en ? "article" : "ltjsarticle"}}\n\\usepackage{amsmath,amssymb,amsthm}\n\\newtheorem{theorem}{${en ? "Theorem" : "定理"}}\n\\newtheorem{axiom}{${en ? "Axiom" : "公理"}}\n\\begin{document}\n\n`;
   for (const d of decls) tex += (d.latex_env || "") + "\n";
   tex += "\\end{document}\n";
   document.getElementById("latexArea").value = tex;
 }
 
+// 読みの表示：なし → 日本語 → 英語 → なし（ファイルは変わらない）
 function toggleJpLens() {
-  jpSugarLens = !jpSugarLens;
+  lensLocale = lensLocale === "" ? "ja" : lensLocale === "ja" ? "en" : "";
+  localStorage.setItem("narfi.lens", lensLocale);
+  updateLensButton();
+  refreshAfterEdit();
+}
+
+function updateLensButton() {
   const btn = document.getElementById("btnJpLens");
-  btn.classList.toggle("active", jpSugarLens);
-  renderEditor();
+  btn.textContent = lensLocale === "en" ? "EN" : "JA";
+  btn.classList.toggle("active", !!lensLocale);
+  btn.title = lensLocale ? `読みの表示：${lensLocale === "ja" ? "日本語" : "英語"}（押すと切り替え。ファイルは変わらない）` : "読みの表示：なし（押すと日本語 → 英語）";
 }
 
 function toggleTheme() {
@@ -4884,6 +4952,7 @@ async function startup() {
 window.addEventListener("DOMContentLoaded", async () => {
   const savedTheme = localStorage.getItem("narfi_theme");
   if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+  updateLensButton();
   await startup();
   // はじめて開いた人には Learn（チュートリアル）を出す
   if (!localStorage.getItem("narfi.learn.seen")) {

@@ -5,6 +5,8 @@ rec sum(a : ℕ → ℝ, n : ℕ) : ℝ
   sum(a, n + 1) = sum(a, n) + a_n
 
 -- 和の線形性：Σ (a_k + b_k) = Σ a_k + Σ b_k
+@name ja "和の線形性"
+@name en "linearity of sums"
 thm sum.add :
   ⊢ ∀a:ℕ → ℝ. ∀b:ℕ → ℝ. ∀n:ℕ. sum((k : ℕ ↦ a_k + b_k), n) = sum(a, n) + sum(b, n)
 
@@ -24,6 +26,8 @@ Fix a, b, n
         = sum(a, S(m)) + sum(b, S(m))                  by EQ2(e, refl)
 
 -- 定数倍：Σ c·a_k = c · Σ a_k
+@name ja "和の定数倍"
+@name en "scaling a sum"
 thm sum.smul :
   ⊢ ∀c:ℝ. ∀a:ℕ → ℝ. ∀n:ℕ. sum((k : ℕ ↦ c * a_k), n) = c * sum(a, n)
 

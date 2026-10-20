@@ -9,6 +9,7 @@ pub mod assets;
 pub mod derivation;
 pub mod elab;
 pub mod kernel;
+pub mod locale;
 pub mod module;
 pub mod parser;
 pub mod prose;

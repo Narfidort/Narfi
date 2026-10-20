@@ -22,12 +22,13 @@
 | `kernel/`（`mod.rs`・`env.rs`・`check.rs`・`proof.rs`・`arith.rs`・`tests.rs`） | **核**。証明項 `Proof`、環境 `KEnv`（定理・定義・型・定数）、文脈 `KCtx`、推論規則の検算 `Checker::infer`、算術の証明書（環の正規化・Farkas）、手で組んだ誤った証明項を拒否するテスト |
 | `syntax.rs` | 項 `Term`・論理式 `Formula`、代入（hereditary substitution）、表示（Unicode・LaTeX）、notation の表 |
 | `types.rs` | 型 `Ty` の読み書き |
-| `parser.rs` | 字句解析・構文解析、日本語シュガーの正規化、`rec` の展開、数列の添字、宣言ごとの回復（`Item::Broken`）、古い書き方の警告 |
+| `parser.rs` | 字句解析・構文解析、ロケールの読みの正規化、版（edition）・訳名（@name）、`rec` の展開、数列の添字、宣言ごとの回復（`Item::Broken`）、古い書き方の警告 |
 | `module.rs` | prelude と import の読み込み（ディスク・メモリ）、循環 import の検出 |
 | `sorts.rs` | 型（ソート）の推論 |
 | `elab/`（`mod.rs`・`stmt.rs`・`just.rs`・`unify.rs`） | 推敲器。文ごとの検査と証明項の組み立て、根拠の解釈と探索、単一化（高階のパターン単一化を含む）、各行の文脈・goal・次の一手の記録（`StepTrace`） |
 | `derivation.rs` | 証明木（表示用）：kernel に検算させながら部分証明の結論を記録して、Gentzen 式の木にする |
-| `prose.rs` | 日本語の証明文・LaTeX・日本語シュガー／標準形への変換 |
+| `locale/`（`mod.rs`・`ja.txt`・`en.txt`） | 自然言語での読みの表（日本語・英語）と、型紙による読み書き（[../language/locale.md](../language/locale.md)） |
+| `prose.rs` | 証明の文章・LaTeX（ロケールの型紙で）、ソースの変換（標準・ロケール） |
 | `api.rs` | 検査結果を JSON にする（ローカルサーバーと WebAssembly で共通） |
 | `web.rs` | ローカルサーバー（`narfi web`）：作業フォルダ・ファイル操作・PDF・AI |
 | `wasm.rs` | WebAssembly の入口（`narfi_call` に JSON を渡す） |

@@ -9,7 +9,7 @@
 //! - `convert` {src, mode}：/api/convert と同じ応答
 //! - `stdlib_list` {}・`stdlib_get` {path}：同梱の標準ライブラリ
 
-use crate::api::{check_json, json_get_str, json_get_usize, json_str};
+use crate::api::{check_json_in, json_get_str, json_get_usize, json_str};
 use crate::module::{load_and_check, use_memory_files};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -77,13 +77,14 @@ fn handle(req: &str) -> String {
             let src = get("src");
             let path = get("path");
             let key = if path.is_empty() { "untitled.narfi".to_string() } else { path };
-            check_json(&src, json_get_usize(req, "cursor_line"), &|s| load_and_check(s, Some(Path::new(&key))))
+            check_json_in(&src, json_get_usize(req, "cursor_line"), &json_get_str(req, "locale").unwrap_or_default(), &|s| load_and_check(s, Some(Path::new(&key))))
         }
         "convert" => {
             use_memory_files(FILES.with(|f| f.borrow().clone()));
             let src = get("src");
             let out = match get("mode").as_str() {
-                "to_jp_sugar" => crate::prose::convert_source_to_japanese_sugar(&src),
+                "to_jp_sugar" | "to_ja" => crate::prose::convert_source_to_locale(&src, "ja"),
+                "to_en" => crate::prose::convert_source_to_locale(&src, "en"),
                 "to_standard" => crate::prose::convert_source_to_standard_narfi(&src),
                 _ => src,
             };

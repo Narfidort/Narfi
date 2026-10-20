@@ -79,6 +79,23 @@ pub struct SyntaxTable {
     /// typedef で作った型・定数
     pub types: BTreeSet<String>,
     pub consts: BTreeSet<String>,
+    /// 定理・定義の訳名（`@name ja "和の線形性"`）：名前 → (ロケール, 訳名)
+    pub display_names: HashMap<String, Vec<(String, String)>>,
+}
+
+/// 定理・定義の、ロケール loc での訳名
+pub fn display_name(name: &str, loc: &str) -> Option<String> {
+    with_syntax(|t| t.display_names.get(name).and_then(|v| v.iter().find(|(l, _)| l == loc).map(|(_, n)| n.clone())))
+}
+
+/// 宣言の前に書く訳名の注釈（ソースの変換で書き戻す）
+pub fn display_name_lines(name: &str) -> String {
+    with_syntax(|t| {
+        t.display_names
+            .get(name)
+            .map(|v| v.iter().map(|(l, n)| format!("@name {l} {n:?}\n")).collect::<String>())
+            .unwrap_or_default()
+    })
 }
 
 thread_local! {

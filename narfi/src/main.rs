@@ -66,7 +66,8 @@ fn main() -> ExitCode {
                 }
             };
             let out = match mode.as_str() {
-                "--jp" => prose::convert_source_to_japanese_sugar(&src),
+                "--jp" | "--ja" => prose::convert_source_to_locale(&src, "ja"),
+                "--en" => prose::convert_source_to_locale(&src, "en"),
                 "--std" => prose::convert_source_to_standard_narfi(&src),
                 _ => return usage(),
             };

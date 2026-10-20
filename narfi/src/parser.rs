@@ -64,6 +64,8 @@ pub enum Item {
 /// 1ファイル分。宣言を書かれた順に持つ。
 #[derive(Debug, Clone, Default)]
 pub struct Module {
+    /// ファイルの版（`edition 2026`）。書かなければ最新の版
+    pub edition: Option<String>,
     pub items: Vec<Item>,
 }
 
@@ -209,230 +211,12 @@ type PResult<T> = Result<T, ParseError>;
 
 /// 日本語シュガーで書かれた1行の構文を標準の Narfi 行へ展開する。
 pub fn normalize_japanese_sugar(raw: &str) -> String {
+    // 日本語・英語などの読みは src/locale/ の表だけが知っている（言語の核は自然言語に依存しない）
     let s = raw.trim();
     if s.is_empty() {
         return String::new();
     }
-
-    // 1. 連鎖の根拠: `(∵ j)` または `∵ j` または `理由 j` → `by j`
-    let s = if let Some((lhs, rhs)) = s.rsplit_once("(∵") {
-        if let Some(j) = rhs.strip_suffix(')') {
-            format!("{} by {}", lhs.trim_end(), j.trim())
-        } else {
-            s.to_string()
-        }
-    } else if let Some((lhs, rhs)) = s.rsplit_once('∵') {
-        format!("{} by {}", lhs.trim_end(), rhs.trim())
-    } else {
-        s.to_string()
-    };
-    let s = s.trim();
-
-    // 2. 単体のキーワード
-    if s == "未完" || s == "後で" {
-        return "sorry".to_string();
-    }
-    if s == "左を選ぶ" || s == "左を選べばよい" {
-        return "choose left".to_string();
-    }
-    if s == "右を選ぶ" || s == "右を選べばよい" {
-        return "choose right".to_string();
-    }
-    if s == "基底段階" || s == "基底段階:" {
-        return "Case zero".to_string();
-    }
-
-    // 3. 語尾型の日本語シュガー
-    // Fix: `h : P を満たす x を任意にとって固定する` / `h : P を満たす x を任意にとる`
-    for suffix in [
-        "を任意にとって固定する",
-        "を任意にとって固定",
-        "を任意にとる",
-        "を固定する",
-    ] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            let body = body.trim();
-            if let Some((cond, vars)) = body.split_once("を満たす") {
-                return format!("Fix {} | {}", vars.trim(), cond.trim());
-            }
-            let vars = body
-                .strip_prefix("任意の")
-                .unwrap_or(body)
-                .strip_prefix("任意に")
-                .unwrap_or(body)
-                .trim();
-            return format!("Fix {vars}");
-        }
-    }
-
-    // Obtain: `j より x, h が存在する` / `j より N(ε), hN を得る` / `j より h : P を満たす x が存在する`
-    for suffix in ["が存在する", "を得る", "をとる"] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            if let Some((just, targets)) = body.split_once("より") {
-                let just = just.trim();
-                let targets = targets.trim();
-                if let Some((cond, var)) = targets.split_once("を満たす") {
-                    let h = cond.split(':').next().unwrap_or(cond).trim();
-                    return format!("Obtain {}, {} : {}", var.trim(), h, just);
-                }
-                return format!("Obtain {} : {}", targets, just);
-            }
-        }
-    }
-
-    // Assume: `h : P と仮定する` / `背理法により h と仮定する`
-    if let Some(body) = s
-        .strip_suffix("と仮定する")
-        .or_else(|| s.strip_suffix("を仮定する"))
-    {
-        let body = body.trim();
-        if let Some(rest) = body
-            .strip_prefix("背理法により")
-            .or_else(|| body.strip_prefix("背理法で"))
-        {
-            let h = rest.split(':').next().unwrap_or(rest).trim();
-            return format!("by_contra {h}");
-        }
-        return format!("assume {body}");
-    }
-
-    // Let: `x := t とする` / `x := t とおく`
-    for suffix in ["とする", "とおく", "と定義する"] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            let body = body
-                .trim()
-                .strip_prefix("ここで")
-                .map(|x| x.trim())
-                .unwrap_or(body.trim());
-            if body.contains(":=") {
-                return format!("let {body}");
-            }
-        }
-    }
-
-    // Choose: `t をとればよい` / `t とすればよい`（古い書き方の `t をうまく選べばよい` / `t を選ぶ` なども読む）
-    for suffix in [
-        "をとればよい",
-        "とすればよい",
-        "をうまく選べばよい",
-        "を選べばよい",
-        "をうまく選ぶ",
-        "を選ぶ",
-        "と選ぶ",
-    ] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            return format!("choose {}", body.trim());
-        }
-    }
-
-    // Suffices: `j より ψ を示せば十分である` / `ψ を示せば十分 := j`
-    for suffix in ["を示せば十分である", "を示せば十分", "を示せばよい"] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            if let Some((just, f)) = body.split_once("より") {
-                return format!("suffices {} := {}", f.trim(), just.trim());
-            }
-        }
-    }
-    if s.contains("を示せば十分") && s.contains(":=") {
-        if let Some((f, j)) = s.split_once("を示せば十分") {
-            let j = j.trim().strip_prefix(":=").unwrap_or(j.trim()).trim();
-            return format!("suffices {} := {}", f.trim(), j);
-        }
-    }
-
-    // Have: `j より h : φ が成り立つ`
-    for suffix in ["が成り立つ", "を得る"] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            if let Some((just, rest)) = body.split_once("より") {
-                let rest = rest.trim();
-                if !rest.is_empty() {
-                    return format!("{} by {}", rest, just.trim());
-                }
-            }
-        }
-    }
-
-    // Have（下に証明）: `h : φ を示す`
-    if let Some(body) = s.strip_suffix("を示す") {
-        let body = body.trim();
-        if body.contains(':') && !body.contains("より") {
-            return body.to_string();
-        }
-    }
-
-    // Unfold: `is_lim を展開する` / `h の is_lim を展開する`
-    for suffix in ["の定義を展開する", "を展開する"] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            if let Some((hs, names)) = body.split_once('の') {
-                return format!("unfold {} at {}", names.trim(), hs.trim());
-            }
-            return format!("unfold {}", body.trim());
-        }
-    }
-
-    // Cases / Induction: `h で場合分けする` / `n に関する帰納法` / `n で帰納法を行う`
-    for suffix in ["で場合分けする", "について場合分けする", "で場合分け"] {
-        if let Some(h) = s.strip_suffix(suffix) {
-            return format!("cases {}", h.trim());
-        }
-    }
-    for suffix in [
-        "に関する数学的帰納法",
-        "に関する帰納法",
-        "についての帰納法",
-        "で帰納法を行う",
-        "で帰納法",
-    ] {
-        if let Some(v) = s.strip_suffix(suffix) {
-            return format!("induction {}", v.trim());
-        }
-    }
-
-    // Contradiction: `h1 と h2 は矛盾`
-    for suffix in ["は矛盾する", "は矛盾", "より矛盾"] {
-        if let Some(body) = s.strip_suffix(suffix) {
-            if let Some((a, b)) = body.split_once("と") {
-                return format!("contradiction {} {}", a.trim(), b.trim());
-            }
-        }
-    }
-
-    // 4. 語頭型の日本語キーワード
-    let prefixes = [
-        ("定理 ", "thm "),
-        ("補題 ", "thm "),
-        ("命題 ", "thm "),
-        ("公理 ", "axiom "),
-        ("定義 ", "def "),
-        ("記法 ", "notation "),
-        ("固定 ", "Fix "),
-        ("任意に ", "Fix "),
-        ("仮定 ", "assume "),
-        ("背理法 ", "by_contra "),
-        ("取得 ", "Obtain "),
-        ("主張 ", "have "),
-        ("示す ", "have "),
-        ("十分 ", "suffices "),
-        ("選ぶ ", "choose "),
-        ("とおく ", "let "),
-        ("場合分け ", "cases "),
-        ("帰納法 ", "induction "),
-        ("帰納段階 ", "Case succ "),
-        ("場合 左 ", "Case left "),
-        ("場合 右 ", "Case right "),
-        ("場合 ", "Case "),
-        ("矛盾 ", "contradiction "),
-        ("したがって ", "∴ "),
-        ("よって ", "∴ "),
-        ("ゆえに ", "∴ "),
-    ];
-    for (jp, en) in prefixes {
-        if let Some(rest) = s.strip_prefix(jp) {
-            return format!("{en}{}", rest.trim());
-        }
-    }
-
-    s.to_string()
+    crate::locale::to_standard(s).unwrap_or_else(|| s.to_string())
 }
 
 // ================================================================ 字句解析
@@ -1579,6 +1363,10 @@ fn decl_keyword(text: &str) -> String {
 }
 
 fn starts_decl(text: &str) -> bool {
+    // 宣言の前の注釈（訳名）・版も、前の宣言の終わり
+    if text.starts_with("@name") || text.starts_with("edition ") {
+        return true;
+    }
     matches!(
         decl_keyword(text).as_str(),
         "thm" | "axiom" | "def" | "rec" | "notation" | "import" | "typedef"
@@ -1657,6 +1445,21 @@ fn subscript_apps(decl: &mut Decl) {
     }
     decl.concl = sc.formula(&decl.concl);
     sc.stmts(&mut decl.body);
+}
+
+/// この検査器が読めるファイルの版。書き方を壊す変更は新しい版でだけ行う（docs/principles.md の原則 4）
+pub const EDITIONS: [&str; 1] = ["2026"];
+
+/// `@name ja "和の線形性"` → (ja, 和の線形性)
+fn parse_name_annotation(text: &str) -> Option<(String, String)> {
+    let rest = text.strip_prefix("@name")?.trim();
+    let (loc, q) = rest.split_once(char::is_whitespace)?;
+    let q = q.trim();
+    let n = q.strip_prefix('"')?.strip_suffix('"')?;
+    if loc.is_empty() || !loc.chars().all(|c| c.is_ascii_alphabetic()) || n.is_empty() || n.contains('"') {
+        return None;
+    }
+    Some((loc.to_string(), n.to_string()))
 }
 
 /// トップレベルの宣言を 1 つ読む（i は次の宣言の行へ進む）
@@ -1833,7 +1636,41 @@ pub fn parse_module(
 
     let mut items = Vec::new();
     let mut i = 0;
+    // 次の宣言に付ける訳名（`@name ja "和の線形性"`）
+    let mut pending_names: Vec<(String, String)> = Vec::new();
+    let mut edition: Option<String> = None;
     while i < lines.len() {
+        // ファイルの版：最初の宣言より前に 1 度だけ
+        if lines[i].indent == 0 && lines[i].text.starts_with("edition ") {
+            let v = lines[i].text["edition ".len()..].trim().to_string();
+            let msg = if !items.is_empty() || edition.is_some() {
+                Some("edition はファイルの最初（ほかの宣言より前）に 1 度だけ書く".to_string())
+            } else if !EDITIONS.contains(&v.as_str()) {
+                Some(format!("この検査器が読める版は {}（`edition {v}` は読めない）", EDITIONS.join("・")))
+            } else {
+                None
+            };
+            match msg {
+                Some(msg) => items.push(Item::Broken { name: "edition".into(), line: lines[i].no, msg, src: lines[i].text.clone() }),
+                None => edition = Some(v),
+            }
+            i += 1;
+            continue;
+        }
+        if lines[i].indent == 0 && lines[i].text.starts_with("@name") {
+            match parse_name_annotation(&lines[i].text) {
+                Some(n) => pending_names.push(n),
+                None => items.push(Item::Broken {
+                    name: "@name".into(),
+                    line: lines[i].no,
+                    msg: "訳名は `@name ja \"和の線形性\"` の形で書く（ロケールの名前と、二重引用符で囲んだ訳名）".into(),
+                    src: lines[i].text.clone(),
+                }),
+            }
+            i += 1;
+            continue;
+        }
+        let before = items.len();
         let start = i;
         if let Err(e) = parse_item(&lines, &mut i, &mut items, on_import) {
             // import の失敗はファイル全体の失敗。それ以外は、その宣言だけを「通らない」として次の宣言へ進む
@@ -1854,8 +1691,19 @@ pub fn parse_module(
             let src = lines[start..i].iter().map(|l| format!("{}{}", "  ".repeat(l.indent), l.text)).collect::<Vec<_>>().join("\n");
             items.push(Item::Broken { name, line: e.line, msg: e.msg, src });
         }
+        if !pending_names.is_empty() {
+            let target = items[before..].iter().find_map(|it| match it {
+                Item::Decl(d) => Some(d.name.clone()),
+                Item::Def(d) => Some(d.name.clone()),
+                _ => None,
+            });
+            if let Some(n) = target {
+                let names = std::mem::take(&mut pending_names);
+                with_syntax(|t| t.display_names.insert(n, names));
+            }
+        }
     }
-    Ok(Module { items })
+    Ok(Module { edition, items })
 }
 
 /// 論理式か項として読めれば、その LaTeX（エラーメッセージの中の式を数式として表示するため）

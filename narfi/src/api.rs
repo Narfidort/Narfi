@@ -72,6 +72,12 @@ fn extract_notes(src: &str) -> Vec<NoteBlock> {
 
 /// /api/check の応答。load は「ソースを読み込んで検査する」関数（ディスク版・ブラウザ版で差し替える）。
 pub fn check_json(src: &str, cursor_line: Option<usize>, load: &dyn Fn(&str) -> Result<Loaded, ParseError>) -> String {
+    check_json_in(src, cursor_line, "ja", load)
+}
+
+/// locale は Prose・LaTeX の言語（ja・en）
+pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: &dyn Fn(&str) -> Result<Loaded, ParseError>) -> String {
+    crate::locale::set_current(locale);
     let notes = extract_notes(src);
 
     // まずそのままパースを試みる。もし編集中（空行や入力途中）でパースエラーになった場合、
@@ -253,7 +259,7 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
         .collect();
 
     format!(
-        "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{},\"tree\":{},\"warnings\":[{}]}}",
+        "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{},\"tree\":{},\"warnings\":[{}],\"display_name\":{}}}",
         json_str(&r.name),
         r.line,
         r.is_axiom,
@@ -276,7 +282,8 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
                 rep.as_ref().map(|x| json_str(x)).unwrap_or_else(|| "null".into())
             ))
             .collect::<Vec<_>>()
-            .join(",")
+            .join(","),
+        crate::syntax::display_name(&d.name, crate::locale::current().name).map(|n| json_str(&n)).unwrap_or_else(|| "null".into())
     )
 }
 

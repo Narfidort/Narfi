@@ -2,7 +2,7 @@
 //! 外部クレートを使わず `std::net::TcpListener` のみで動作し、
 //! リアルタイム検証・日本語証明生成・LaTeX出力・ファイル保存・AIアシストを提供する。
 
-use crate::api::{check_json, json_get_str, json_get_usize, json_str, json_str_array};
+use crate::api::{json_get_str, json_get_usize, json_str, json_str_array};
 use crate::module::load_and_check;
 use crate::parser::Decl;
 use crate::prose;
@@ -101,6 +101,18 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             let html = WEB_UI_HTML.replacen("<!--NARFI_LOCAL-->", "<script>window.NARFI_LOCAL = true;</script>", 1);
             send_response(&mut stream, 200, "text/html; charset=utf-8", html.as_bytes())
         }
+        ("GET", "/locales.js") => {
+            // 読みの表（src/locale/*.txt）をエディタに渡す
+            let body = format!(
+                "window.NARFI_LOCALES = {{{}}};\n",
+                crate::locale::locales()
+                    .iter()
+                    .map(|l| format!("{}:{}", crate::api::json_str(l.name), crate::api::json_str(l.source)))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            send_response(&mut stream, 200, "application/javascript; charset=utf-8", body.as_bytes())
+        }
         ("GET", "/course.js") => send_response(
             &mut stream,
             200,
@@ -130,7 +142,8 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             let src = json_get_str(&body, "src").unwrap_or_default();
             let cursor_line = json_get_usize(&body, "cursor_line");
             let path = json_get_str(&body, "path").filter(|p| !p.is_empty());
-            let res = api_check(&src, cursor_line, path.as_deref());
+            let locale = json_get_str(&body, "locale").unwrap_or_default();
+            let res = api_check(&src, cursor_line, path.as_deref(), &locale);
             send_response(
                 &mut stream,
                 200,
@@ -142,7 +155,8 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             let src = json_get_str(&body, "src").unwrap_or_default();
             let mode = json_get_str(&body, "mode").unwrap_or_default();
             let converted = match mode.as_str() {
-                "to_jp_sugar" => prose::convert_source_to_japanese_sugar(&src),
+                "to_jp_sugar" | "to_ja" => prose::convert_source_to_locale(&src, "ja"),
+                "to_en" => prose::convert_source_to_locale(&src, "en"),
                 "to_standard" => prose::convert_source_to_standard_narfi(&src),
                 _ => src,
             };
@@ -360,9 +374,9 @@ fn send_response(
 }
 
 /// /api/check（ディスク版）：相対 import の起点は開いているファイル（未保存なら作業フォルダの直下）
-pub fn api_check(src: &str, cursor_line: Option<usize>, path: Option<&str>) -> String {
+pub fn api_check(src: &str, cursor_line: Option<usize>, path: Option<&str>, locale: &str) -> String {
     let file = path.and_then(safe_resolve_path).unwrap_or_else(|| workspace_root().join("untitled.narfi"));
-    check_json(src, cursor_line, &|s| load_and_check(s, Some(&file)))
+    crate::api::check_json_in(src, cursor_line, locale, &|s| load_and_check(s, Some(&file)))
 }
 
 // ================================================================ ファイル管理
