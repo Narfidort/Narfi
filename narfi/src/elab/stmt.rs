@@ -585,6 +585,9 @@ impl<'a> Checker<'a> {
             let f = Formula::Atom(st.rel.clone(), vec![cur.clone(), st.term.clone()]);
             self.record_step(st.line, self.depth + 1, &format!("{} {} by ...", st.rel, st.term), ctx, &Some(f.clone()));
             self.check_term_scope(ctx, &st.term)?;
+            if st.just.is_empty() {
+                return self.missing_just(ctx, &f);
+            }
             let p = Proof::Line(st.line, self.chain_step(ctx, &st.just, &f)?.b());
             acc = Some(match compose(acc.as_deref(), &st.rel) {
                 Some(r) => r,

@@ -894,7 +894,22 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .pref-opt { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .deps { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: "JetBrains Mono", monospace; }
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
-.learn-nav select { flex: 1; min-width: 0; }
+.learn-pick-wrap { position: relative; flex: 1; min-width: 0; }
+.learn-pick { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--bg-elev); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 5px 10px; font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left; }
+.learn-pick:hover { border-color: var(--text-dim); }
+.learn-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.learn-pick .chev { width: 10px; height: 10px; flex-shrink: 0; color: var(--text-dim); }
+.learn-menu { left: 0; right: 0; max-height: 60vh; overflow-y: auto; }
+.learn-menu .group { font-size: 10.5px; color: var(--text-faint); padding: 8px 10px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.learn-menu .menu-item.current { color: var(--accent); }
+.learn-menu .done { color: var(--ok); font-size: 11px; }
+.learn-body .paper { padding: 10px 14px; margin: 0 0 12px; border-left: 2px solid var(--text-faint); background: var(--bg-elev); }
+.learn-body .paper-title, .learn-body .box-title { font-size: 11px; color: var(--text-faint); letter-spacing: 0.05em; margin-bottom: 4px; }
+.learn-body .steps td:first-child { white-space: pre; }
+.learn-body .check { padding: 8px 12px; margin: 0 0 12px; border-left: 2px solid var(--accent); background: var(--bg-active); }
+.learn-body .pitfall { padding: 8px 12px; margin: 0 0 8px; border-left: 2px solid var(--warn); background: rgba(245, 158, 11, 0.06); }
+.learn-body .hint { margin: 0 0 10px; padding: 8px 12px; border: 1px dashed var(--border); }
+.learn-body h4 { font-size: 13px; margin: 18px 0 8px; color: var(--text-dim); font-weight: 600; }
 .learn-body { font-size: 13.5px; line-height: 1.85; color: var(--text); }
 .learn-body h3 { font-size: 15px; margin: 0 0 10px; font-weight: 600; }
 .learn-body p { margin: 0 0 12px; }
@@ -963,8 +978,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <div class="menu-sep"></div>
       <button class="menu-item" onclick="exportPdf()" data-only="local"><span class="mi-label">Export PDF (LaTeX)</span><span class="kbd">⇧⌘P</span></button>
       <button class="menu-item" onclick="printDocument()"><span class="mi-label">Print</span><span class="kbd">⌘P</span></button>
-      <div class="menu-sep"></div>
-      <button class="menu-item" onclick="openPreferences()"><span class="mi-label">Preferences…</span><span class="kbd">⌘,</span></button>
+
     </div>
   </div>
   <div id="tabStrip" class="tab-strip"></div>
@@ -1008,7 +1022,10 @@ html:not(.web) [data-only="web"] { display: none !important; }
 
     <div id="tab-learn" class="insp-body">
       <div class="learn-nav">
-        <select id="learnSelect" class="ctrl-select" onchange="showLesson(+this.value)"></select>
+        <div class="learn-pick-wrap">
+          <button id="learnPick" class="learn-pick" onclick="toggleLessonMenu(event)"><span id="learnPickLabel"></span><svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+          <div id="learnMenu" class="menu learn-menu" hidden></div>
+        </div>
         <button class="ctrl-btn" onclick="showLesson(learnIndex - 1)" title="前のレッスン">‹</button>
         <button class="ctrl-btn" onclick="showLesson(learnIndex + 1)" title="次のレッスン">›</button>
       </div>
@@ -1116,6 +1133,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
   <div class="sbar-right">
     <a class="icon-btn" href="https://github.com/Narfidort/Narfi" target="_blank" rel="noopener" title="Narfi のリポジトリ（GitHub）"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
     <button id="btnJpLens" class="icon-btn text" onclick="toggleJpLens()" title="日本語シュガーの表示（裏の ASCII コードは変わらない）">JP</button>
+    <button class="icon-btn" onclick="openPreferences()" title="Preferences（⌘,）"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor"/></svg></button>
     <button id="btnTheme" class="icon-btn" onclick="toggleTheme()" title="ライト／ダーク"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
     <button id="btnInspector" class="icon-btn active" onclick="toggleInspector()" title="右側（Goal・Prose・LaTeX など）の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/></svg></button>
   </div>
@@ -3590,6 +3608,7 @@ async function runCheckApi() {
     });
     const data = await resp.json();
     lastCheckData = data;
+    noteLessonProgress(data);
     registerNotations(data.notations);
     updateStatusPill(data);
     renderEditor();
@@ -4004,41 +4023,97 @@ function allLessons() {
   return [...(window.NARFI_TUTORIAL || []), ...(window.NARFI_COURSE || [])];
 }
 
+function learnDone() {
+  try { return new Set(JSON.parse(localStorage.getItem("narfi.learn.done") || "[]")); } catch (_) { return new Set(); }
+}
+
+function renderLessonMenu() {
+  const lessons = allLessons();
+  const nt = (window.NARFI_TUTORIAL || []).length;
+  const done = learnDone();
+  const item = (l, k) => `<button class="menu-item${k === learnIndex ? " current" : ""}" data-lesson="${k}"><span class="mi-label">${escHtml(l.title)}</span><span class="done">${done.has(l.title) ? "✓" : ""}</span></button>`;
+  document.getElementById("learnMenu").innerHTML =
+    `<div class="group">チュートリアル</div>${lessons.slice(0, nt).map((l, k) => item(l, k)).join("")}` +
+    `<div class="group">コース：公理へ</div>${lessons.slice(nt).map((l, k) => item(l, nt + k)).join("")}`;
+}
+
+function toggleLessonMenu(e) {
+  e.stopPropagation();
+  const m = document.getElementById("learnMenu");
+  if (m.hidden) renderLessonMenu();
+  m.hidden = !m.hidden;
+}
+
+document.addEventListener("click", (e) => {
+  const m = document.getElementById("learnMenu");
+  if (!m || m.hidden) return;
+  const b = e.target.closest("#learnMenu .menu-item");
+  if (b) showLesson(+b.getAttribute("data-lesson"));
+  if (!e.target.closest(".learn-pick-wrap") || b) m.hidden = true;
+});
+
+let hintShown = 0;
+
 function showLesson(i) {
   const lessons = allLessons();
   if (!lessons.length) return;
   learnIndex = Math.max(0, Math.min(lessons.length - 1, i));
   localStorage.setItem("narfi.learn.index", String(learnIndex));
-  const sel = document.getElementById("learnSelect");
-  if (!sel.options.length) {
-    const nt = (window.NARFI_TUTORIAL || []).length;
-    const opt = (l, k) => `<option value="${k}">${escHtml(l.title)}</option>`;
-    sel.innerHTML = `<optgroup label="チュートリアル">${lessons.slice(0, nt).map((l, k) => opt(l, k)).join("")}</optgroup>` +
-      `<optgroup label="コース：公理へ">${lessons.slice(nt).map((l, k) => opt(l, nt + k)).join("")}</optgroup>`;
-  }
-  sel.value = String(learnIndex);
+  hintShown = 0;
   const l = lessons[learnIndex];
+  document.getElementById("learnPickLabel").textContent = l.title + (learnDone().has(l.title) ? "  ✓" : "");
   let html = `<h3>${escHtml(l.title)}</h3>`;
   for (const b of l.blocks) {
+    if (b.h) html += `<h4>${inlineMd(b.h)}</h4>`;
     if (b.p) html += `<p>${inlineMd(b.p)}</p>`;
+    // 紙の証明：数学の答案として
+    if (b.paper) html += `<div class="paper"><div class="paper-title">紙に書くと</div>${b.paper.map((x) => `<div>${inlineMd(x)}</div>`).join("")}</div>`;
     if (b.code) html += `<pre>${escHtml(b.code)}</pre>`;
+    // 1 行ずつ：コードの行と、その意味
+    if (b.steps) html += `<table class="steps">${b.steps.map(([c, d]) => `<tr><td>${escHtml(c)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
     if (b.keys) html += `<table>${b.keys.map(([k, d]) => `<tr><td>${escHtml(k)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
+    if (b.check) html += `<div class="check"><div class="box-title">確かめよう</div>${inlineMd(b.check)}</div>`;
+    if (b.pitfalls) html += b.pitfalls.map(([sym, fix]) => `<div class="pitfall"><div class="box-title">よくあるつまずき</div><div>${inlineMd(sym)}</div><div>→ ${inlineMd(fix)}</div></div>`).join("");
   }
-  if (l.file) {
+  if (l.exercise || l.file) {
+    html += `<h4>練習</h4>`;
+    if (l.task) html += `<p>${inlineMd(l.task)}</p>`;
     html += `<div class="learn-actions">
-      <button class="ctrl-btn primary" onclick="openCourseFile()">コースのファイルを開く</button>
+      <button class="ctrl-btn primary" onclick="${l.file ? "openCourseFile()" : "openExercise()"}">${l.file ? "コースのファイルを開く" : "練習を開く"}</button>
+      ${(l.hints || []).length ? `<button class="ctrl-btn" id="hintBtn" onclick="nextHint()">ヒント（${(l.hints || []).length}）</button>` : ""}
       <button class="ctrl-btn" onclick="toggleAnswer()">答えを見る</button>
-    </div><pre id="learnAnswer" hidden>${escHtml(l.answer)}</pre>`;
-  } else if (l.exercise) {
-    html += `<div class="learn-actions">
-      <button class="ctrl-btn primary" onclick="openExercise()">練習を開く</button>
-      <button class="ctrl-btn" onclick="toggleAnswer()">答えを見る</button>
-    </div><pre id="learnAnswer" hidden>${escHtml(l.answer)}</pre>`;
+    </div><div id="learnHints"></div><pre id="learnAnswer" hidden>${escHtml(l.answer)}</pre>`;
   }
   if (learnIndex + 1 < lessons.length) {
     html += `<div class="learn-actions"><button class="ctrl-btn" onclick="showLesson(learnIndex + 1)">次へ：${escHtml(lessons[learnIndex + 1].title)}</button></div>`;
   }
   document.getElementById("learnBody").innerHTML = html;
+  document.getElementById("learnBody").scrollTop = 0;
+}
+
+// ヒントは 1 つずつ出す（答えの前に、自分で考える余地を残す）
+function nextHint() {
+  const l = allLessons()[learnIndex];
+  const hs = l.hints || [];
+  if (hintShown >= hs.length) return;
+  document.getElementById("learnHints").insertAdjacentHTML("beforeend", `<div class="hint"><div class="box-title">ヒント ${hintShown + 1}</div>${inlineMd(hs[hintShown])}</div>`);
+  hintShown++;
+  const b = document.getElementById("hintBtn");
+  if (b) b.textContent = hintShown < hs.length ? `次のヒント（あと ${hs.length - hintShown}）` : "ヒントはここまで";
+}
+
+// 練習のタブが「すべて検証済み」になったら、そのレッスンを済みにする
+function noteLessonProgress(data) {
+  const t = tabs[activeTab];
+  if (!t || !t.lesson) return;
+  const decls = (data.decls || []).filter((d) => !d.is_axiom);
+  if (data.parse_error || !decls.length || decls.some((d) => d.status !== "ok")) return;
+  const done = learnDone();
+  if (done.has(t.lesson)) return;
+  done.add(t.lesson);
+  localStorage.setItem("narfi.learn.done", JSON.stringify([...done]));
+  uiToast(`できました：${t.lesson}`);
+  if (allLessons()[learnIndex] && allLessons()[learnIndex].title === t.lesson) showLesson(learnIndex);
 }
 
 // コースの章：自分のファイル一覧に course/… を作って開く（すでにあれば、そのまま開く）
@@ -4057,7 +4132,8 @@ async function openCourseFile() {
 function openExercise() {
   const l = allLessons()[learnIndex];
   if (!l) return;
-  loadSrc(l.exercise, "", { newTab: true, title: `練習${learnIndex + 1}.narfi` });
+  loadSrc(l.exercise, "", { newTab: true, title: `練習${learnIndex}.narfi` });
+  if (tabs[activeTab]) tabs[activeTab].lesson = l.title;
 }
 
 function toggleAnswer() {

@@ -2693,14 +2693,13 @@ fn chain_step(p: &mut P, line: usize) -> PResult<ChainStep> {
     };
     p.pos += 1;
     let term = p.term()?;
-    if !p.is_ident("by") {
-        return Err(ParseError {
-            line,
-            msg: "連鎖の各行には `by 根拠` が必要".into(),
-        });
-    }
-    p.pos += 1;
-    let just = p.just()?;
+    // 根拠のない段（`= …` だけ）も読む。検査でエラーにし、見つかった根拠を直し方として示す
+    let just = if p.is_ident("by") {
+        p.pos += 1;
+        p.just()?
+    } else {
+        vec![]
+    };
     p.expect_end()?;
     Ok(ChainStep {
         line,
