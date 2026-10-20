@@ -1,358 +1,91 @@
-// Narfi のチュートリアル（エディタ右側の Learn タブ）。
-// 各レッスン：本文（p・paper：紙の証明・code・steps：1 行ずつ・check：確かめよう・pitfalls：よくあるつまずき・keys・h）、
+// Narfi のチュートリアル（エディタ右側の Learn タブ）。対象：理系の高校生でもわかるように。
+// 各レッスン：本文（p・paper：紙の証明・code：エディタと同じ見た目で描く・steps：1 行ずつ・type：打ち方・check・pitfalls・keys・h）、
 // 練習（task・hints・exercise・answer）。答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。
-// このファイルは手で直してよい。
 
 window.NARFI_TUTORIAL = [
   {
-    "title": "1. はじめての証明と画面の見方",
+    "title": "1. はじめての証明",
     "blocks": [
       {
-        "p": "**ねらい**：定理の形（仮定 ⊢ 結論）と、証明が「通る」とはどういうことかを知る。画面のどこを見ればよいかを覚える。"
+        "p": "**ねらい**：Narfi で定理を書いて、証明が正しいかを検査器に確かめてもらう。"
       },
       {
         "paper": [
-          "**定理**　命題 $P$ が成り立つと仮定する。このとき $P$ が成り立つ。",
-          "**証明**　仮定そのものである。$\\blacksquare$"
+          "**定理**　実数 $x$ が $x > 1$ を満たすとき、$2x > 2$ である。",
+          "**証明**　$x > 1$ の両辺を 2 倍すればよい。$\\blacksquare$"
         ]
       },
       {
-        "code": "thm first :\n  P : Prop, h : P\n  |- P\n\nh"
+        "p": "Narfi では、同じことをこう書きます。"
+      },
+      {
+        "code": "thm double_gt :\n  x : Real, h : x > 1\n  |- 2x > 2\n\nlinarith"
       },
       {
         "steps": [
           [
-            "thm first :",
-            "定理の名前は first。名前には英数字と `.`・`_` が使える"
+            "thm double_gt :",
+            "「定理を書きます。名前は double_gt」という宣言"
           ],
           [
-            "  P : Prop, h : P",
-            "仮定の並び。$P$ は命題（`Prop`）、$h$ は「$P$ が成り立つ」という仮定の名前"
+            "x : Real, h : x > 1",
+            "**仮定**。$x$ は実数、$x > 1$ が成り立つ。この仮定に $h$ という名前を付けている（あとで使うため）"
           ],
           [
-            "  |- P",
-            "`⊢` の右が示すこと（結論）。`|-` と打つ（エディタでは `\\|-` で ⊢ が入る）"
+            "|- 2x > 2",
+            "⊢ の右が**示したいこと**（結論）"
           ],
           [
-            "h",
-            "証明。結論 $P$ は仮定 $h$ そのものなので、名前 `h` を書くだけで閉じる"
+            "linarith",
+            "**証明**。`linarith` は「仮定から不等式の計算で分かる」という意味。検査器がその計算を実際に確かめる"
           ]
         ]
       },
       {
-        "check": "「練習を開く」で開いたら、最後の `sorry` の行にカーソルを置き、右の **Goal** タブを見る。文脈に $h : P$、下に $\\vdash P$（示すべきもの）が出ている。`sorry` を `h` に書き換えると、右上が **1 theorem verified** になる。"
+        "type": [
+          [
+            "Real",
+            "ℝ（実数）。`Nat` は ℕ"
+          ],
+          [
+            "\\|-",
+            "⊢（「〜のとき、〜が成り立つ」の区切り）"
+          ],
+          [
+            ">=  <=  !=",
+            "≥　≤　≠"
+          ]
+        ]
+      },
+      {
+        "check": "「練習を開く」を押すと、証明の所が `sorry`（まだ書いていない、の印）になっています。右上が **1 incomplete**（黄色）。`sorry` の行にカーソルを置いて右の **Goal** タブを見ると、使える仮定と、示すべきもの（⊢ の右）が出ています。`sorry` を消して `linarith` と書くと、右上が **1 theorem verified**（緑）になります。"
       },
       {
         "pitfalls": [
           [
-            "右上が「1 incomplete」（黄色）",
-            "`sorry` が残っている。`sorry` は「あとで書く」の印で、そこを埋めると通る"
-          ],
-          [
-            "「`k` が見つからない」",
-            "名前の打ち間違い。Goal タブの文脈にある名前（ここでは `h`）を使う"
-          ]
-        ]
-      },
-      {
-        "p": "困ったら Goal タブの **次の一手** を見る。いま書けるものがボタンで出ていて、押すとその行に入る。"
-      }
-    ],
-    "task": "`sorry` を消して、証明を書く。",
-    "hints": [
-      "Goal タブで、示すべきもの（$\\vdash$ の右）と、文脈の仮定を見比べる。",
-      "示すべき $P$ が、仮定 `h : P` とまったく同じ。名前を 1 つ書けば閉じる。"
-    ],
-    "exercise": "-- 練習 1：sorry を消して証明を書く\n\nthm first :\n  P : Prop, h : P\n  |- P\n\nsorry\n",
-    "answer": "thm first :\n  P : Prop, h : P\n  |- P\n\nh\n"
-  },
-  {
-    "title": "2. ならば（→）：仮定する・当てはめる",
-    "blocks": [
-      {
-        "p": "**ねらい**：$P \\to Q$ を**示す**には $P$ を仮定する（`assume`）。$P \\to Q$ を**使う**には $P$ の根拠を渡す（`f(p)`）。"
-      },
-      {
-        "paper": [
-          "**定理**　$P \\to Q$ かつ $Q \\to R$ ならば $P \\to R$。",
-          "**証明**　$P$ を仮定する（$p$）。$f$ より $Q$ が成り立つ。$g$ より $R$ が成り立つ。$\\blacksquare$"
-        ]
-      },
-      {
-        "code": "thm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P -> Q, g : Q -> R\n  |- P -> R\n\nassume p : P\n  q : Q by f(p)\n  g(q)"
-      },
-      {
-        "steps": [
-          [
-            "assume p : P",
-            "→ を剥がす。$P$ を仮定し、名前を $p$ にする。ここから先（字下げした所）の Goal は $R$ になる"
-          ],
-          [
-            "  q : Q by f(p)",
-            "$f : P \\to Q$ に $p : P$ を渡すと $Q$ が出る（→ の除去）。それに名前 $q$ を付けて覚える"
-          ],
-          [
-            "  g(q)",
-            "$g : Q \\to R$ に $q$ を渡すと $R$。Goal と同じなので閉じる"
-          ]
-        ]
-      },
-      {
-        "p": "字下げが「仮定 $p$ が使える範囲」。`assume` の下を字下げして書く。"
-      },
-      {
-        "check": "`q : Q by f(p)` の行にカーソルを置くと、Goal タブの文脈に $p : P$ があり、示すべきものが $R$ になっている。"
-      },
-      {
-        "pitfalls": [
-          [
-            "「仮定 p の中身が書かれていない」",
-            "`assume p` だけでは何を仮定したか読めない。`: P` を書く（行末で Tab を押すと入る）"
-          ],
-          [
-            "「根拠 g(p) が示すのは … だが、必要なのは …」",
-            "$g$ に渡せるのは $Q$ の根拠。$p$ は $P$ の根拠なので、先に $f(p)$ で $Q$ を作る"
+            "「linarith では … を示せない」",
+            "仮定から一次の不等式の計算だけでは出ない。仮定が足りないか、$x^2$ のような 2 次の式が入っている"
           ]
         ]
       }
     ],
-    "task": "$P \\to (Q \\to P)$ を示す（$Q$ は使わなくてよい）。",
+    "task": "$x > 1$、$y > 2$ のとき、$x + y > 3$ を示す。",
     "hints": [
-      "→ が 2 つある。外側の → を `assume p : P` で剥がすと、Goal は $Q \\to P$ になる。",
-      "もう 1 回 `assume q : Q` で剥がすと Goal は $P$。手元に $p : P$ がある。"
+      "Goal タブで、仮定 2 つと示すべき $x + y > 3$ を確かめる。",
+      "2 つの不等式を足せば出る。`linarith` がその計算をしてくれる。"
     ],
-    "exercise": "-- 練習 2：P → (Q → P)\n\nthm k_comb :\n  P : Prop, Q : Prop\n  |- P -> (Q -> P)\n\nsorry\n",
-    "answer": "thm k_comb :\n  P : Prop, Q : Prop\n  |- P -> (Q -> P)\n\nassume p : P\n  assume q : Q\n    p\n"
+    "exercise": "-- 練習 1：sorry を消して証明を書く\n\nthm sum_gt :\n  x : Real, y : Real, h : x > 1, k : y > 2\n  |- x + y > 3\n\nsorry\n",
+    "answer": "thm sum_gt :\n  x : Real, y : Real, h : x > 1, k : y > 2\n  |- x + y > 3\n\nlinarith\n"
   },
   {
-    "title": "3. かつ（∧）：取り出す・まとめる",
+    "title": "2. 式変形をつなげる",
     "blocks": [
       {
-        "p": "**ねらい**：$P \\land Q$ の仮定 $h$ から `h.left`（$P$）・`h.right`（$Q$）を取り出す。$P \\land Q$ を示すには 2 つの根拠を `,` で並べる。"
+        "p": "**ねらい**：紙と同じように、式を縦に並べて変形する。各行に「なぜそう変形できるか」（根拠）を `by` の後ろに書く。"
       },
       {
         "paper": [
-          "**定理**　$P \\land Q$ ならば $Q \\land P$。",
-          "**証明**　$P \\land Q$ を仮定する。そこから $Q$ と $P$ がわかる。よって $Q \\land P$。$\\blacksquare$"
-        ]
-      },
-      {
-        "code": "thm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q -> Q and P\n\nassume h : P and Q\n  q : Q by h.right\n  p : P by h.left\n  Q and P by q, p"
-      },
-      {
-        "steps": [
-          [
-            "assume h : P and Q",
-            "→ を剥がす。`and` と打つと ∧"
-          ],
-          [
-            "  q : Q by h.right",
-            "∧ の右側を取り出す（∧ の除去）"
-          ],
-          [
-            "  p : P by h.left",
-            "∧ の左側"
-          ],
-          [
-            "  Q and P by q, p",
-            "2 つの根拠を並べると ∧ ができる（∧ の導入）。最後の行なので Goal と同じことを確かめて閉じる"
-          ]
-        ]
-      },
-      {
-        "p": "途中の行 `q : Q by h.right` は「事実の行」：示したことに名前を付けて、あとで使えるようにする。紙の「よって $Q$（これを $q$ とする）」にあたる。"
-      },
-      {
-        "check": "右クリック →「証明木を見る」で、∧E と ∧I が使われた自然演繹の木が見られる。"
-      },
-      {
-        "pitfalls": [
-          [
-            "「根拠が書かれていない」",
-            "事実の行には `by 根拠` が要る。エラーに出た候補（`by h.right` など）を Tab で入れられる"
-          ]
-        ]
-      }
-    ],
-    "task": "$P \\land (Q \\land R)$ から $(P \\land Q) \\land R$ を示す。",
-    "hints": [
-      "`assume h : P and (Q and R)` のあと、`h.left` が $P$、`h.right` が $Q \\land R$。",
-      "$Q \\land R$ からさらに `.left`・`.right` で $Q$ と $R$ を取り出せる（いったん名前を付けると楽）。",
-      "最後は `(P and Q) and R by (p, q), r` のように、まとめを入れ子にする。"
-    ],
-    "exercise": "-- 練習 3：∧ の組み替え\n\nthm and_assoc :\n  P : Prop, Q : Prop, R : Prop\n  |- P and (Q and R) -> (P and Q) and R\n\nsorry\n",
-    "answer": "thm and_assoc :\n  P : Prop, Q : Prop, R : Prop\n  |- P and (Q and R) -> (P and Q) and R\n\nassume h : P and (Q and R)\n  qr : Q and R by h.right\n  pq : P and Q by h.left, qr.left\n  (P and Q) and R by pq, qr.right\n"
-  },
-  {
-    "title": "4. または（∨）：選ぶ・場合分けする",
-    "blocks": [
-      {
-        "p": "**ねらい**：$P \\lor Q$ を**示す**には、どちらを示すかを `choose left`・`choose right` で選ぶ。$P \\lor Q$ を**使う**には `cases` で場合分けする。"
-      },
-      {
-        "paper": [
-          "**定理**　$P \\lor Q$ ならば $Q \\lor P$。",
-          "**証明**　$P$ の場合、右側の $P$ を示せばよい。$Q$ の場合、左側の $Q$ を示せばよい。$\\blacksquare$"
-        ]
-      },
-      {
-        "code": "thm or_swap :\n  P : Prop, Q : Prop, h : P or Q\n  |- Q or P\n\ncases h\n  Case left hp\n    choose right\n    hp\n  Case right hq\n    choose left\n    hq"
-      },
-      {
-        "steps": [
-          [
-            "cases h",
-            "$h : P \\lor Q$ で場合分け。下に 2 つの場合を書く"
-          ],
-          [
-            "  Case left hp",
-            "$P$ の場合。その仮定の名前が $hp$"
-          ],
-          [
-            "    choose right",
-            "Goal $Q \\lor P$ の右側（$P$）を示すと決める。Goal が $P$ になる"
-          ],
-          [
-            "    hp",
-            "$P$ は $hp$ そのもの"
-          ],
-          [
-            "  Case right hq",
-            "$Q$ の場合"
-          ]
-        ]
-      },
-      {
-        "check": "`Case left hp` の下の行で Goal タブを見ると、文脈に $hp : P$ がある。`Case right hq` の下では $hq : Q$。"
-      },
-      {
-        "pitfalls": [
-          [
-            "「Case left か Case right が必要」",
-            "`cases` の下には、2 つの場合をちょうど同じ字下げで書く"
-          ]
-        ]
-      }
-    ],
-    "task": "$P \\lor Q$ と $P \\to R$、$Q \\to R$ から $R$ を示す（場合分けの基本形）。",
-    "hints": [
-      "`cases h` で 2 つの場合に分ける。",
-      "左の場合は `f(hp)`、右の場合は `g(hq)` で $R$ が出る。"
-    ],
-    "exercise": "-- 練習 4：場合分け\n\nthm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P -> R, g : Q -> R\n  |- R\n\nsorry\n",
-    "answer": "thm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P -> R, g : Q -> R\n  |- R\n\ncases h\n  Case left hp\n    f(hp)\n  Case right hq\n    g(hq)\n"
-  },
-  {
-    "title": "5. すべての（∀）：任意にとる・代入する",
-    "blocks": [
-      {
-        "p": "**ねらい**：$\\forall x.\\ \\varphi(x)$ を**示す**には、$x$ を任意にとって固定し（`Fix x`）、$\\varphi(x)$ を示す。$\\forall$ を**使う**には、具体的なものを代入する（`h(t)`）。これが「量化子を剥がす」操作。"
-      },
-      {
-        "paper": [
-          "**定理**　すべての $x$ で $P(x) \\to Q(x)$、すべての $x$ で $P(x)$ ならば、すべての $x$ で $Q(x)$。",
-          "**証明**　$x$ を任意にとる。$P(x)$ が成り立つので、$Q(x)$ が成り立つ。$\\blacksquare$"
-        ]
-      },
-      {
-        "code": "thm all_mp :\n  P : Nat -> Prop, Q : Nat -> Prop,\n  f : forall x:Nat. P(x) -> Q(x), h : forall x:Nat. P(x)\n  |- forall x:Nat. Q(x)\n\nFix x\n  px : P(x) by h(x)\n  f(x, px)"
-      },
-      {
-        "steps": [
-          [
-            "Fix x",
-            "∀ を剥がす。$x$ を任意にとる。Goal は $Q(x)$ になる"
-          ],
-          [
-            "  px : P(x) by h(x)",
-            "$h$ の $\\forall$ に $x$ を代入（∀ の除去）"
-          ],
-          [
-            "  f(x, px)",
-            "$f$ に $x$ を代入し、続けて $P(x)$ の根拠 $px$ を渡す。引数は ∀ と → の順に並べる"
-          ]
-        ]
-      },
-      {
-        "check": "`Fix x` の次の行で Goal タブを見ると、文脈に $x \\in \\mathbb{N}$（Fix）があり、Goal が $Q(x)$。"
-      },
-      {
-        "pitfalls": [
-          [
-            "「Fix できない：goal は ∀ の形ではない」",
-            "Goal が ∀ のときだけ `Fix` が使える。Goal タブで形を確かめる"
-          ]
-        ]
-      }
-    ],
-    "task": "すべての $x$ で $P(x) \\land Q(x)$ ならば、すべての $x$ で $P(x)$。",
-    "hints": [
-      "まず `Fix x`。",
-      "`h(x)` が $P(x) \\land Q(x)$。その左側が欲しい。"
-    ],
-    "exercise": "-- 練習 5：∀ と ∧\n\nthm all_left :\n  P : Nat -> Prop, Q : Nat -> Prop, h : forall x:Nat. P(x) and Q(x)\n  |- forall x:Nat. P(x)\n\nsorry\n",
-    "answer": "thm all_left :\n  P : Nat -> Prop, Q : Nat -> Prop, h : forall x:Nat. P(x) and Q(x)\n  |- forall x:Nat. P(x)\n\nFix x\n  pq : P(x) and Q(x) by h(x)\n  pq.left\n"
-  },
-  {
-    "title": "6. ある（∃）：例を挙げる・取り出す",
-    "blocks": [
-      {
-        "p": "**ねらい**：$\\exists x.\\ \\varphi(x)$ を**示す**には、例 $t$ を挙げて（`choose t`）$\\varphi(t)$ を示す。仮定の $\\exists$ を**使う**には、その $x$ と性質を取り出す（`Obtain x, hx : e`）。"
-      },
-      {
-        "paper": [
-          "**定理**　$P(x)$ となる $x$ があり、すべての $x$ で $P(x) \\to Q(x)$ ならば、$Q(x)$ となる $x$ がある。",
-          "**証明**　$P(a)$ となる $a$ をとる。すると $Q(a)$。よって $a$ が例になる。$\\blacksquare$"
-        ]
-      },
-      {
-        "code": "thm ex_mp :\n  P : Nat -> Prop, Q : Nat -> Prop,\n  e : exists x:Nat. P(x), f : forall x:Nat. P(x) -> Q(x)\n  |- exists x:Nat. Q(x)\n\nObtain a, ha : e\nchoose a\nf(a, ha)"
-      },
-      {
-        "steps": [
-          [
-            "Obtain a, ha : e",
-            "$e$ から、$P(a)$ となる $a$ と、その性質 $ha : P(a)$ を取り出す（∃ の除去）"
-          ],
-          [
-            "choose a",
-            "Goal $\\exists x.\\ Q(x)$ の例として $a$ を挙げる（∃ の導入）。Goal は $Q(a)$ になる"
-          ],
-          [
-            "f(a, ha)",
-            "$Q(a)$ の根拠"
-          ]
-        ]
-      },
-      {
-        "check": "`choose a` の次の行で、Goal が $Q(a)$ になっている。"
-      },
-      {
-        "pitfalls": [
-          [
-            "`choose 0` などで別の値を挙げてしまう",
-            "その値で $\\varphi$ が示せなくなる。Goal タブで、何を示すことになったかを確かめる"
-          ]
-        ]
-      }
-    ],
-    "task": "どんな自然数 $n$ にも、$m = n + n$ となる $m$ がある。",
-    "hints": [
-      "`Fix n` のあと、例として何を挙げればよいか考える。",
-      "`choose n + n` とすると、Goal は $n + n = n + n$。`refl`（反射律）で閉じる。"
-    ],
-    "exercise": "-- 練習 6：∃ の例を挙げる\n\nthm double :\n  |- forall n:Nat. exists m:Nat. m = n + n\n\nsorry\n",
-    "answer": "thm double :\n  |- forall n:Nat. exists m:Nat. m = n + n\n\nFix n\n  choose n + n\n  refl\n"
-  },
-  {
-    "title": "7. 計算：式変形の連鎖",
-    "blocks": [
-      {
-        "p": "**ねらい**：等式・不等式は、紙と同じように縦に並べて変形する。各行の `by` の右がその一歩の根拠。計算は `ring`（多項式として等しい）・`linarith`（仮定からの一次不等式）に任せられる。"
-      },
-      {
-        "paper": [
-          "$a \\le b$ のとき　$a + 1 \\le b + 1 \\le b + 2$。"
+          "$a \\le b$ のとき　$a + 1 \\le b + 1 \\le b + 2$"
         ]
       },
       {
@@ -365,48 +98,327 @@ window.NARFI_TUTORIAL = [
             "変形を始める式"
           ],
           [
-            "  <= b + 1   by linarith",
-            "1 歩目。$h : a \\le b$ から一次不等式で出る"
+            "<= b + 1   by linarith",
+            "1 行目の変形。根拠は「仮定 $h$ からの不等式の計算」"
           ],
           [
-            "  <= b + 2   by linarith",
-            "2 歩目。最後の式まで来たら、全体として $a + 1 \\le b + 2$ が示された"
+            "<= b + 2   by linarith",
+            "2 行目。最後まで来ると、全体として $a + 1 \\le b + 2$ が示された"
           ]
         ]
       },
       {
-        "p": "**根拠がわからないとき**：`by …` を書かずに `<= b + 1` とだけ書くと、エラーになり、検査器が見つけた根拠の候補（`by linarith` など）が出る。行末で Tab を押すと入る。検査器が勝手に補うことはない。"
+        "p": "根拠には、仮定の名前（`by h`）、計算（`by ring`：多項式の計算、`by linarith`：不等式の計算）が書けます。"
       },
       {
-        "check": "`<= b + 1` の行の `by linarith` を消すと、Goal タブに「根拠の候補」のボタンが出る。"
+        "p": "**根拠がわからないとき**は、`by …` を書かずに `<= b + 1` とだけ書いてみてください。エラーになって、検査器が見つけた根拠の候補が出ます。行末で **Tab** を押すと入ります。"
       },
       {
-        "pitfalls": [
+        "type": [
           [
-            "「連鎖の中で不等号の向きが混ざっている」",
-            "$\\le$ と $\\ge$ を 1 つの連鎖に混ぜない。向きをそろえる"
+            "<=",
+            "≤（打つと自動で ≤ になる）"
+          ],
+          [
+            "by",
+            "根拠を書く前の区切り"
           ]
         ]
       }
     ],
-    "task": "$x \\le y$、$y < z$ から $x < z$ を、連鎖で示す。",
+    "task": "$x \\le y$、$y < z$ から $x < z$ を、変形の連鎖で示す。",
     "hints": [
-      "`x` から始めて、`<= y` と `< z` の 2 段。",
-      "根拠は仮定そのもの（`by h`・`by k`）。"
+      "`x` から始めて、`<= y` と `< z` の 2 行。",
+      "1 行目の根拠は仮定 `h`、2 行目は仮定 `k`。"
     ],
-    "exercise": "-- 練習 7：式変形の連鎖\n\nthm chain2 :\n  x : Real, y : Real, z : Real, h : x <= y, k : y < z\n  |- x < z\n\nsorry\n",
+    "exercise": "-- 練習 2：式変形の連鎖\n\nthm chain2 :\n  x : Real, y : Real, z : Real, h : x <= y, k : y < z\n  |- x < z\n\nsorry\n",
     "answer": "thm chain2 :\n  x : Real, y : Real, z : Real, h : x <= y, k : y < z\n  |- x < z\n\nx\n  <= y   by h\n  < z    by k\n"
   },
   {
-    "title": "8. ε を任意にとる",
+    "title": "3. 「ならば」を示す・使う",
     "blocks": [
       {
-        "p": "**ねらい**：解析でいちばん使う形 $\\forall \\varepsilon > 0.\\ \\cdots$ を扱う。これは $\\forall \\varepsilon.\\ \\varepsilon > 0 \\to \\cdots$ の略記なので、`Fix ε | hε : ε > 0` で ∀ と → を一度に剥がす。"
+        "p": "**ねらい**：「$P$ ならば $Q$」（$P \\to Q$）を示すには、$P$ を仮定して $Q$ を示す。高校の数学と同じ。"
+      },
+      {
+        "paper": [
+          "**定理**　$x > 2$ ならば $x > 1$。",
+          "**証明**　$x > 2$ と仮定する。すると $x > 1$。$\\blacksquare$"
+        ]
+      },
+      {
+        "code": "thm gt_two :\n  x : Real\n  |- x > 2 -> x > 1\n\nassume h : x > 2\n  linarith"
+      },
+      {
+        "steps": [
+          [
+            "assume h : x > 2",
+            "「$x > 2$ と仮定する」。仮定の名前を $h$ にする"
+          ],
+          [
+            "  linarith",
+            "字下げした所では $h$ が使える。示すべきものは $x > 1$ に変わっている"
+          ]
+        ]
+      },
+      {
+        "p": "**字下げ**が「仮定が使える範囲」です。`assume` の下は 1 段（スペース 2 つ）下げて書きます。"
+      },
+      {
+        "p": "逆に「ならば」の仮定 $f : P \\to Q$ を**使う**ときは、$P$ の根拠 $p$ を渡して `f(p)` と書くと $Q$ になります（三段論法）。"
+      },
+      {
+        "code": "thm syllogism :\n  P : Prop, Q : Prop, f : P -> Q, p : P\n  |- Q\n\nf(p)"
+      },
+      {
+        "type": [
+          [
+            "->",
+            "→（ならば）"
+          ],
+          [
+            "Prop",
+            "命題（正しいか正しくないかが決まる文）"
+          ]
+        ]
+      },
+      {
+        "pitfalls": [
+          [
+            "「仮定 h の中身が書かれていない」",
+            "`assume h` だけでなく `: x > 2` まで書く（行末で Tab を押すと入る）"
+          ]
+        ]
+      }
+    ],
+    "task": "$P \\to Q$、$Q \\to R$ ならば $P \\to R$ を示す。",
+    "hints": [
+      "示すのは「$P$ ならば $R$」。まず `assume p : P`。",
+      "$f(p)$ で $Q$ が手に入る。それを $g$ に渡すと $R$。`g(f(p))` と一度に書いてもよい。"
+    ],
+    "exercise": "-- 練習 3：ならば を 2 回使う\n\nthm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P -> Q, g : Q -> R\n  |- P -> R\n\nsorry\n",
+    "answer": "thm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P -> Q, g : Q -> R\n  |- P -> R\n\nassume p : P\n  g(f(p))\n"
+  },
+  {
+    "title": "4. 「かつ」",
+    "blocks": [
+      {
+        "p": "**ねらい**：「$P$ かつ $Q$」（$P \\land Q$）の仮定 $h$ からは、`h.left` で $P$、`h.right` で $Q$ が取り出せる。$P \\land Q$ を示すには、2 つの根拠を `,` で並べる。"
+      },
+      {
+        "paper": [
+          "**定理**　$x > 0$ かつ $y > 0$ ならば $x + y > 0$。",
+          "**証明**　$x > 0$ と $y > 0$ を足せばよい。$\\blacksquare$"
+        ]
+      },
+      {
+        "code": "thm pos_add :\n  x : Real, y : Real\n  |- x > 0 and y > 0 -> x + y > 0\n\nassume h : x > 0 and y > 0\n  hx : x > 0 by h.left\n  hy : y > 0 by h.right\n  linarith"
+      },
+      {
+        "steps": [
+          [
+            "hx : x > 0 by h.left",
+            "$h$ の左側を取り出して、名前 $hx$ を付ける。「名前 : 命題 by 根拠」は**途中で分かったことを書き留める行**"
+          ],
+          [
+            "hy : y > 0 by h.right",
+            "右側も同じ"
+          ],
+          [
+            "linarith",
+            "$hx$ と $hy$ を足して $x + y > 0$"
+          ]
+        ]
+      },
+      {
+        "type": [
+          [
+            "and",
+            "∧（かつ）"
+          ],
+          [
+            "h.left / h.right",
+            "∧ の左側・右側を取り出す"
+          ]
+        ]
+      }
+    ],
+    "task": "$P \\land Q$ ならば $Q \\land P$ を示す。",
+    "hints": [
+      "`assume h : P and Q`。",
+      "`h.right` が $Q$、`h.left` が $P$。2 つを `,` で並べると $Q \\land P$ になる（`h.right, h.left`）。"
+    ],
+    "exercise": "-- 練習 4：かつ の順番を入れ替える\n\nthm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q -> Q and P\n\nsorry\n",
+    "answer": "thm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q -> Q and P\n\nassume h : P and Q\n  h.right, h.left\n"
+  },
+  {
+    "title": "5. 「または」",
+    "blocks": [
+      {
+        "p": "**ねらい**：「$P$ または $Q$」（$P \\lor Q$）を**示す**には、どちらを示すか選ぶ（`choose left` / `choose right`）。$P \\lor Q$ の仮定を**使う**には、場合分けする（`cases`）。"
+      },
+      {
+        "paper": [
+          "**定理**　$P$ または $Q$ ならば、$Q$ または $P$。",
+          "**証明**　$P$ の場合は右側、$Q$ の場合は左側を示せばよい。$\\blacksquare$"
+        ]
+      },
+      {
+        "code": "thm or_swap :\n  P : Prop, Q : Prop, h : P or Q\n  |- Q or P\n\ncases h\n  Case left hp\n    choose right\n    hp\n  Case right hq\n    choose left\n    hq"
+      },
+      {
+        "steps": [
+          [
+            "cases h",
+            "$h$ で場合分けする"
+          ],
+          [
+            "Case left hp",
+            "$P$ の場合。そのとき分かっていること（$P$）に $hp$ と名前を付ける"
+          ],
+          [
+            "choose right",
+            "示したい $Q \\lor P$ のうち、右（$P$）を示すと決める"
+          ],
+          [
+            "hp",
+            "$P$ は $hp$ そのもの"
+          ]
+        ]
+      },
+      {
+        "type": [
+          [
+            "or",
+            "∨（または）"
+          ],
+          [
+            "cases h",
+            "場合分け。下に `Case left …` と `Case right …` を同じ字下げで"
+          ]
+        ]
+      }
+    ],
+    "task": "$P \\lor Q$、$P \\to R$、$Q \\to R$ から $R$ を示す。",
+    "hints": [
+      "`cases h` で 2 つの場合に分ける。",
+      "左の場合は `f(hp)`、右の場合は `g(hq)`。"
+    ],
+    "exercise": "-- 練習 5：場合分け\n\nthm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P -> R, g : Q -> R\n  |- R\n\nsorry\n",
+    "answer": "thm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P -> R, g : Q -> R\n  |- R\n\ncases h\n  Case left hp\n    f(hp)\n  Case right hq\n    g(hq)\n"
+  },
+  {
+    "title": "6. 「すべての」",
+    "blocks": [
+      {
+        "p": "**ねらい**：「すべての $x$ について …」（$\\forall x$）を**示す**には、$x$ を 1 つ任意にとって（`Fix x`）、その $x$ で示す。**使う**ときは、具体的な値を入れる（`h(3)` のように）。"
+      },
+      {
+        "paper": [
+          "**定理**　すべての実数 $x$ について $x + 1 > x$。",
+          "**証明**　$x$ を任意にとる。$x + 1 > x$ は明らか。$\\blacksquare$"
+        ]
+      },
+      {
+        "code": "thm add_one :\n  |- forall x:Real. x + 1 > x\n\nFix x\n  linarith"
+      },
+      {
+        "steps": [
+          [
+            "Fix x",
+            "「$x$ を任意にとって固定する」。ここから先、示すべきものは $x + 1 > x$"
+          ],
+          [
+            "linarith",
+            "その $x$ について示す"
+          ]
+        ]
+      },
+      {
+        "p": "**使う**例：「すべての $x$ で $f(x) \\ge 0$」という仮定 $h$ があれば、`h(2)` が「$f(2) \\ge 0$」の根拠になります。"
+      },
+      {
+        "type": [
+          [
+            "forall x:Real.",
+            "∀x ∈ ℝ,（すべての実数 x について）。`forall` は空白を打つと ∀ になる"
+          ]
+        ]
+      }
+    ],
+    "task": "すべての $x$ で $f(x) \\ge 0$ のとき、$f(2) + 1 > 0$ を示す。",
+    "hints": [
+      "まず「$f(2) \\ge 0$」を書き留める：`k : f(2) >= 0 by h(2)`。",
+      "あとは `linarith`。"
+    ],
+    "exercise": "-- 練習 6：すべての を使う\n\nthm f_two :\n  f : Real -> Real, h : forall x:Real. f(x) >= 0\n  |- f(2) + 1 > 0\n\nsorry\n",
+    "answer": "thm f_two :\n  f : Real -> Real, h : forall x:Real. f(x) >= 0\n  |- f(2) + 1 > 0\n\nk : f(2) >= 0 by h(2)\nlinarith\n"
+  },
+  {
+    "title": "7. 「ある」",
+    "blocks": [
+      {
+        "p": "**ねらい**：「… となる $x$ がある」（$\\exists x$）を**示す**には、例を 1 つ挙げる（`choose 2` のように）。仮定の「ある」を**使う**には、その $x$ を取り出す（`Obtain`）。"
+      },
+      {
+        "paper": [
+          "**定理**　$x + 3 = 5$ となる実数 $x$ がある。",
+          "**証明**　$x = 2$ とすればよい。$\\blacksquare$"
+        ]
+      },
+      {
+        "code": "thm solve :\n  |- exists x:Real. x + 3 = 5\n\nchoose 2\nring"
+      },
+      {
+        "steps": [
+          [
+            "choose 2",
+            "例として $x = 2$ を挙げる。示すべきものは $2 + 3 = 5$ になる"
+          ],
+          [
+            "ring",
+            "計算で確かめる"
+          ]
+        ]
+      },
+      {
+        "p": "**使う**例：仮定 $h$ が「$a > 5$ となる $a$ がある」なら、`Obtain a, ha : h` でその $a$ と性質 $ha : a > 5$ が手に入ります。"
+      },
+      {
+        "type": [
+          [
+            "exists x:Real.",
+            "∃x ∈ ℝ,（ある実数 x が存在して）"
+          ],
+          [
+            "choose 2",
+            "例として 2 を挙げる"
+          ],
+          [
+            "Obtain a, ha : h",
+            "h から a と、a の性質 ha を取り出す"
+          ]
+        ]
+      }
+    ],
+    "task": "「$x > 5$ となる $x$ がある」ならば「$y > 4$ となる $y$ がある」。",
+    "hints": [
+      "まず `Obtain a, ha : h` で $a$ と $ha : a > 5$ を取り出す。",
+      "例として同じ $a$ を挙げる（`choose a`）。あとは `linarith`。"
+    ],
+    "exercise": "-- 練習 7：ある を使って、ある を示す\n\nthm exists_gt :\n  h : exists x:Real. x > 5\n  |- exists y:Real. y > 4\n\nsorry\n",
+    "answer": "thm exists_gt :\n  h : exists x:Real. x > 5\n  |- exists y:Real. y > 4\n\nObtain a, ha : h\nchoose a\nlinarith\n"
+  },
+  {
+    "title": "8. ε を任意にとる（大学の入口）",
+    "blocks": [
+      {
+        "p": "**ねらい**：大学の解析で最もよく出る形「任意の $\\varepsilon > 0$ に対して …」を書く。$\\forall \\varepsilon > 0$ は「$\\varepsilon$ を任意にとり、$\\varepsilon > 0$ と仮定する」の 2 つをまとめたもの。"
       },
       {
         "paper": [
           "**定理**　任意の $\\varepsilon > 0$ に対し、$\\delta < \\varepsilon$ となる $\\delta > 0$ がある。",
-          "**証明**　$\\varepsilon > 0$ を任意にとる。$\\delta = \\varepsilon / 2$ とすればよい。$\\blacksquare$"
+          "**証明**　$\\varepsilon > 0$ を任意にとる。$\\delta = \\varepsilon/2$ とすればよい。$\\blacksquare$"
         ]
       },
       {
@@ -416,92 +428,124 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "Fix eps | h_{eps} : eps > 0",
-            "$\\varepsilon$ と仮定 $h_\\varepsilon : \\varepsilon > 0$ を導入。`eps` は ε と表示される"
+            "$\\varepsilon$ を任意にとり、$\\varepsilon > 0$ という仮定に名前 $h_\\varepsilon$ を付ける"
           ],
           [
-            "  choose eps/2, linarith",
+            "choose eps/2, linarith",
             "$\\delta$ として $\\varepsilon/2$ を挙げる。`,` の後ろは「$\\varepsilon/2 > 0$」の根拠"
           ],
           [
-            "  linarith",
-            "残った Goal $\\varepsilon/2 < \\varepsilon$ を一次不等式で"
+            "linarith",
+            "残りの $\\varepsilon/2 < \\varepsilon$"
           ]
         ]
       },
       {
-        "check": "`choose eps/2, linarith` の次の行で、Goal が $\\varepsilon/2 < \\varepsilon$ になっている。"
+        "type": [
+          [
+            "eps",
+            "ε（空白を打つと変わる）。`delta` は δ"
+          ],
+          [
+            "h_{eps}",
+            "添字つきの名前 $h_\\varepsilon$。`_` で添字の欄ができる"
+          ],
+          [
+            "/",
+            "分数（直前の項が分子になる）"
+          ]
+        ]
       }
     ],
-    "task": "上の half_pos を、自分で書いてみる。",
+    "task": "上の half_pos を、見ないで書いてみる。",
     "hints": [
       "`Fix eps | h_{eps} : eps > 0` で始める。",
-      "$\\delta$ として何を選ぶか。$\\varepsilon/2$ なら、$> 0$ も $< \\varepsilon$ も `linarith` で出る。"
+      "$\\delta$ として $\\varepsilon/2$ を選ぶと、$> 0$ も $< \\varepsilon$ も `linarith` で出る。"
     ],
     "exercise": "-- 練習 8：ε を任意にとる\n\nthm half_pos :\n  |- forall eps:Real>0. exists d:Real>0. d < eps\n\nsorry\n",
     "answer": "thm half_pos :\n  |- forall eps:Real>0. exists d:Real>0. d < eps\n\nFix eps | h_{eps} : eps > 0\n  choose eps/2, linarith\n  linarith\n"
   },
   {
-    "title": "9. 数列と極限",
+    "title": "9. 数列の極限",
     "blocks": [
       {
-        "p": "**ねらい**：定義（`def`）を使って、数列の極限を書く。数列 $a : \\mathbb{N} \\to \\mathbb{R}$ は $a_n$ と添字で書ける。定義は必要な所で自動的に開かれる。"
+        "p": "**ねらい**：数列 $a_n$ が $\\alpha$ に収束する（$\\varepsilon$-$N$ 論法）を `def` で定義し、使う。数列は $a : \\mathbb{N} \\to \\mathbb{R}$ と宣言すると $a_n$ と書ける。"
       },
       {
         "code": "def is_lim(a : Nat -> Real, alpha : Real) :=\n  forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps"
       },
       {
+        "p": "読み方：「任意の $\\varepsilon > 0$ に対し、ある $N$ があって、$n \\ge N$ なら $|a_n - \\alpha| < \\varepsilon$」。"
+      },
+      {
         "paper": [
           "**定理**　$a_n \\to \\alpha$ ならば $a_{n+1} \\to \\alpha$。",
-          "**証明**　$\\varepsilon > 0$ をとる。$n \\ge N$ で $|a_n - \\alpha| < \\varepsilon$ となる $N$ をとる。$n \\ge N$ なら $n + 1 \\ge N$ なので $|a_{n+1} - \\alpha| < \\varepsilon$。$\\blacksquare$"
+          "**証明**　$\\varepsilon > 0$ をとる。$n \\ge N$ で $|a_n - \\alpha| < \\varepsilon$ となる $N$ をとる。$n \\ge N$ なら $n + 1 \\ge N$ なので、$|a_{n+1} - \\alpha| < \\varepsilon$。$\\blacksquare$"
         ]
       },
       {
         "steps": [
           [
             "Fix eps | h_{eps} : eps > 0",
-            "定義が開かれて、Goal の先頭が ∀ε>0 になっている"
+            "$\\varepsilon > 0$ をとる（定義は自動で開かれる）"
           ],
           [
-            "  Obtain N, hN : h(eps, h_{eps})",
-            "仮定 $h$ に $\\varepsilon$ とその条件を渡し、$N$ を取り出す"
+            "Obtain N, hN : h(eps, h_{eps})",
+            "仮定 $h$ に $\\varepsilon$ と $h_\\varepsilon$ を渡すと「ある $N$ が…」が出る。その $N$ を取り出す"
           ],
           [
-            "  choose N",
-            "同じ $N$ でよい"
+            "choose N",
+            "同じ $N$ を挙げる"
           ],
           [
-            "  Fix n | h_n : n >= N",
+            "Fix n | h_n : n >= N",
             "$n \\ge N$ をとる"
           ],
           [
-            "    k : n + 1 >= N by linarith",
-            "$n + 1 \\ge N$"
+            "k : n + 1 >= N by linarith",
+            "$n + 1 \\ge N$ を書き留める"
           ],
           [
-            "    hN(n + 1, k)",
+            "hN(n + 1, k)",
             "$hN$ を $n + 1$ で使う"
+          ]
+        ]
+      },
+      {
+        "type": [
+          [
+            "a_n, a_{n+1}",
+            "数列の項 $a_n$・$a_{n+1}$"
+          ],
+          [
+            "abs( ) または |x|",
+            "絶対値"
+          ],
+          [
+            "(n:Nat |-> a_{n+1})",
+            "「$n$ を $a_{n+1}$ に移す数列」。`|->` は ↦"
           ]
         ]
       }
     ],
-    "task": "上の証明を書く（$(n \\mapsto a_{n+1})$ は「$n$ を $a_{n+1}$ に移す数列」。`|->` で ↦）。",
+    "task": "上の証明を書く。",
     "hints": [
-      "形は練習 8 と同じ。$\\exists N$ は $h$ から `Obtain` で取り出した $N$ をそのまま使う。",
-      "最後に必要なのは $|a_{n+1} - \\alpha| < \\varepsilon$。$hN$ は $n + 1 \\ge N$ の根拠があれば $n + 1$ で使える。"
+      "形は練習 8 と同じ。$N$ は $h$ から `Obtain` で取り出したものを、そのまま使う。",
+      "最後に要るのは $|a_{n+1} - \\alpha| < \\varepsilon$。$hN$ は「$n + 1 \\ge N$」の根拠があれば $n + 1$ で使える。"
     ],
     "exercise": "-- 練習 9：1 つずらした数列の極限\n\ndef is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nsorry\n",
     "answer": "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
   },
   {
-    "title": "10. 背理法と帰納法",
+    "title": "10. 背理法",
     "blocks": [
       {
-        "p": "**ねらい**：`by_contra h` で結論の否定 $h$ を仮定し、矛盾 $\\bot$ を示す（背理法）。自然数の性質は `induction n` で $0$ の場合と $k \\to k+1$ の場合に分ける（帰納法）。"
+        "p": "**ねらい**：「$P$ でないと仮定して矛盾を導く」（背理法）。`by_contra hn` で「$P$ でない」を仮定し、矛盾（$\\bot$）を示す。"
       },
       {
         "paper": [
-          "**定理**　$\\lnot\\lnot P$ ならば $P$。",
-          "**証明**　$P$ でないと仮定する。これは $\\lnot\\lnot P$ に矛盾する。$\\blacksquare$"
+          "**定理**　「$P$ でない、ということはない」ならば $P$。",
+          "**証明**　$P$ でないと仮定する。これは仮定に矛盾する。$\\blacksquare$"
         ]
       },
       {
@@ -511,27 +555,36 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "by_contra hn",
-            "$hn : \\lnot P$ を仮定する。Goal は $\\bot$（矛盾）"
+            "「$P$ でない」と仮定し、名前 $hn$ を付ける。示すべきものは矛盾（$\\bot$）"
           ],
           [
-            "  h(hn)",
-            "$\\lnot\\lnot P$ は「$\\lnot P \\to \\bot$」なので、$hn$ を渡すと $\\bot$"
+            "h(hn)",
+            "「$P$ でない、ということはない」は「$P$ でないなら矛盾」という意味。$hn$ を渡すと矛盾になる"
           ]
         ]
       },
       {
-        "p": "帰納法の形：\n"
+        "p": "「でない」（$\\lnot P$）は Narfi の中では「$P$ ならば矛盾」（$P \\to \\bot$）として扱われます。だから「$P$ でない」を示すには `assume p : P` として矛盾を示し、使うには `hn(p)` と $P$ の根拠を渡します。"
       },
       {
-        "code": "induction n\n  Case zero\n    （n = 0 のときの証明）\n  Case succ k, IH : φ(k)\n    （φ(k) を仮定して φ(k + 1) の証明）"
+        "type": [
+          [
+            "not",
+            "¬（でない）"
+          ],
+          [
+            "by_contra hn",
+            "背理法：結論の否定を hn として仮定する"
+          ]
+        ]
       }
     ],
-    "task": "$P$ ならば $\\lnot\\lnot P$（上の逆向き）。",
+    "task": "$P$ ならば「$P$ でない、ということはない」。",
     "hints": [
-      "$\\lnot\\lnot P$ は $\\lnot P \\to \\bot$。→ を剥がすので `assume hn : not P`。",
-      "$hn : \\lnot P$ は $P \\to \\bot$。$P$ の根拠を渡せば $\\bot$。"
+      "示すのは $\\lnot\\lnot P$、つまり「$\\lnot P$ ならば矛盾」。`assume hn : not P`。",
+      "$hn$ に $P$ の根拠 $h$ を渡すと矛盾：`hn(h)`。"
     ],
-    "exercise": "-- 練習 10：二重否定の導入\n\nthm dni :\n  P : Prop, h : P\n  |- not not P\n\nsorry\n",
+    "exercise": "-- 練習 10：でない、ということはない\n\nthm dni :\n  P : Prop, h : P\n  |- not not P\n\nsorry\n",
     "answer": "thm dni :\n  P : Prop, h : P\n  |- not not P\n\nassume hn : not P\n  hn(h)\n"
   },
   {
@@ -590,64 +643,63 @@ window.NARFI_TUTORIAL = [
           [
             "⌘S / ⌘Z",
             "保存 / 元に戻す"
-          ],
-          [
-            "⌘,",
-            "Preferences（読みの言語）"
           ]
         ]
       },
       {
-        "p": "右の **Prose** で証明が文章として、**LaTeX** で論文に貼れる形で読める。下の言語のボタン（`JA`）でエディタの中も読みの形になる（ファイルは変わらない）。言語は右下の歯車（Preferences）で選ぶ。"
+        "p": "右の **Goal** タブには、カーソルの行で使える仮定と、示すべきものが出ます。困ったら「次の一手」のボタンを押すと、いま書けるものが入ります。"
       },
       {
-        "p": "証明の行を右クリック →「証明木を見る」で、自然演繹の木（Gentzen 式・Fitch 式）が見られる。"
+        "p": "**Prose** タブで証明が文章として、**LaTeX** タブで論文に貼れる形で読めます。下の `JA` を押すと、エディタの中も日本語の証明文の形になります（ファイルは変わりません）。言語は Preferences（右上のアイコンのメニュー、または ⌘,）で選べます。"
+      },
+      {
+        "p": "証明の行を右クリック →「証明木を見る」で、証明が論理の規則（自然演繹）の組み合わせとしてどう組み立てられているかが見られます。"
       }
     ]
   },
   {
-    "title": "付録：早見表（goal の形から書き方を選ぶ）",
+    "title": "付録：早見表",
     "blocks": [
       {
-        "p": "証明は「いま示すべきもの（Goal）」と仮定の形を見て、1 行ずつ書く。Goal タブの「次の一手」にも同じ候補が出る。"
+        "p": "証明は「いま示すべきもの」（Goal タブの ⊢ の右）の形を見て、1 行ずつ書きます。"
       },
       {
-        "h": "Goal の形で選ぶ（Goal を小さくする）"
+        "h": "示すべきものの形で選ぶ"
       },
       {
         "keys": [
           [
-            "∀x. φ",
+            "∀x. φ（すべての）",
             "Fix x（条件つき ∀ε>0 なら Fix ε | hε : ε > 0）"
           ],
           [
-            "φ → ψ、¬φ",
+            "φ → ψ（ならば）、¬φ",
             "assume h : φ"
           ],
           [
-            "φ ∧ ψ",
+            "φ ∧ ψ（かつ）",
             "根拠1, 根拠2"
           ],
           [
-            "φ ∨ ψ",
+            "φ ∨ ψ（または）",
             "choose left / choose right"
           ],
           [
-            "∃x. φ",
-            "choose 項"
+            "∃x. φ（ある）",
+            "choose 例"
           ],
           [
             "= < ≤",
-            "ring・linarith・連鎖"
+            "ring・linarith・式変形の連鎖"
           ],
           [
             "何でも",
-            "by_contra h・根拠 1 つで閉じる"
+            "by_contra h（背理法）、根拠 1 つで閉じる"
           ]
         ]
       },
       {
-        "h": "仮定の形で選ぶ（仮定を使う）"
+        "h": "仮定の形で選ぶ"
       },
       {
         "keys": [
@@ -665,19 +717,19 @@ window.NARFI_TUTORIAL = [
           ],
           [
             "h : ∀x. φ",
-            "h(t)"
+            "h(具体的な値)"
           ],
           [
             "h : φ → ψ",
-            "h(p)（p は φ の根拠）"
+            "h(φ の根拠)"
           ]
         ]
       },
       {
-        "h": "途中で示したことを増やす"
+        "h": "途中で分かったことを書き留める"
       },
       {
-        "p": "`k : φ by 根拠`（名前は省略できる）。証明が長ければ `k : φ` の下に字下げして書く。"
+        "p": "`名前 : 命題 by 根拠`。根拠が長ければ `名前 : 命題` の下に字下げして書く。"
       },
       {
         "p": "書き方の完全な一覧は [docs/language/syntax.md](https://github.com/Narfidort/Narfi/blob/main/docs/language/syntax.md)。"

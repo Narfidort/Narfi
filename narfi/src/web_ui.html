@@ -903,9 +903,15 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .learn-menu .group { font-size: 10.5px; color: var(--text-faint); padding: 8px 10px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
 .learn-menu .menu-item.current { color: var(--accent); }
 .learn-menu .done { color: var(--ok); font-size: 11px; }
+.learn-code { margin: 0 0 12px; padding: 6px 0; background: var(--bg); border: 1px solid var(--border); overflow-x: auto; font-size: 15px; }
+.learn-code .mc-line { min-height: 26px; padding-left: 10px; }
+.learn-body .type-box { margin: 0 0 12px; padding: 6px 12px; border: 1px solid var(--border); }
+.learn-body .type-box table { margin: 0; }
 .learn-body .paper { padding: 10px 14px; margin: 0 0 12px; border-left: 2px solid var(--text-faint); background: var(--bg-elev); }
 .learn-body .paper-title, .learn-body .box-title { font-size: 11px; color: var(--text-faint); letter-spacing: 0.05em; margin-bottom: 4px; }
-.learn-body .steps td:first-child { white-space: pre; }
+.learn-body .steps td.step-code { white-space: nowrap; padding-right: 14px; }
+.learn-body .step-code .learn-code { border: 0; margin: 0; padding: 0; background: transparent; font-size: 14px; }
+.learn-body .step-code .mc-line { padding-left: 0; min-height: 22px; }
 .learn-body .check { padding: 8px 12px; margin: 0 0 12px; border-left: 2px solid var(--accent); background: var(--bg-active); }
 .learn-body .pitfall { padding: 8px 12px; margin: 0 0 8px; border-left: 2px solid var(--warn); background: rgba(245, 158, 11, 0.06); }
 .learn-body .hint { margin: 0 0 10px; padding: 8px 12px; border: 1px dashed var(--border); }
@@ -1133,7 +1139,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
   <div class="sbar-right">
     <a class="icon-btn" href="https://github.com/Narfidort/Narfi" target="_blank" rel="noopener" title="Narfi のリポジトリ（GitHub）"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
     <button id="btnJpLens" class="icon-btn text" onclick="toggleJpLens()" title="日本語シュガーの表示（裏の ASCII コードは変わらない）">JP</button>
-    <button class="icon-btn" onclick="openPreferences()" title="Preferences（⌘,）"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor"/></svg></button>
+    <button class="icon-btn" data-only="local" onclick="openPreferences()" title="Preferences（⌘,）"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.018.066.079.158.212.224.231.114.454.243.668.386.123.082.233.09.299.071l1.103-.303c.644-.176 1.392.021 1.82.63.27.385.506.792.704 1.218.315.675.111 1.422-.364 1.891l-.814.806c-.049.048-.098.147-.088.294.016.257.016.515 0 .772-.01.147.038.246.088.294l.814.806c.475.469.679 1.216.364 1.891a7.977 7.977 0 0 1-.704 1.217c-.428.61-1.176.807-1.82.63l-1.102-.302c-.067-.019-.177-.011-.3.071a5.909 5.909 0 0 1-.668.386c-.133.066-.194.158-.211.224l-.29 1.106c-.168.646-.715 1.196-1.458 1.26a8.006 8.006 0 0 1-1.402 0c-.743-.064-1.289-.614-1.458-1.26l-.289-1.106c-.018-.066-.079-.158-.212-.224a5.738 5.738 0 0 1-.668-.386c-.123-.082-.233-.09-.299-.071l-1.103.303c-.644.176-1.392-.021-1.82-.63a8.12 8.12 0 0 1-.704-1.218c-.315-.675-.111-1.422.363-1.891l.815-.806c.05-.048.098-.147.088-.294a6.214 6.214 0 0 1 0-.772c.01-.147-.038-.246-.088-.294l-.815-.806C.635 6.045.431 5.298.746 4.623a7.92 7.92 0 0 1 .704-1.217c.428-.61 1.176-.807 1.82-.63l1.102.302c.067.019.177.011.3-.071.214-.143.437-.272.668-.386.133-.066.194-.158.211-.224l.29-1.106C6.009.645 6.556.095 7.299.03 7.53.01 7.764 0 8 0Zm-.571 1.525c-.036.003-.108.036-.137.146l-.289 1.105c-.147.561-.549.967-.998 1.189-.173.086-.34.183-.5.29-.417.278-.97.423-1.529.27l-1.103-.303c-.109-.03-.175.016-.195.045-.22.312-.412.644-.573.99-.014.031-.021.11.059.19l.815.806c.411.406.562.957.53 1.456a4.709 4.709 0 0 0 0 .582c.032.499-.119 1.05-.53 1.456l-.815.806c-.081.08-.073.159-.059.19.162.346.353.677.573.989.02.03.085.076.195.046l1.102-.303c.56-.153 1.113-.008 1.53.27.161.107.328.204.501.29.447.222.85.629.997 1.189l.289 1.105c.029.109.101.143.137.146a6.6 6.6 0 0 0 1.142 0c.036-.003.108-.036.137-.146l.289-1.105c.147-.561.549-.967.998-1.189.173-.086.34-.183.5-.29.417-.278.97-.423 1.529-.27l1.103.303c.109.029.175-.016.195-.045.22-.313.411-.644.573-.99.014-.031.021-.11-.059-.19l-.815-.806c-.411-.406-.562-.957-.53-1.456a4.709 4.709 0 0 0 0-.582c-.032-.499.119-1.05.53-1.456l.815-.806c.081-.08.073-.159.059-.19a6.464 6.464 0 0 0-.573-.989c-.02-.03-.085-.076-.195-.046l-1.102.303c-.56.153-1.113.008-1.53-.27a4.44 4.44 0 0 0-.501-.29c-.447-.222-.85-.629-.997-1.189l-.289-1.105c-.029-.11-.101-.143-.137-.146a6.6 6.6 0 0 0-1.142 0ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM9.5 8a1.5 1.5 0 1 0-3.001.001A1.5 1.5 0 0 0 9.5 8Z"/></svg></button>
     <button id="btnTheme" class="icon-btn" onclick="toggleTheme()" title="ライト／ダーク"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
     <button id="btnInspector" class="icon-btn active" onclick="toggleInspector()" title="右側（Goal・Prose・LaTeX など）の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/></svg></button>
   </div>
@@ -4023,6 +4029,21 @@ function allLessons() {
   return [...(window.NARFI_TUTORIAL || []), ...(window.NARFI_COURSE || [])];
 }
 
+// Learn のコード：エディタと同じ見た目で描く（読むだけ。エディタの文書には入れない）
+function renderCodeStatic(src) {
+  const saved = nextSeqId;
+  const lines = src.replace(/\n+$/, "").split("\n").map((raw) => {
+    const spaces = (raw.match(/^( *)/) || ["", ""])[1].length;
+    const indent = Math.floor(spaces / 2);
+    const root = createSeq(parseAsciiToItems(raw.substring(indent * 2)), null, "root");
+    const inner = renderItemsSliceHtml(root, 0, root.items.length);
+    return `<div class="mc-line"><div class="mc-indent-guides">${'<span class="mc-indent-guide"></span>'.repeat(indent)}</div><div class="mc-content">${inner || "&nbsp;"}</div></div>`;
+  });
+  for (let id = saved; id < nextSeqId; id++) seqMap.delete(id);
+  nextSeqId = saved;
+  return `<div class="learn-code">${lines.join("").replace(/ data-(?:seq|idx|slot-seq|line-idx)="[^"]*"/g, "")}</div>`;
+}
+
 function learnDone() {
   try { return new Set(JSON.parse(localStorage.getItem("narfi.learn.done") || "[]")); } catch (_) { return new Set(); }
 }
@@ -4068,9 +4089,11 @@ function showLesson(i) {
     if (b.p) html += `<p>${inlineMd(b.p)}</p>`;
     // 紙の証明：数学の答案として
     if (b.paper) html += `<div class="paper"><div class="paper-title">紙に書くと</div>${b.paper.map((x) => `<div>${inlineMd(x)}</div>`).join("")}</div>`;
-    if (b.code) html += `<pre>${escHtml(b.code)}</pre>`;
+    if (b.code) html += renderCodeStatic(b.code);
+    // 打ち方：キーボードで何と打つか
+    if (b.type) html += `<div class="type-box"><div class="box-title">打ち方</div><table>${b.type.map(([k, d]) => `<tr><td>${escHtml(k)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table></div>`;
     // 1 行ずつ：コードの行と、その意味
-    if (b.steps) html += `<table class="steps">${b.steps.map(([c, d]) => `<tr><td>${escHtml(c)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
+    if (b.steps) html += `<table class="steps">${b.steps.map(([c, d]) => `<tr><td class="step-code">${renderCodeStatic(c.replace(/^\s+/, ""))}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
     if (b.keys) html += `<table>${b.keys.map(([k, d]) => `<tr><td>${escHtml(k)}</td><td>${inlineMd(d)}</td></tr>`).join("")}</table>`;
     if (b.check) html += `<div class="check"><div class="box-title">確かめよう</div>${inlineMd(b.check)}</div>`;
     if (b.pitfalls) html += b.pitfalls.map(([sym, fix]) => `<div class="pitfall"><div class="box-title">よくあるつまずき</div><div>${inlineMd(sym)}</div><div>→ ${inlineMd(fix)}</div></div>`).join("");
@@ -4735,6 +4758,7 @@ function uiToast(msg) {
 }
 
 window.uiModal = uiModal;
+window.openPreferences = () => openPreferences();
 window.uiConfirm = uiConfirm;
 window.uiPrompt = uiPrompt;
 window.uiToast = uiToast;

@@ -190,6 +190,20 @@ fn tutorial_answers_check() {
         }
         v
     };
+    // レッスンの中のコードの例（thm を含むもの）も、すべて通ること
+    let all = Command::new("node")
+        .args(["-e", "global.window = {}; require(process.argv[1]); process.stdout.write(JSON.stringify(window.NARFI_TUTORIAL))", "./src/tutorial.js"])
+        .output()
+        .unwrap();
+    let all_json = String::from_utf8(all.stdout).unwrap();
+    let dir0 = std::env::temp_dir().join(format!("narfi-tut-ex-{}", std::process::id()));
+    std::fs::create_dir_all(&dir0).unwrap();
+    for (k, code) in field(&all_json, "code").iter().filter(|c| c.contains("thm ")).enumerate() {
+        let f = dir0.join(format!("code{k}.narfi"));
+        std::fs::write(&f, code).unwrap();
+        let st = statuses(&f);
+        assert!(!st.is_empty() && st.iter().all(|s| s.starts_with('✓')), "レッスンの例 {k} が通らない: {st:?}\n{code}");
+    }
     let exercises = field(&json, "exercise");
     let answers = field(&json, "answer");
     assert_eq!(exercises.len(), answers.len());

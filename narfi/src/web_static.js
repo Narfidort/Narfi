@@ -435,6 +435,7 @@
       b.addEventListener("click", () => { menu.remove(); fn(); });
       menu.appendChild(b);
     };
+    item("Preferences…", () => window.openPreferences && window.openPreferences());
     item("Sync Now", () => syncNow());
     item("Log Out", signOut);
     item("Delete Account…", deleteAccount);
