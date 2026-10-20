@@ -326,20 +326,17 @@
     if (!cloud.configured) { setCloudState("off"); return; }
     if (!me.signed_in) {
       signedOut();
-      // 最初の画面：ログインするか、このブラウザだけで使うかを選ぶ（選んだら覚える）
-      if (!localStorage.getItem("narfi.guest")) {
-        const login = await window.uiModal({
-          title: "Narfi へようこそ",
-          note: "GitHub でログインすると、ファイルがクラウドに保存され、ほかの PC やブラウザでも開けます（自動でログインしたままになります）。ログインしない場合、ファイルはこのブラウザの中だけに保存されます。",
-          okLabel: "GitHub でログイン",
-          cancelLabel: "ログインせずに使う"
-        });
-        if (login) { signIn(); return; }
-        localStorage.setItem("narfi.guest", "1");
-      }
+      // Web 版はログインして使う（ファイルはアカウントに保存される）。閉じられない画面
+      await window.uiModal({
+        title: "Narfi へようこそ",
+        note: "GitHub のアカウントでログインして使います。ファイルはアカウントに保存され、ほかの PC やブラウザでも開けます（ログインしたままになります）。GitHub に求める権限はありません（公開プロフィールの ID と名前だけを使います）。",
+        okLabel: "GitHub でログイン",
+        cancelLabel: null
+      });
+      signIn();
       return;
     }
-    localStorage.removeItem("narfi.guest");
+
     cloud.user = { login: me.login, id: me.id };
     const m = loadSync();
     if (m.user !== me.id) {
@@ -373,9 +370,10 @@
       b.title = "ログインすると、ファイルがクラウドに保存され、ほかの端末でも開けます";
       b.classList.remove("active");
     } else {
-      b.textContent = `${cloud.user.login} · ${STATE_TEXT[st] || ""}`;
-      b.title = st === "error" ? `同期できませんでした：${cloud.error}` : "アカウント";
-      b.classList.toggle("active", st === "synced");
+      // GitHub のアイコンと、同期の状態の小さな点
+      b.classList.add("account-avatar");
+      b.innerHTML = `<img src="https://avatars.githubusercontent.com/u/${encodeURIComponent(cloud.user.id)}?s=64" alt=""><span class="sync-dot ${st}"></span>`;
+      b.title = `${cloud.user.login} · ${st === "error" ? `同期できませんでした：${cloud.error}` : STATE_TEXT[st] || ""}`;
     }
   }
 
@@ -424,6 +422,10 @@
     menu = document.createElement("div");
     menu.id = "accountMenu";
     menu.className = "menu ctx-menu";
+    const head = document.createElement("div");
+    head.className = "account-head";
+    head.textContent = `${cloud.user.login} · ${STATE_TEXT[cloud.state] || ""}`;
+    menu.appendChild(head);
     const item = (label, fn, title) => {
       const b = document.createElement("button");
       b.className = "menu-item";

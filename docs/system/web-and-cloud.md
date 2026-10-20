@@ -11,7 +11,7 @@
 
 ## クラウド保存
 - Cloudflare Pages Functions（`narfi/functions/`、共通部分は `narfi/server/common.js`）と D1（SQLite。表は `narfi/migrations/`）。
-- ログインは GitHub OAuth（権限は求めない。GitHub のトークンは保存しない）。セッションは Cookie `__Host-narfi_session`（HttpOnly・Secure・SameSite=Lax、30 日）、D1 には値の SHA-256 だけを置く。
+- Web 版はログインして使う（最初の画面で GitHub のログインを求める）。ログインは GitHub OAuth（権限は求めない。GitHub のトークンは保存しない）。右上に GitHub のアイコンと同期の状態の点を出す。セッションは Cookie `__Host-narfi_session`（HttpOnly・Secure・SameSite=Lax、30 日。開くたびに延びる）、D1 には値の SHA-256 だけを置く。
 - 状態を変える要求は `X-Narfi-Cloud: 1` と `Origin` を確かめる（CSRF 対策）。上限は 1 人 1000 ファイル・20 MB。
 - 同期：手元の保存領域が本体。ファイルごとに version を持ち、変更は後から送る。両方で変わったら、手元の版を残し、もう一方を `名前.conflict-日時.narfi` として残す。削除・名前の変更も同期する（tombstone）。
 

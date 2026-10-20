@@ -878,6 +878,13 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .hints-label { font-size: 10.5px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; margin-right: 2px; }
 .hint { font-family: "JetBrains Mono", monospace; font-size: 11.5px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-elev); color: var(--text); cursor: pointer; }
 .hint:hover { border-color: var(--accent); color: var(--accent); }
+.account-avatar { position: relative; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid var(--border); overflow: visible; background: var(--bg-elev); }
+.account-avatar img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.sync-dot { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--bg); background: var(--text-faint); }
+.sync-dot.synced { background: var(--ok); }
+.sync-dot.syncing, .sync-dot.pending { background: var(--warn); }
+.sync-dot.error { background: var(--err); }
+.account-head { padding: 6px 12px 8px; font-size: 12px; color: var(--text-dim); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .deps { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: "JetBrains Mono", monospace; }
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
 .learn-nav select { flex: 1; min-width: 0; }
@@ -1090,6 +1097,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
     <span id="fileLabel" class="file-label">untitled.narfi</span>
   </div>
   <div class="sbar-right">
+    <a class="icon-btn" href="https://github.com/Narfidort/Narfi" target="_blank" rel="noopener" title="Narfi のリポジトリ（GitHub）"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
     <button id="btnJpLens" class="icon-btn text" onclick="toggleJpLens()" title="日本語シュガーの表示（裏の ASCII コードは変わらない）">JP</button>
     <button id="btnTheme" class="icon-btn" onclick="toggleTheme()" title="ライト／ダーク"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
     <button id="btnInspector" class="icon-btn active" onclick="toggleInspector()" title="右側（Goal・Prose・LaTeX など）の表示・非表示"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/></svg></button>
@@ -4447,7 +4455,9 @@ function uiModal({ title, note = "", value = null, okLabel = "OK", cancelLabel =
     input.hidden = value === null;
     input.value = value || "";
     ok.textContent = okLabel;
-    cancel.textContent = cancelLabel;
+    // cancelLabel が null なら、選ばずには閉じられない
+    cancel.hidden = cancelLabel === null;
+    cancel.textContent = cancelLabel || "";
     ok.classList.toggle("danger", danger);
     back.hidden = false;
     const done = (v) => {
@@ -4460,7 +4470,7 @@ function uiModal({ title, note = "", value = null, okLabel = "OK", cancelLabel =
       resolve(v);
     };
     const onOk = () => done(value === null ? true : input.value);
-    const onCancel = () => done(value === null ? false : null);
+    const onCancel = () => { if (cancelLabel !== null) done(value === null ? false : null); };
     const onKey = (e) => {
       e.stopPropagation();
       if (e.key === "Enter") { e.preventDefault(); onOk(); }
