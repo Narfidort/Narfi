@@ -50,7 +50,7 @@ Cloudflare Pages に自動で置く（`.github/workflows/web.yml`）。
 | ファイル | パソコンのフォルダ | ブラウザ内の保存領域。`File` → `Upload File…`・`Upload Folder…` で読み込み、`Download All (.zip)` で書き出す。GitHub でログインするとクラウドと同期（削除・名前の変更も） |
 | 自分用ライブラリ | `~/.narfi/lib` | 保存領域の `lib/`（`lib/mydefs.narfi` は `import mydefs`） |
 | PDF | LaTeX で組版 | `Print` から「PDF として保存」 |
-| AI 補助 | 使える | 使えない |
+| AI 補助（自分の API キー。Preferences で登録） | 使える | 使える（ブラウザから直接呼べない接続先は Narfi のサーバーが中継する。キーは保存しない） |
 
 ブラウザの保存領域は、ブラウザのデータを消すと消える。大事なファイルは `Export` で書き出しておくか、クラウド保存を使う。
 

@@ -569,6 +569,11 @@
     switch (path) {
       case "/api/check":
         return json(call({ op: "check", src: body.src || "", path: body.path && !body.path.startsWith("lib:") ? body.path : "", cursor_line: body.cursor_line || 0, locale: body.locale || "ja" }));
+      case "/api/ai_chat": {
+        // AI への要求は Pages Functions の中継（functions/cloud/ai.js）へ。キーは保存されない
+        const r = await realFetch("/cloud/ai", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "X-Narfi-Cloud": "1", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json" } });
+      }
       case "/api/convert":
         return json(call({ op: "convert", src: body.src || "", mode: body.mode || "" }));
       case "/api/workspace":

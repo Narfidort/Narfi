@@ -3,7 +3,8 @@
 ## ローカル版（`narfi web`）
 - `narfi/src/web.rs`。`127.0.0.1` で待ち受け、`Host`・`Origin` を確かめて他のサイトからの要求を拒む。
 - 作業フォルダ（`~/.narfi/workspace` に記録）のファイルを直接読み書きする。削除はゴミ箱（`~/.Trash`）へ移す。
-- macOS のダイアログ（osascript）、LuaLaTeX（latexmk）での PDF、AI 補助（CLI・API）。
+- macOS のダイアログ（osascript）、LuaLaTeX（latexmk）での PDF。
+- AI の中継 `/api/ai_chat`（curl で送る。キーはコマンドの引数に出さず、設定を標準入力から渡す）。
 
 ## Web 版（https://narfi.pages.dev）
 - `scripts/build-site.sh` が `site/` を作る：`index.html`（エディタ）・`narfi.wasm`（検査器）・`narfi-web.js`（`src/web_static.js`）・`tutorial.js`・`course.js`・KaTeX。
@@ -13,6 +14,7 @@
 - Cloudflare Pages Functions（`narfi/functions/`、共通部分は `narfi/server/common.js`）と D1（SQLite。表は `narfi/migrations/`）。
 - Web 版はログインして使う（最初の画面で GitHub のログインを求める）。ログインは GitHub OAuth（権限は求めない。GitHub のトークンは保存しない）。右上に GitHub のアイコンと同期の状態の点を出す。セッションは Cookie `__Host-narfi_session`（HttpOnly・Secure・SameSite=Lax、30 日。開くたびに延びる）、D1 には値の SHA-256 だけを置く。
 - 状態を変える要求は `X-Narfi-Cloud: 1` と `Origin` を確かめる（CSRF 対策）。上限は 1 人 1000 ファイル・20 MB。
+- AI の中継 `/cloud/ai`（`functions/cloud/ai.js`）：ブラウザから直接呼べない接続先（OpenCode Go など）のため。ログイン中だけ・決まった接続先（opencode.ai・generativelanguage.googleapis.com・api.openai.com・openrouter.ai・api.anthropic.com）だけに送る。キーは利用者のブラウザにだけ保存され（localStorage の `narfi.ai.*`。クラウドの同期には入らない）、中継は保存も記録もしない。
 - 同期：手元の保存領域が本体。ファイルごとに version を持ち、変更は後から送る。両方で変わったら、手元の版を残し、もう一方を `名前.conflict-日時.narfi` として残す。削除・名前の変更も同期する（tombstone）。
 
 ## CI/CD（`.github/workflows/web.yml`）

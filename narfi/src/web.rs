@@ -334,6 +334,10 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
                 res.as_bytes(),
             )
         }
+        ("POST", "/api/ai_chat") => {
+            let (status, res) = api_ai_chat(&body);
+            send_response(&mut stream, status, "application/json; charset=utf-8", res.as_bytes())
+        }
         ("POST", "/api/ai") => {
             let res = api_run_ai(&body);
             send_response(
@@ -809,6 +813,51 @@ const NARFI_AI_SYSTEM_PROMPT: &str = r#"あなたは自然演繹ベースの証�
    - ∧の取り出し: `h.left`, `h.right` / ∧導入: `根拠1, 根拠2`
 
 回答は簡潔にし、Narfiコードを提案する場合は ```narfi ... ``` ブロックで囲んでください。"#;
+
+/// AI の API（OpenAI と同じ形式の chat/completions）への中継。Web 版の functions/cloud/ai.js と同じ約束：
+/// 要求は {base, key, session, payload}（payload は送る JSON の文字列）、応答は接続先の JSON をそのまま。
+/// キーはコマンドの引数に出さないよう、curl の設定を標準入力から渡す。
+fn api_ai_chat(body: &str) -> (u16, String) {
+    let err = |m: &str| (400, format!("{{\"ok\":false,\"error\":{}}}", json_str(m)));
+    let base = json_get_str(body, "base").unwrap_or_default();
+    let key = json_get_str(body, "key").unwrap_or_default();
+    let session = json_get_str(body, "session").unwrap_or_else(|| "narfi".into());
+    let payload = json_get_str(body, "payload").unwrap_or_default();
+    let local = base.starts_with("http://localhost") || base.starts_with("http://127.0.0.1");
+    if !(base.starts_with("https://") || local) || base.contains(['"', '\n', '\r', ' ']) {
+        return err("接続先の URL が正しくない（https:// で始まるもの）");
+    }
+    if key.contains(['"', '\n', '\r', '\\']) || session.contains(['"', '\n', '\r', '\\']) {
+        return err("キーに使えない文字がある");
+    }
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let tmp = std::env::temp_dir().join(format!("narfi-ai-{}-{}.json", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed)));
+    if std::fs::write(&tmp, &payload).is_err() {
+        return err("一時ファイルを書けない");
+    }
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let config = format!(
+        "url = \"{url}\"\nrequest = \"POST\"\nheader = \"Content-Type: application/json\"\nheader = \"Authorization: Bearer {key}\"\nheader = \"User-Agent: narfi-local/2\"\nheader = \"x-opencode-session: {session}\"\ndata-binary = \"@{}\"\nmax-time = 120\n",
+        tmp.display()
+    );
+    let child = Command::new("curl")
+        .args(["-sS", "-K", "-"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn();
+    let out = child.and_then(|mut c| {
+        use std::io::Write as _;
+        c.stdin.take().unwrap().write_all(config.as_bytes())?;
+        c.wait_with_output()
+    });
+    let _ = std::fs::remove_file(&tmp);
+    match out {
+        Ok(o) if o.status.success() => (200, String::from_utf8_lossy(&o.stdout).to_string()),
+        Ok(o) => (502, format!("{{\"ok\":false,\"error\":{}}}", json_str(String::from_utf8_lossy(&o.stderr).trim()))),
+        Err(e) => (502, format!("{{\"ok\":false,\"error\":{}}}", json_str(&format!("curl を実行できない: {e}")))),
+    }
+}
 
 fn api_run_ai(body: &str) -> String {
     let provider = json_get_str(body, "provider").unwrap_or_else(|| "auto".into());

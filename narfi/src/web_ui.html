@@ -894,6 +894,19 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .pref-row { margin-top: 14px; }
 .pref-label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
 .pref-opts { display: flex; gap: 16px; font-size: 13px; }
+.pref-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pref-grid .pref-wide { grid-column: 1 / 3; }
+.pref-ai-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.pref-ai-result { font-size: 12px; color: var(--text-dim); }
+.pref-ai-result.ok { color: var(--ok, #3fb950); }
+.pref-ai-result.bad { color: var(--err, #f85149); }
+.ai-status { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.ai-status a { color: var(--accent); cursor: pointer; }
+.ai-result { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.ai-result .ai-verdict { font-size: 12px; margin-bottom: 6px; }
+.ai-result .ai-verdict.ok { color: var(--ok, #3fb950); }
+.ai-result .ai-verdict.bad { color: var(--err, #f85149); }
+.ai-result .ai-meta { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 .pref-opt { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .deps { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: "JetBrains Mono", monospace; }
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
@@ -1025,7 +1038,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <button class="insp-tab" onclick="switchTab('prose', this)">Prose</button>
       <button class="insp-tab" onclick="switchTab('code', this)">Source</button>
       <button class="insp-tab" onclick="switchTab('latex', this)">LaTeX</button>
-      <button class="insp-tab" onclick="switchTab('ai', this)" data-only="local">AI</button>
+      <button class="insp-tab" onclick="switchTab('ai', this)">AI</button>
       <button id="learnTabBtn" class="insp-tab" onclick="switchTab('learn', this)">Learn</button>
     </div>
 
@@ -1081,32 +1094,18 @@ html:not(.web) [data-only="web"] { display: none !important; }
     </div>
 
     <div id="tab-ai" class="insp-body">
-      <div class="sec-label"><span>Provider</span><span id="cliStatus"></span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-        <select id="aiProvider" class="ctrl-select">
-          <option value="auto">Auto (API Key / Local CLI)</option>
-          <option value="opencode_go">OpenCode Go / OpenAI Compat</option>
-          <option value="gemini_api">Gemini API</option>
-          <option value="anthropic_api">Anthropic API</option>
-          <option value="claude_cli">claude CLI</option>
-          <option value="gemini_cli">gemini CLI</option>
-        </select>
-        <input id="aiModel" class="ctrl-input" placeholder="Model (optional)">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-        <input id="aiBase" class="ctrl-input" placeholder="API Endpoint URL">
-        <input id="aiKey" type="password" class="ctrl-input" placeholder="API Key">
-      </div>
+      <div id="aiStatus" class="ai-status"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-        <button class="ctrl-btn" onclick="askAi('next')">Suggest Next Step</button>
-        <button class="ctrl-btn" onclick="askAi('sorry')">Fill sorry</button>
-        <button class="ctrl-btn" onclick="askAi('error')">Explain Error</button>
+        <button class="ctrl-btn" onclick="askAi('next')" title="カーソルの行のあとに続く 1〜3 行（検査を通ったものだけ見せる）">次の一手</button>
+        <button class="ctrl-btn" onclick="askAi('sorry')" title="カーソルに近い sorry を証明で置き換える（検査を通ったものだけ見せる）">sorry を埋める</button>
+        <button class="ctrl-btn" onclick="askAi('error')">エラーの説明</button>
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:14px;">
-        <input id="aiPrompt" class="ctrl-input" style="flex:1;" placeholder="Ask about current proof..." onkeydown="if(event.key==='Enter') askAi('custom')">
-        <button class="ctrl-btn" onclick="askAi('custom')">Send</button>
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        <input id="aiPrompt" class="ctrl-input" style="flex:1;" placeholder="この証明について質問する…" onkeydown="if(event.key==='Enter') askAi('custom')">
+        <button class="ctrl-btn" onclick="askAi('custom')">送る</button>
       </div>
-      <div id="aiReply" style="font-size:12.5px;line-height:1.65;white-space:pre-wrap;color:var(--text-dim);"></div>
+      <div id="aiReply"></div>
+    </div>
     </div>
   </div>
 </div>
@@ -1128,6 +1127,23 @@ html:not(.web) [data-only="web"] { display: none !important; }
     <div class="modal-title">Preferences</div>
     <div class="pref-row"><div class="pref-label">言語（読みの表示・Prose・LaTeX）</div><div id="prefLang" class="pref-opts"></div></div>
     <div class="modal-note">下の言語のボタンで、エディタの読みの表示をオン・オフします。ファイルの中身は変わりません。</div>
+    <div class="pref-row">
+      <div class="pref-label">AI（任意。自分の API キーで使う）</div>
+      <div class="pref-grid">
+        <select id="aiPreset" class="ctrl-select" onchange="aiPresetChanged()">
+          <option value="opencode_go">OpenCode Go</option>
+          <option value="gemini">Gemini（Google AI Studio）</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="openai">OpenAI</option>
+          <option value="custom">そのほか（OpenAI と同じ形式）</option>
+        </select>
+        <input id="aiModel" class="ctrl-input" placeholder="モデル" spellcheck="false" oninput="saveAiSettings()">
+        <input id="aiBase" class="ctrl-input pref-wide" placeholder="接続先の URL（…/v1 まで）" spellcheck="false" oninput="saveAiSettings()">
+        <input id="aiKey" type="password" class="ctrl-input pref-wide" placeholder="API キー" autocomplete="off" spellcheck="false" oninput="saveAiSettings()">
+      </div>
+      <div class="pref-ai-actions"><button class="ctrl-btn" onclick="testAiConnection()">接続を確かめる</button><button class="ctrl-btn" onclick="clearAiKey()">キーを消す</button><span id="aiTestResult" class="pref-ai-result"></span></div>
+      <div class="modal-note">キーはこのブラウザにだけ保存されます（クラウドの同期にも入りません）。<span data-only="web">Web 版では、ブラウザから直接呼べない接続先のために Narfi のサーバーを通して送りますが、保存も記録もしません。</span>AI の答えは検査器にかけてから見せます。</div>
+    </div>
     <div class="modal-actions"><button class="ctrl-btn primary" onclick="document.getElementById('prefBack').hidden = true">閉じる</button></div>
   </div>
 </div>
@@ -4096,6 +4112,15 @@ function appendToLine(text) {
   editorSurface.focus();
 }
 
+// 文書を書き換える（元に戻す の履歴は残す。onDocMutated で新しい状態が履歴に入る）
+function replaceDocKeepingHistory(src) {
+  const h = history, hi = histIdx;
+  loadSourceIntoDoc(src);
+  history = h;
+  histIdx = hi;
+  histTime = 0;
+}
+
 function insertHint(code) {
   const lines = serializeDocToAscii().split("\n");
   const idx = Math.min(cursor.lineIdx, lines.length - 1);
@@ -4115,7 +4140,7 @@ function insertHint(code) {
     lines.splice(idx + 1, 0, ...parts);
     at = idx + 1;
   }
-  loadSourceIntoDoc(lines.join("\n"));
+  replaceDocKeepingHistory(lines.join("\n"));
   const ln = docLines[Math.min(at, docLines.length - 1)];
   setCursor(ln.rootSeq.id, ln.rootSeq.items.length, Math.min(at, docLines.length - 1));
   onDocMutated();
@@ -4215,6 +4240,7 @@ function openPreferences() {
   document.getElementById("prefLang").innerHTML = langs
     .map((l) => `<label class="pref-opt"><input type="radio" name="prefLang" value="${l}" ${l === prefLang ? "checked" : ""}> ${escHtml(LANG_NAMES[l] || l)}</label>`)
     .join("");
+  fillAiSettings();
   back.hidden = false;
 }
 
@@ -4389,6 +4415,7 @@ function toggleAnswer() {
 
 function switchTab(id, btn) {
   if (id === "learn") showLesson(learnIndex);
+  if (id === "ai") renderAiStatus();
   document.querySelectorAll(".insp-tab").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".insp-body").forEach(p => p.classList.remove("active"));
   btn.classList.add("active");
@@ -4453,29 +4480,311 @@ window.addEventListener("mouseup", () => {
   }
 });
 
-async function askAi(mode) {
-  const reply = document.getElementById("aiReply");
-  reply.textContent = "Thinking...";
-  let prompt = document.getElementById("aiPrompt").value;
-  if (mode === "next") prompt = "カーソル行の目標を進めるための次の1ステップを純粋ASCIIのNarfiコードで提案してください。";
-  else if (mode === "sorry") prompt = "sorry を埋める証明コードを純粋ASCIIのNarfiコードで提案してください。";
-  else if (mode === "error") prompt = "エラーの原因と修正案を簡潔に示してください。";
+// ---- AI（任意。自分の API キーで。設定は Preferences、使うのは右の AI タブ）
+// 要求は /api/ai_chat（ローカル版は narfi web、Web 版は functions/cloud/ai.js が中継）。形式は OpenAI と同じ chat/completions。
+// 「次の一手」「sorry を埋める」は、答えを検査器にかけ、通らなければエラーを返して直させる（最大 AI_TRIES 回）。
+// 通った案だけ「入れる」ボタンを出す（docs/principles.md の原則 1・2）。
 
-  const resp = await fetch("/api/ai", {
+const AI_PRESETS = {
+  opencode_go: { base: "https://opencode.ai/zen/go/v1", model: "glm-5.3-flash" },
+  gemini: { base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "" },
+  openrouter: { base: "https://openrouter.ai/api/v1", model: "" },
+  openai: { base: "https://api.openai.com/v1", model: "" },
+  custom: { base: "", model: "" },
+};
+const AI_TRIES = 3;
+const AI_TIME_LIMIT = 120;  // 秒。これを過ぎたら打ち切る
+let aiBusy = false;
+let aiPending = null;
+let aiAbort = null;
+
+function stopAi() {
+  if (aiAbort) aiAbort.abort();
+}
+
+function aiSettings() {
+  const g = (k) => localStorage.getItem("narfi.ai." + k) || "";
+  const preset = g("preset") || "opencode_go";
+  return { preset, base: g("base") || AI_PRESETS[preset].base, model: g("model") || AI_PRESETS[preset].model, key: g("key") };
+}
+
+function fillAiSettings() {
+  const st = aiSettings();
+  document.getElementById("aiPreset").value = st.preset;
+  document.getElementById("aiBase").value = st.base;
+  document.getElementById("aiModel").value = st.model;
+  document.getElementById("aiKey").value = st.key;
+  document.getElementById("aiTestResult").textContent = "";
+}
+
+function saveAiSettings() {
+  const set = (k, v) => localStorage.setItem("narfi.ai." + k, v.trim());
+  set("preset", document.getElementById("aiPreset").value);
+  set("base", document.getElementById("aiBase").value);
+  set("model", document.getElementById("aiModel").value);
+  set("key", document.getElementById("aiKey").value);
+  renderAiStatus();
+}
+
+function aiPresetChanged() {
+  const p = AI_PRESETS[document.getElementById("aiPreset").value];
+  document.getElementById("aiBase").value = p.base;
+  document.getElementById("aiModel").value = p.model;
+  saveAiSettings();
+}
+
+function clearAiKey() {
+  document.getElementById("aiKey").value = "";
+  saveAiSettings();
+}
+
+function renderAiStatus() {
+  const el = document.getElementById("aiStatus");
+  if (!el) return;
+  const st = aiSettings();
+  const name = (document.querySelector(`#aiPreset option[value="${st.preset}"]`) || {}).textContent || st.preset;
+  el.innerHTML = st.key && st.base && st.model
+    ? `${escHtml(name)} · ${escHtml(st.model)}　<a onclick="openPreferences()">設定</a>`
+    : `Preferences で API キーとモデルを登録すると使えます。<a onclick="openPreferences()">Preferences を開く</a>`;
+}
+
+async function aiChat(messages, maxTokens = 8000) {
+  const st = aiSettings();
+  if (!st.key || !st.base || !st.model) throw new Error("Preferences で API キーとモデルを登録してください");
+  const session = "narfi-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const resp = await fetch("/api/ai_chat", {
     method: "POST",
+    signal: aiAbort ? aiAbort.signal : undefined,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      provider: document.getElementById("aiProvider").value,
-      prompt,
-      src: serializeDocToAscii(),
-      goal_info: `Cursor Ln ${cursor.lineIdx + 1}`,
-      api_key: document.getElementById("aiKey").value,
-      api_base: document.getElementById("aiBase").value,
-      model: document.getElementById("aiModel").value
-    })
+    body: JSON.stringify({ base: st.base, key: st.key, session, payload: JSON.stringify({ model: st.model, messages, max_tokens: maxTokens }) }),
   });
-  const data = await resp.json();
-  reply.textContent = data.ok ? data.reply : (data.error || "Error");
+  let data = {};
+  try { data = await resp.json(); } catch (_) { throw new Error(`応答が読めない（HTTP ${resp.status}）`); }
+  if (data.error) throw new Error(typeof data.error === "string" ? data.error : (data.error.message || JSON.stringify(data.error)));
+  const msg = data.choices && data.choices[0] && data.choices[0].message;
+  if (!msg) throw new Error(`応答に答えがない（HTTP ${resp.status}）`);
+  const text = (msg.content || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const finish = data.choices[0].finish_reason;
+  return { text, finish, usage: data.usage || {}, model: data.model || st.model };
+}
+
+async function testAiConnection() {
+  saveAiSettings();
+  const out = document.getElementById("aiTestResult");
+  out.className = "pref-ai-result";
+  out.textContent = "確かめています…";
+  const t0 = performance.now();
+  try {
+    const r = await aiChat([{ role: "user", content: "Reply with just: ok" }], 2000);
+    out.className = "pref-ai-result ok";
+    out.textContent = `✓ 応答あり（${((performance.now() - t0) / 1000).toFixed(1)} 秒・${r.model}）`;
+  } catch (e) {
+    out.className = "pref-ai-result bad";
+    out.textContent = "✗ " + e.message;
+  }
+}
+
+const AI_SPEC = `You help write proofs in Narfi, a forward natural-deduction proof language checked by a small kernel.
+Write ASCII: forall, exists, ->, and, or, not, |-, <=, >=, !=, Real, Nat, Prop, abs(x) or |x|, a_n (subscript = a(n)), (n:Nat |-> t) for functions.
+A theorem: "thm name :" then hypotheses "x : Real, h : x > 0" and "|- goal", a blank line, then the proof. Nesting is by 2-space indentation.
+Proof statements (one per line):
+- Fix x            (goal forall x. P)        Fix eps | heps : eps > 0   (goal forall eps>0. P)
+- assume h : P     (goal P -> Q or not P)
+- choose t         (goal exists x. P; then prove P[t])   choose left / choose right (goal P or Q)
+- Obtain x, hx : h (h : exists x. P)
+- cases h          (h : P or Q) then indented "Case left h1" and "Case right h2", each with an indented proof
+- induction n      then "Case zero" and "Case succ k, IH : P(k)"
+- by_contra h      (assume the negation, prove false)
+- k : P by j       a fact line; j is a justification. A fact with a longer proof: "k : P" then the proof indented below.
+- the last line of a block must prove that block's goal: a justification alone, e.g. "linarith", "ring", "h(x)", "p, q".
+- chains:  a
+             = b   by j
+             <= c  by j
+Justifications: a hypothesis name; h(t) instantiates forall / applies ->; h.left, h.right; "p, q" proves P and Q; ring (algebraic equality); linarith (linear inequalities from hypotheses); refl; lemma names with arguments.
+Blocks: Fix, assume, by_contra, Case open a block; the rest of that proof is indented under them. choose and Obtain do not open a block (continue at the same indentation).
+Bounded quantifiers: goal "exists d:Real>0. P" → "choose t, j" where j proves t > 0 (e.g. "choose eps/2, linarith"). Goal "forall n:Nat>=N. P" → "Fix n | hn : n >= N". Using h : forall eps:Real>0. P → h(eps, heps).
+Lemmas/axioms written "name : x : Real, h : x > 0 |- P" are used as name(proof of x > 0), e.g. pos_half(heps); variables are inferred.
+Example:
+thm shift :
+  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)
+  |- is_lim((n:Nat |-> a_{n+1}), alpha)
+
+Fix eps | heps : eps > 0
+  Obtain N, hN : h(eps, heps)
+  choose N
+  Fix n | hn : n >= N
+    k : n + 1 >= N by linarith
+    hN(n + 1, k)
+Never use tactics from other languages (no "intro", "apply", "exact", "simp").`;
+
+function aiDeclContext() {
+  const curLine = cursor.lineIdx + 1;
+  const decls = (lastCheckData && lastCheckData.decls) || [];
+  let d = null, next = null;
+  for (const x of decls) { if (x.line <= curLine) d = x; else if (!next) next = x; }
+  const lines = serializeDocToAscii().split("\n");
+  if (!d) return null;
+  const end = next ? next.line - 1 : lines.length;
+  let st = null;
+  for (const x of d.steps || []) if (x.line <= curLine) st = x;
+  const numbered = lines.slice(d.line - 1, end).map((l, k) => `${String(d.line + k).padStart(3)}| ${l}`).join("\n").replace(/\s+$/, "");
+  // 前の宣言（定義・公理・補題）も見せる（名前を使えるように）
+  const before = lines.slice(0, d.line - 1).join("\n").slice(-6000);
+  return { decl: d, st, lines, numbered, before, curLine };
+}
+
+function codeBlockOf(text) {
+  const m = [...text.matchAll(/```[a-zA-Z]*\n([\s\S]*?)```/g)];
+  return (m.length ? m[m.length - 1][1] : text).replace(/\s+$/, "");
+}
+
+// 新しい行を pad の字下げで入れる（AI の答えの共通の字下げは外す）
+function reindent(code, pad) {
+  const ls = code.split("\n").filter((l) => l.trim());
+  const common = Math.min(...ls.map((l) => l.match(/^ */)[0].length));
+  return ls.map((l) => pad + l.slice(common));
+}
+
+async function checkSource(src) {
+  const resp = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ src, cursor_line: 1, path: currentFilePath, locale: prefLang }) });
+  return resp.json();
+}
+
+function aiShow(html) { document.getElementById("aiReply").innerHTML = html; }
+
+function aiTextHtml(text) {
+  // 文章はそのまま、```…``` はエディタと同じ見た目で
+  return text.split(/```[a-zA-Z]*\n([\s\S]*?)```/g).map((part, k) => k % 2 ? renderCodeStatic(part) : `<div style="white-space:pre-wrap;font-size:12.5px;line-height:1.65;">${escHtml(part.trim())}</div>`).join("");
+}
+
+async function askAi(mode) {
+  if (aiBusy) return;
+  const st = aiSettings();
+  if (!st.key || !st.model) { renderAiStatus(); openPreferences(); return; }
+  const ctx = aiDeclContext();
+  const lang = prefLang === "en" ? "English" : "Japanese";
+  const t0 = performance.now();
+  aiBusy = true;
+  aiPending = null;
+  aiAbort = new AbortController();
+  const thinking = () => aiShow(`<div class="ai-status">考えています…（${escHtml(st.model)}・${((performance.now() - t0) / 1000).toFixed(0)} 秒）　<a onclick="stopAi()">やめる</a></div>`);
+  const timer = setInterval(() => {
+    if (!aiBusy) return;
+    if ((performance.now() - t0) / 1000 > AI_TIME_LIMIT) stopAi();
+    else thinking();
+  }, 500);
+  thinking();
+  try {
+    if (mode === "error" || mode === "custom") {
+      const q = mode === "error"
+        ? `Explain the error in this proof and how to fix it, briefly, in ${lang}.`
+        : document.getElementById("aiPrompt").value + `\n(Answer in ${lang}. Put Narfi code in \`\`\`narfi blocks.)`;
+      const err = ctx && ctx.decl.error ? `\nChecker error on line ${ctx.decl.error.line}: ${ctx.decl.error.msg}` : "";
+      const msgs = [
+        { role: "system", content: AI_SPEC },
+        { role: "user", content: `${ctx ? `Earlier in the file:\n\`\`\`\n${ctx.before}\n\`\`\`\nThe theorem (line numbers on the left):\n\`\`\`\n${ctx.numbered}\n\`\`\`\nCursor on line ${ctx.curLine}.${ctx.st ? `\nContext: ${(ctx.st.ctx || []).join("; ")}\nGoal: ${ctx.st.goal || "-"}` : ""}${err}\n\n` : ""}${q}` },
+      ];
+      const r = await aiChat(msgs);
+      aiShow(`<div class="ai-result">${aiTextHtml(r.text)}<div class="ai-meta">${escHtml(r.model)}・${((performance.now() - t0) / 1000).toFixed(1)} 秒</div></div>`);
+      return;
+    }
+    if (!ctx) { aiShow(`<div class="ai-status">カーソルを定理の中に置いてください。</div>`); return; }
+    const lines = ctx.lines;
+    // どこを書き換えるか
+    let at, del, pad, ask;
+    if (mode === "sorry") {
+      const ss = (ctx.decl.sorries || []).slice().sort((a, b) => Math.abs(a.line - ctx.curLine) - Math.abs(b.line - ctx.curLine));
+      if (!ss.length) { aiShow(`<div class="ai-status">この定理に sorry がありません。</div>`); return; }
+      const s0 = ss[0];
+      at = s0.line - 1; del = 1; pad = lines[at].match(/^\s*/)[0];
+      ask = `Replace the \`sorry\` on line ${s0.line} with a proof.\nContext there: ${(s0.ctx || []).join("; ")}\nGoal there: ${s0.goal}\nAnswer with only the replacement lines in one \`\`\`narfi block (no line numbers).`;
+    } else {
+      const cur = lines[ctx.curLine - 1] || "";
+      // 空の行の字下げはファイルに残らないので、エディタの行の字下げを使う
+      pad = cur.trim() ? cur.match(/^\s*/)[0] : "  ".repeat(docLines[cursor.lineIdx].indent);
+      if (!cur.trim() || cur.trim() === "sorry") { at = ctx.curLine - 1; del = 1; } else { at = ctx.curLine; del = 0; }
+      // カーソルの位置の状態：そこに sorry を置いて検査し、検査器が言う文脈と goal を使う
+      const probe = lines.slice();
+      probe.splice(at, del, pad + "sorry");
+      const pd = (await checkSource(probe.join("\n"))).decls || [];
+      const pdecl = pd.find((x) => x.name === ctx.decl.name);
+      const here = pdecl && (pdecl.sorries || []).find((x) => x.line === at + 1);
+      const shown = probe.slice(ctx.decl.line - 1).map((l, k) => `${String(ctx.decl.line + k).padStart(3)}| ${l}`).join("\n").replace(/\s+$/, "");
+      ask = `The proof so far (line ${at + 1} is a placeholder \`sorry\` where the next lines go):\n\`\`\`\n${shown}\n\`\`\`\n` +
+        (here ? `Context at line ${at + 1}: ${(here.ctx || []).join("; ")}\nGoal at line ${at + 1}: ${here.goal}\n` : "") +
+        `Write the next 1 to 3 proof lines to replace that \`sorry\` (they need not finish the proof). Answer with only those lines in one \`\`\`narfi block (no line numbers).`;
+    }
+    const msgs = [
+      { role: "system", content: AI_SPEC },
+      { role: "user", content: `Earlier in the file:\n\`\`\`\n${ctx.before}\n\`\`\`\n` + (mode === "next" ? ask : `The theorem (line numbers on the left):\n\`\`\`\n${ctx.numbered}\n\`\`\`\n${ask}`) },
+    ];
+    let last = null;
+    for (let tries = 1; tries <= AI_TRIES; tries++) {
+      const r = await aiChat(msgs);
+      const code = codeBlockOf(r.text);
+      if (!code.trim()) {
+        // 考える途中で上限に達したなど。空の証明は検査しない
+        last = { code: "", ok: false, why: r.finish === "length" ? "AI の答えが空でした（考える途中で長さの上限に達した）" : "AI の答えが空でした", tries, model: r.model };
+        msgs.push({ role: "assistant", content: r.text || "(empty)" }, { role: "user", content: "Your answer was empty. Answer with only the lines in one ```narfi block, thinking briefly." });
+        continue;
+      }
+      let ins = reindent(code, pad);
+      const nl = lines.slice();
+      nl.splice(at, del, ...ins);
+      let newSrc = nl.join("\n");
+      let data = await checkSource(newSrc);
+      if (mode === "next") {
+        // 途中までの案：まだ終わらないなら、続きの sorry を置いた形で確かめる（ブロックを開く行なら一段下に）
+        const dd = (data.decls || []).find((x) => x.name === ctx.decl.name);
+        if (data.parse_error || (dd && dd.error && dd.error.line <= at + ins.length + 1)) {
+          const lastL = ins[ins.length - 1];
+          const lp = lastL.match(/^\s*/)[0] + (/^\s*(Fix|assume|by_contra|Case|induction|cases)\b/.test(lastL) || /:\s*$/.test(lastL) ? "  " : "");
+          const ins2 = [...ins, lp + "sorry"];
+          const nl2 = lines.slice();
+          nl2.splice(at, del, ...ins2);
+          const data2 = await checkSource(nl2.join("\n"));
+          const d2 = (data2.decls || []).find((x) => x.name === ctx.decl.name);
+          if (!data2.parse_error && d2 && (!d2.error || d2.error.line > at + ins2.length)) { ins = ins2; newSrc = nl2.join("\n"); data = data2; }
+        }
+      }
+      const d = (data.decls || []).find((x) => x.name === ctx.decl.name);
+      const lastIns = at + ins.length; // 1 始まりの行番号で、入れた最後の行
+      let ok, why = "";
+      if (data.parse_error) { ok = false; why = `parse error on line ${data.parse_error.line}: ${data.parse_error.msg}`; }
+      else if (!d) { ok = false; why = "the theorem disappeared"; }
+      else if (mode === "sorry") { ok = d.status === "ok" || (d.status === "sorry" && !d.error && (d.sorries || []).length < (ctx.decl.sorries || []).length); if (!ok && d.error) why = `line ${d.error.line}: ${d.error.msg}`; }
+      else { ok = !d.error || d.error.line > lastIns; if (!ok) why = `line ${d.error.line}: ${d.error.msg}`; }
+      last = { code: ins.map((l) => l.slice(pad.length)).join("\n"), ok, why, tries, model: r.model, newSrc, at };
+      if (ok) break;
+      msgs.push({ role: "assistant", content: r.text }, { role: "user", content: `narfi check rejected it: ${why || "not accepted"}. Fix it and answer again with only the lines in one \`\`\`narfi block.` });
+    }
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    if (last.ok) {
+      aiPending = { before: serializeDocToAscii(), newSrc: last.newSrc, line: last.at };
+      aiShow(`<div class="ai-result"><div class="ai-verdict ok">✓ 検査を通りました</div>${renderCodeStatic(last.code)}<div style="margin-top:8px;"><button class="ctrl-btn primary" onclick="applyAiEdit()">入れる</button></div><div class="ai-meta">${escHtml(last.model)}・${secs} 秒・${last.tries} 回目</div></div>`);
+    } else {
+      aiShow(`<div class="ai-result"><div class="ai-verdict bad">✗ ${AI_TRIES} 回試しましたが、検査を通る案は出ませんでした</div>${renderCodeStatic(last.code)}<div class="ai-meta">${escHtml(last.why)}<br>${escHtml(last.model)}・${secs} 秒</div></div>`);
+    }
+  } catch (e) {
+    const msg = e.name === "AbortError" ? ((performance.now() - t0) / 1000 > AI_TIME_LIMIT ? `${AI_TIME_LIMIT} 秒を過ぎたので打ち切りました` : "やめました") : e.message;
+    aiShow(`<div class="ai-result"><div class="ai-verdict bad">✗ ${escHtml(msg)}</div></div>`);
+  } finally {
+    clearInterval(timer);
+    aiBusy = false;
+    aiAbort = null;
+  }
+}
+
+function applyAiEdit() {
+  if (!aiPending) return;
+  if (serializeDocToAscii() !== aiPending.before) { uiToast("文書が変わったので、もう一度頼んでください"); return; }
+  replaceDocKeepingHistory(aiPending.newSrc);
+  const li = Math.min(aiPending.line, docLines.length - 1);
+  setCursor(docLines[li].rootSeq.id, docLines[li].rootSeq.items.length, li);
+  aiPending = null;
+  aiShow("");
+  onDocMutated();
+  editorSurface.focus();
 }
 
 // ================================================================
