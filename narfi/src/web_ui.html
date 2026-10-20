@@ -697,6 +697,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-family: "KaTeX_Main", serif;
   color: var(--math-num);
 }
+.mc-annot-loc { font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: var(--accent); }
+.mc-annot-str { font-family: -apple-system, "Hiragino Sans", sans-serif; font-size: 13.5px; color: var(--math-num); }
 .mc-comment {
   font-family: -apple-system, "Hiragino Sans", sans-serif;
   font-size: 13px;
@@ -886,6 +888,10 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .sync-dot.syncing, .sync-dot.pending { background: var(--warn); }
 .sync-dot.error { background: var(--err); }
 .account-head { padding: 6px 12px 8px; font-size: 12px; color: var(--text-dim); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.pref-row { margin-top: 14px; }
+.pref-label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.pref-opts { display: flex; gap: 16px; font-size: 13px; }
+.pref-opt { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .deps { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: "JetBrains Mono", monospace; }
 .learn-nav { display: flex; gap: 6px; margin-bottom: 14px; }
 .learn-nav select { flex: 1; min-width: 0; }
@@ -957,6 +963,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <div class="menu-sep"></div>
       <button class="menu-item" onclick="exportPdf()" data-only="local"><span class="mi-label">Export PDF (LaTeX)</span><span class="kbd">⇧⌘P</span></button>
       <button class="menu-item" onclick="printDocument()"><span class="mi-label">Print</span><span class="kbd">⌘P</span></button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" onclick="openPreferences()"><span class="mi-label">Preferences…</span><span class="kbd">⌘,</span></button>
     </div>
   </div>
   <div id="tabStrip" class="tab-strip"></div>
@@ -1089,6 +1097,14 @@ html:not(.web) [data-only="web"] { display: none !important; }
   </div>
 </div>
 <div id="toast" class="toast" hidden></div>
+<div id="prefBack" class="modal-back" hidden onmousedown="if (event.target === this) this.hidden = true">
+  <div class="modal">
+    <div class="modal-title">Preferences</div>
+    <div class="pref-row"><div class="pref-label">言語（読みの表示・Prose・LaTeX）</div><div id="prefLang" class="pref-opts"></div></div>
+    <div class="modal-note">下の言語のボタンで、エディタの読みの表示をオン・オフします。ファイルの中身は変わりません。</div>
+    <div class="modal-actions"><button class="ctrl-btn primary" onclick="document.getElementById('prefBack').hidden = true">閉じる</button></div>
+  </div>
+</div>
 <div id="treeBack" class="modal-back" hidden onmousedown="if (event.target === this) hideDerivation()">
   <div class="modal tree-modal" id="treeBody"></div>
 </div>
@@ -1259,18 +1275,20 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "Fix", preview: "Fix", desc: "∀-intro: Fix x | hx" },
   { cmd: "assume", preview: "assume", desc: "→-intro: assume h : P" },
   { cmd: "Obtain", preview: "Obtain", desc: "∃-elim: Obtain x, hx : e" },
-  { cmd: "have", preview: "have", desc: "lemma: have h : P := j" },
-  { cmd: "suffices", preview: "suffices", desc: "suffices P := j" },
   { cmd: "choose", preview: "choose", desc: "∃/∨-intro: choose t" },
   { cmd: "by_contra", preview: "by_contra", desc: "RAA: by_contra hn" },
   { cmd: "cases", preview: "cases", desc: "∨-elim: cases h" },
   { cmd: "induction", preview: "induction", desc: "induction n" },
   { cmd: "let", preview: "let", desc: "local def: let x := t" },
-  { cmd: "unfold", preview: "unfold", desc: "unfold P at h" },
   { cmd: "def", preview: "def", desc: "def P(a, b) := φ" },
   { cmd: "notation", preview: "notation", desc: "notation a \"⟶\" b := P(a, b)" },
   { cmd: "import", preview: "import", desc: "import analysis.limits" },
-  { cmd: "contradiction", preview: "contradiction", desc: "contradiction h1 h2" },
+  { cmd: "thm", preview: "thm", desc: "theorem: thm name :" },
+  { cmd: "axiom", preview: "axiom", desc: "axiom name : Γ ⊢ φ" },
+  { cmd: "rec", preview: "rec", desc: "primitive recursion: rec f(n : ℕ) : τ" },
+  { cmd: "typedef", preview: "typedef", desc: "typedef T := {x : σ | φ}" },
+  { cmd: "@name", preview: "@name", desc: "display name: @name ja \"…\"" },
+  { cmd: "edition", preview: "edition", desc: "file edition: edition 2026" },
   { cmd: "linarith", preview: "linarith", desc: "linear arithmetic solver" },
   { cmd: "ring", preview: "ring", desc: "ring normalization" },
   { cmd: "decide", preview: "decide", desc: "numerical decision" },
@@ -1278,7 +1296,7 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "sorry", preview: "sorry", desc: "placeholder goal" }
 ];
 
-const DECL_KWS = new Set(["thm", "axiom", "def", "rec", "notation", "import", "typedef"]);
+const DECL_KWS = new Set(["thm", "axiom", "def", "rec", "notation", "import", "typedef", "edition"]);
 const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "have", "suffices", "choose", "contradiction", "cases", "Case", "induction", "let", "unfold", "at", "by"]);
 const JUST_KWS = new Set(["ring", "linarith", "refl", "decide", "sorry", "left", "right", "zero", "succ", "EQ1", "EQ2"]);
 const UPRIGHT_FNS = new Set(["max", "min", "sup", "inf", "sin", "cos", "tan", "exp", "log", "ln", "gcd", "lcm", "det", "dim", "ker", "im", "deg", "sgn", "mod", "Prop"]);
@@ -1837,6 +1855,21 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
     for (let k = 0; k < Math.min(4, items.length); k++) {
       if (items[k].kind === "char") rawPrefix += items[k].ch;
     }
+    // 訳名の注釈 @name ja "…"：@name・ロケール・訳名をそれぞれの色で（数式にしない）
+    if (rawPrefix.startsWith("@")) {
+      let field = 0, prevSpace = false;
+      for (let i = startIdx; i < endIdx; i++) {
+        const it = items[i];
+        const sp = it.kind === "char" && it.ch === " ";
+        if (sp && !prevSpace && field < 2) field++;
+        prevSpace = sp;
+        const cls = field === 0 ? "mc-kw-decl" : field === 1 ? "mc-annot-loc" : "mc-annot-str";
+        if (isFocusedSeq && cursor.offset === i) html += `<span class="mc-caret"></span>`;
+        html += renderSingleItemHtml(seq, it, i, cls);
+      }
+      if (isFocusedSeq && cursor.offset === endIdx) html += `<span class="mc-caret"></span>`;
+      return html;
+    }
     if (rawPrefix.startsWith("//") || rawPrefix.startsWith("--") || rawPrefix.startsWith("#")) {
       const cls = rawPrefix.startsWith("#") ? "mc-heading" : "mc-comment";
       html += `<span class="${cls}">`;
@@ -2118,7 +2151,10 @@ function renderRootSeqWithLens(rootSeq, lineNo) {
 
 // ---- 読みの表示（レンズ）：src/locale/*.txt の表（/locales.js）で、行の構造を保ったまま読みに置き換える
 
-let lensLocale = localStorage.getItem("narfi.lens") || "";
+// 言語の設定（読みの表示・Prose・LaTeX の言語）と、読みの表示のオン・オフ
+let prefLang = localStorage.getItem("narfi.locale") || (["ja", "en"].includes(localStorage.getItem("narfi.lens")) ? localStorage.getItem("narfi.lens") : "ja");
+let lensOn = localStorage.getItem("narfi.lens.on") === "1" || ["ja", "en"].includes(localStorage.getItem("narfi.lens"));
+let lensLocale = lensOn ? prefLang : "";
 let lensHeaderLines = new Set();
 const lensCache = {};
 
@@ -3193,9 +3229,26 @@ function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
 
 function updateAutocomplete() {
   const seq = seqMap.get(cursor.seqId);
-  if (!seq || isCommentLine(seq)) {
+  const lineText = seq && seq.slotName === "root" ? seq.items.filter((x) => x.kind === "char").map((x) => x.ch).join("") : "";
+  const annot = lineText.startsWith("@");
+  if (!seq || (isCommentLine(seq) && !annot)) {
     acPopup.style.display = "none";
     acMatches = [];
+    return;
+  }
+  // @name の行：@name と、ロケールの名前（ja・en）だけを補う
+  if (annot) {
+    let st = cursor.offset;
+    while (st > 0 && seq.items[st - 1].kind === "char" && /[A-Za-z@]/.test(seq.items[st - 1].ch)) st--;
+    const w = seq.items.slice(st, cursor.offset).map((x) => x.ch).join("");
+    const cands = st === 0
+      ? [{ cmd: "@name", preview: "@name", desc: "display name: @name ja \"…\"" }]
+      : /^@name\s+\S*$/.test(lineText.slice(0, cursor.offset)) ? Object.keys(window.NARFI_LOCALES || { ja: 1, en: 1 }).map((l) => ({ cmd: l, preview: l, desc: l === "ja" ? "日本語" : l === "en" ? "English" : l })) : [];
+    acMatches = cands.filter((c) => c.cmd.startsWith(w) && c.cmd !== w && (w.length >= 1 || st > 0));
+    acRange = { seqId: seq.id, startOffset: st, endOffset: cursor.offset, isSlash: false };
+    if (!acMatches.length) { acPopup.style.display = "none"; return; }
+    acIndex = 0;
+    renderAcPopup();
     return;
   }
   let start = cursor.offset;
@@ -3262,6 +3315,7 @@ editorSurface.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.altKey) {
     const k = e.key.toLowerCase();
     if (k === "z") { e.preventDefault(); undoDoc(e.shiftKey ? 1 : -1); return; }
+    if (k === ",") { e.preventDefault(); openPreferences(); return; }
     if (k === "y") { e.preventDefault(); undoDoc(1); return; }
     if (k === "a") { e.preventDefault(); selectAll(); return; }
   }
@@ -3532,7 +3586,7 @@ async function runCheckApi() {
     const resp = await fetch("/api/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src, cursor_line, path: currentFilePath, locale: lensLocale || "ja" })
+      body: JSON.stringify({ src, cursor_line, path: currentFilePath, locale: prefLang })
     });
     const data = await resp.json();
     lastCheckData = data;
@@ -3852,7 +3906,7 @@ function renderProseTab(data) {
         html += `<div class="prose-thm prose-broken"><strong>定理 ${escHtml(d.name)}</strong></div>`;
         html += `<div class="prose-err" onclick="jumpToLine(${d.error.line - 1})">${d.error.line} 行目：${msgHtml(d.error)}</div>`;
       } else {
-        const thmWord = lensLocale === "en" ? "Theorem" : "定理";
+        const thmWord = prefLang === "en" ? "Theorem" : "定理";
         const title = d.display_name ? `${escHtml(d.display_name)} <span style="color:var(--text-faint);font-weight:400">${escHtml(d.name)}</span>` : escHtml(d.name);
         html += `<div class="prose-thm"><div><strong>${thmWord} ${title}</strong></div><div style="margin-top:6px;overflow-x:auto;">${renderKatex(d.header_latex, false)}</div></div>`;
         html += `<div class="prose-proof">`;
@@ -3870,27 +3924,55 @@ function renderProseTab(data) {
 
 function renderLatexTab(data) {
   const decls = data.decls || [];
-  const en = lensLocale === "en";
+  const en = prefLang === "en";
   let tex = `\\documentclass[a4paper,11pt]{${en ? "article" : "ltjsarticle"}}\n\\usepackage{amsmath,amssymb,amsthm}\n\\newtheorem{theorem}{${en ? "Theorem" : "定理"}}\n\\newtheorem{axiom}{${en ? "Axiom" : "公理"}}\n\\begin{document}\n\n`;
   for (const d of decls) tex += (d.latex_env || "") + "\n";
   tex += "\\end{document}\n";
   document.getElementById("latexArea").value = tex;
 }
 
-// 読みの表示：なし → 日本語 → 英語 → なし（ファイルは変わらない）
+// 読みの表示のオン・オフ（言語は Preferences で選ぶ。ファイルは変わらない）
 function toggleJpLens() {
-  lensLocale = lensLocale === "" ? "ja" : lensLocale === "ja" ? "en" : "";
-  localStorage.setItem("narfi.lens", lensLocale);
+  lensOn = !lensOn;
+  localStorage.setItem("narfi.lens.on", lensOn ? "1" : "0");
+  localStorage.removeItem("narfi.lens");
+  lensLocale = lensOn ? prefLang : "";
+  updateLensButton();
+  renderEditor();
+}
+
+function setPrefLang(l) {
+  prefLang = l;
+  localStorage.setItem("narfi.locale", l);
+  lensLocale = lensOn ? prefLang : "";
   updateLensButton();
   refreshAfterEdit();
 }
 
+const LANG_NAMES = { ja: "日本語", en: "English" };
+
 function updateLensButton() {
   const btn = document.getElementById("btnJpLens");
-  btn.textContent = lensLocale === "en" ? "EN" : "JA";
-  btn.classList.toggle("active", !!lensLocale);
-  btn.title = lensLocale ? `読みの表示：${lensLocale === "ja" ? "日本語" : "英語"}（押すと切り替え。ファイルは変わらない）` : "読みの表示：なし（押すと日本語 → 英語）";
+  btn.textContent = prefLang.toUpperCase();
+  btn.classList.toggle("active", lensOn);
+  btn.title = `読みの表示（${LANG_NAMES[prefLang] || prefLang}）：${lensOn ? "オン" : "オフ"}。言語は File → Preferences で変える`;
 }
+
+function openPreferences() {
+  closeFileMenu();
+  acPopup.style.display = "none";
+  acMatches = [];
+  const back = document.getElementById("prefBack");
+  const langs = Object.keys(window.NARFI_LOCALES || { ja: 1, en: 1 });
+  document.getElementById("prefLang").innerHTML = langs
+    .map((l) => `<label class="pref-opt"><input type="radio" name="prefLang" value="${l}" ${l === prefLang ? "checked" : ""}> ${escHtml(LANG_NAMES[l] || l)}</label>`)
+    .join("");
+  back.hidden = false;
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.name === "prefLang") setPrefLang(e.target.value);
+});
 
 function toggleTheme() {
   const root = document.documentElement;

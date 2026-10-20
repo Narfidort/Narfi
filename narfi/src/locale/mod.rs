@@ -122,7 +122,16 @@ impl Locale {
             .or_else(|| locale("ja").and_then(|j| j.prose.get(key)))
             .cloned()
             .unwrap_or_else(|| format!("[{key}]"));
-        let mut out = tpl;
+        // 言い回しの変化：「A || B || C」なら、同じ文書の中で使うたびに順に替える（よって → ゆえに → したがって）
+        let variants: Vec<&str> = tpl.split(" || ").collect();
+        let k = USES.with(|u| {
+            let mut u = u.borrow_mut();
+            let c = u.entry(key.to_string()).or_insert(0);
+            let k = *c;
+            *c += 1;
+            k
+        });
+        let mut out = variants[k % variants.len()].to_string();
         for (k, v) in vals {
             out = out.replace(&format!("{{{k}}}"), v);
         }
@@ -141,6 +150,25 @@ pub fn locale(name: &str) -> Option<&'static Locale> {
 }
 
 thread_local! {
+    /// 言い回しを使った回数（鍵ごと。文書ごとに reset_variation で 0 に戻す）
+    static USES: std::cell::RefCell<HashMap<String, usize>> = std::cell::RefCell::new(HashMap::new());
+}
+
+/// 言い回しの順番の今の状態（同じ証明の Prose と LaTeX で同じ言い回しにするため）
+pub fn variation_state() -> HashMap<String, usize> {
+    USES.with(|u| u.borrow().clone())
+}
+
+pub fn set_variation_state(st: HashMap<String, usize>) {
+    USES.with(|u| *u.borrow_mut() = st);
+}
+
+/// 言い回しの順番を最初に戻す（文書を書き始めるときに呼ぶ。同じ文書は毎回同じ文章になる）
+pub fn reset_variation() {
+    USES.with(|u| u.borrow_mut().clear());
+}
+
+thread_local! {
     /// 証明の文章（Prose・LaTeX）を書くロケール。既定は日本語
     static CURRENT: std::cell::Cell<&'static str> = const { std::cell::Cell::new("ja") };
 }
@@ -149,6 +177,7 @@ thread_local! {
 pub fn set_current(name: &str) {
     let n = locale(name).map(|l| l.name).unwrap_or("ja");
     CURRENT.with(|c| c.set(n));
+    reset_variation();
 }
 
 pub fn current() -> &'static Locale {

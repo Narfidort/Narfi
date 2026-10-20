@@ -302,6 +302,7 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
 
 /// LaTeX の文書全体（LuaLaTeX + ltjsarticle）。title が空なら表題をつけない。
 pub fn latex_document(title: &str, items: &[(&Decl, &[StepTrace])]) -> String {
+    crate::locale::reset_variation();
     let mut out = String::new();
     out.push_str("\\documentclass[a4paper,11pt]{ltjsarticle}\n");
     out.push_str("\\usepackage{amsmath,amssymb,amsthm}\n");

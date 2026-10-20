@@ -69,17 +69,17 @@ induction_ih_unknown	 (induction hypothesis ${h}$)
 induction_succ	**(Inductive step)** Assume the claim for ${n} = {k}${ih}; we show it for $S({k})$:
 unfold	Unfold the definition of {n}.
 unfold_at	Unfold the definition of {n} in {h}.
-therefore	Therefore ${f}$. $\blacksquare$
+therefore	Therefore ${f}$. $\blacksquare$ || Hence ${f}$. $\blacksquare$ || Thus ${f}$. $\blacksquare$
 label	 (${h}$)
 show_block	First we show ${f}${label}.
-show	By ${j}$, ${f}${label}.
+show	By ${j}$, ${f}${label}. || From ${j}$ we get ${f}${label}. || Using ${j}$, ${f}${label}.
 show_unjustified	${f}${label} (no justification written).
 sorry	(※ unfinished: `sorry`)
 close_refl	This holds by reflexivity. $\blacksquare$
 close_ring	This holds by algebraic computation. $\blacksquare$
 close_linarith	This follows from the inequalities. $\blacksquare$
 close_decide	This holds by direct computation. $\blacksquare$
-close	This follows from ${j}$. $\blacksquare$
+close	This follows from ${j}$. $\blacksquare$ || By ${j}$, we are done. $\blacksquare$
 theorem	Theorem
 axiom	Axiom
 proof	Proof

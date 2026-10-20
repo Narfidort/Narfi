@@ -180,8 +180,11 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
 
     let header_latex = prose::decl_header_latex(d);
     let concl_latex = d.concl.to_latex();
-    let prose_blocks = prose::decl_to_japanese_prose(d, &r.steps);
+    // Prose と LaTeX で同じ言い回しになるよう、言い回しの順番をそろえる
+    let before = crate::locale::variation_state();
     let latex_env = prose::decl_to_latex_env(d, &r.steps);
+    crate::locale::set_variation_state(before);
+    let prose_blocks = prose::decl_to_japanese_prose(d, &r.steps);
 
     let err_json = match &r.err {
         Some(e) => {
