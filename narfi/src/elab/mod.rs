@@ -139,6 +139,10 @@ pub struct StepTrace {
     pub goal_latex: Option<String>,
     /// 次の一手の候補（goal と仮定の形から。src は書くもの、why は理由）
     pub hints: Vec<(String, String)>,
+    /// 文脈（goal と仮定、定義を展開した形も）に現れる式。エディタの記法の補完に使う（docs/system/editor.md）
+    pub terms: Vec<String>,
+    /// 数列（ℕ → 何か）の変数の名前
+    pub seqs: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -224,7 +228,73 @@ impl<'a> Checker<'a> {
             goal: goal.as_ref().map(|g| g.to_string()),
             goal_latex: goal.as_ref().map(|g| g.to_latex()),
             hints: goal.as_ref().map(|g| self.hints(ctx, g)).unwrap_or_default(),
+            terms: self.context_terms(ctx, goal),
+            seqs: self.seq_vars(ctx).into_iter().collect(),
         });
+    }
+
+    fn seq_vars(&self, ctx: &Ctx) -> std::collections::BTreeSet<String> {
+        ctx.entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Var(x, s, _) if self.zonk_sort(s).starts_with("ℕ →") => Some(x.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 文脈に現れる式（goal が先、仮定は新しい順。定義の述語は 3 段まで展開した形も見る）
+    fn context_terms(&self, ctx: &Ctx, goal: &Option<Formula>) -> Vec<String> {
+        let seqs = self.seq_vars(ctx);
+        let mut out: Vec<String> = Vec::new();
+        let mut fs: Vec<Formula> = Vec::new();
+        if let Some(g) = goal {
+            let g = self.zonk_f(g);
+            fs.push(self.unfold_deep(&g, 3));
+            fs.push(g);
+        }
+        for e in ctx.entries.iter().rev() {
+            match e {
+                Entry::Hyp(h, f) if !h.starts_with('#') && !h.ends_with(".def") => {
+                    let f = self.zonk_f(f);
+                    fs.push(f.clone());
+                    fs.push(self.unfold_deep(&f, 3));
+                }
+                Entry::Def(_, _, t) => fs.push(Formula::Atom("=".into(), vec![t.clone(), t.clone()])),
+                _ => {}
+            }
+        }
+        for f in &fs {
+            collect_terms_f(f, &mut |t| {
+                if out.len() < 80 && !t.has_meta() && !hidden_name(t) {
+                    let s = crate::syntax::show_term_sub(t, &seqs);
+                    if !out.contains(&s) {
+                        out.push(s);
+                    }
+                }
+            });
+        }
+        out
+    }
+
+    /// 述語の定義を、式のどの位置でも depth 段まで展開する
+    fn unfold_deep(&self, f: &Formula, depth: u32) -> Formula {
+        if depth == 0 {
+            return f.clone();
+        }
+        let go = |g: &Formula| self.unfold_deep(g, depth);
+        match f {
+            Formula::Atom(..) => match self.unfold_head(f) {
+                Some(g) => self.unfold_deep(&g, depth - 1),
+                None => f.clone(),
+            },
+            Formula::Bot => Formula::Bot,
+            Formula::Imp(a, b) => Formula::Imp(Box::new(go(a)), Box::new(go(b))),
+            Formula::And(a, b) => Formula::And(Box::new(go(a)), Box::new(go(b))),
+            Formula::Or(a, b) => Formula::Or(Box::new(go(a)), Box::new(go(b))),
+            Formula::Forall(x, t, b) => Formula::Forall(x.clone(), t.clone(), Box::new(go(b))),
+            Formula::Exists(x, t, b) => Formula::Exists(x.clone(), t.clone(), Box::new(go(b))),
+        }
     }
 
     /// goal と仮定の形から、次に書けるもの（docs/language/syntax.md の早見表と同じ考え方）
@@ -594,4 +664,40 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
         }
     }
     Ok(reports)
+}
+
+/// 式の中の、変数・数でない項（外側から順に）
+fn collect_terms_f(f: &Formula, k: &mut dyn FnMut(&Term)) {
+    match f {
+        Formula::Atom(_, ts) => ts.iter().for_each(|t| collect_terms_t(t, k)),
+        Formula::Bot => {}
+        Formula::Imp(a, b) | Formula::And(a, b) | Formula::Or(a, b) => {
+            collect_terms_f(a, k);
+            collect_terms_f(b, k);
+        }
+        Formula::Forall(_, _, b) | Formula::Exists(_, _, b) => collect_terms_f(b, k),
+    }
+}
+
+fn collect_terms_t(t: &Term, k: &mut dyn FnMut(&Term)) {
+    match t {
+        Term::Var(_) | Term::Num(_) | Term::Meta(_) => {}
+        Term::App(_, args) => {
+            k(t);
+            args.iter().for_each(|a| collect_terms_t(a, k));
+        }
+        Term::Lam(_, b) => {
+            k(t);
+            collect_terms_t(b, k);
+        }
+        Term::Set(_, f) => collect_terms_f(f, k),
+    }
+}
+
+/// 内部の名前（#…・%…・?…）を含む項は、ソースに書けないので候補にしない
+fn hidden_name(t: &Term) -> bool {
+    let mut vs = std::collections::BTreeSet::new();
+    t.vars(&mut vs);
+    let bad = |x: &str| x.starts_with('#') || x.starts_with('%') || x.starts_with('?');
+    vs.iter().any(|x| bad(x)) || matches!(t, Term::App(f, _) if bad(f))
 }

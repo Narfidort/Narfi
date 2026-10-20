@@ -601,6 +601,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .mc-bigop-sup {
   font-size: 0.68em;
 }
+.mc-bigop.lt .mc-bigop-sup { display: none; }
+.ac-math .mc-bigop { font-size: 0.9em; }
 .mc-bigop-sym {
   font-family: "KaTeX_Size1", "KaTeX_Main", serif;
   font-size: 1.25em;
@@ -770,6 +772,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-size: 15px;
   min-width: 36px;
 }
+.ac-preview.ac-math { font-family: inherit; white-space: nowrap; }
 .ac-cmd {
   color: var(--text);
   font-weight: 500;
@@ -1167,7 +1170,7 @@ const COMMAND_DICT = [
   { cmd: "bar", preview: "x̄", desc: "overline bar", kind: "accent", fnName: "bar", mark: "bar" },
   { cmd: "overline", preview: "x̄", desc: "overline bar", kind: "accent", fnName: "bar", mark: "bar" },
   { cmd: "tilde", preview: "x̃", desc: "tilde accent", kind: "accent", fnName: "tilde", mark: "~" },
-  { cmd: "sum", preview: "∑", desc: "summation ∑_{}^{}", kind: "bigop", fnName: "sum", sym: "∑" },
+  { cmd: "sum", preview: "∑", desc: "finite sum ∑_{k<n} = sum((k : ℕ ↦ …), n)", kind: "bigop", fnName: "sum", sym: "∑" },
   { cmd: "prod", preview: "∏", desc: "product ∏_{}^{}", kind: "bigop", fnName: "prod", sym: "∏" },
   { cmd: "int", preview: "∫", desc: "integral ∫_{}^{}", kind: "bigop", fnName: "int", sym: "∫" },
   { cmd: "sub", preview: "x_i", desc: "subscript", kind: "sub" },
@@ -1467,6 +1470,19 @@ function parseAsciiToItems(str) {
     // 1. Structured Function Calls: abs(...), sqrt(...), norm(...), floor(...), ceil(...), set(...), inner(...), binom(n,k), vec/hat/bar/tilde(...), sum/prod/int(...)
     let fnMatch = str.slice(i).match(/^(abs|sqrt|norm|floor|ceil|set|inner|binom|vec|hat|bar|tilde|sum|prod|int)\(/);
     // sum(…)・prod(…)・int(…) は引数が 3 つのときだけ Σ の入力欄にする（sum(a, n) は lib/algebra/sum の関数）
+    // sum((k : ℕ ↦ 中身), n) は Σ_{k<n} 中身 の入力欄にする（書き戻すと同じ形。lib/algebra/sum）
+    let sumLam = null;
+    if (fnMatch && fnMatch[1] === "sum" && !(i > 0 && /[A-Za-z0-9_.]/.test(str[i - 1]))) {
+      const close = findMatchingClose(str, i + 3, "(", ")");
+      const args = close > i + 3 ? splitTopLevelCommaArgs(str.substring(i + 4, close)) : [];
+      const m = args.length === 2 && args[0].trim().match(/^\(\s*([A-Za-z\u0370-\u03ff]\w*)\s*:\s*(?:ℕ|Nat)\s*(?:↦|\|->)\s*([\s\S]*)\)$/);
+      if (m && findMatchingClose(args[0].trim(), 0, "(", ")") === args[0].trim().length - 1) sumLam = { k: m[1], body: m[2].trim(), n: args[1].trim(), close };
+    }
+    if (sumLam) {
+      items.push(makeBigOp("sum", "∑", parseAsciiToItems(`${sumLam.k}<${sumLam.n}`), [], parseAsciiToItems(sumLam.body)));
+      i = sumLam.close + 1;
+      continue;
+    }
     if (fnMatch && ["sum", "prod", "int"].includes(fnMatch[1]) && (i > 0 && /[A-Za-z0-9_.]/.test(str[i - 1]) ||
         splitTopLevelCommaArgs(str.substring(i + fnMatch[1].length + 1, Math.max(i + fnMatch[1].length + 1, findMatchingClose(str, i + fnMatch[1].length, "(", ")")))).length !== 3)) {
       fnMatch = null;
@@ -1782,7 +1798,13 @@ function serializeSeqToAscii(seq) {
     } else if (it.kind === "accent") {
       out += `${it.fnName}(${serializeSeqToAscii(it.body).trim()})`;
     } else if (it.kind === "bigop") {
-      out += `${it.fnName}(${serializeSeqToAscii(it.sub).trim() || "0"}, ${serializeSeqToAscii(it.sup).trim() || "0"}, ${serializeSeqToAscii(it.body).trim() || "0"})`;
+      const sub = serializeSeqToAscii(it.sub).trim(), sup = serializeSeqToAscii(it.sup).trim(), body = serializeSeqToAscii(it.body).trim();
+      const lt = it.fnName === "sum" && sub.match(/^([A-Za-z\u0370-\u03ff]\w*)\s*<\s*(.+)$/);
+      const from0 = it.fnName === "sum" && sub.match(/^([A-Za-z\u0370-\u03ff]\w*)\s*=\s*0$/);
+      // Σ_{k<n} 中身 = sum((k : ℕ ↦ 中身), n)、Σ_{k=0}^{m} 中身 = sum((k : ℕ ↦ 中身), m + 1)
+      if (lt && !sup) out += `sum((${lt[1]} : Nat |-> ${body}), ${lt[2].trim()})`;
+      else if (from0 && sup) out += `sum((${from0[1]} : Nat |-> ${body}), ${sup} + 1)`;
+      else out += `${it.fnName}(${sub || "0"}, ${sup || "0"}, ${body || "0"})`;
     }
   }
   return out;
@@ -2033,7 +2055,8 @@ function renderSingleItemHtml(seq, it, idx, charCls) {
       `</span>`;
   }
   if (it.kind === "bigop") {
-    return `<span class="mc-bigop" data-seq="${seq.id}" data-idx="${idx}">` +
+    const ltForm = it.fnName === "sum" && it.sup.items.length === 0 && cursor.seqId !== it.sup.id && it.sub.items.some((x) => x.kind === "char" && x.ch === "<");
+    return `<span class="mc-bigop${ltForm ? " lt" : ""}" data-seq="${seq.id}" data-idx="${idx}">` +
       `<span class="mc-bigop-stack">` +
         `<span class="mc-bigop-sup">${renderSlotSeqHtml(it.sup)}</span>` +
         `<span class="mc-bigop-sym">${escHtml(it.sym)}</span>` +
@@ -3186,6 +3209,25 @@ function tryAutoConvertPrecedingWord(seq, wordEndOffset) {
 }
 
 function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
+  if (entry.kind === "ctxterm") {
+    // 文脈の式：数式の入力欄の形で入れる。(n ↦ のあとに ) があれば、それも置き換える
+    if (acRange && acRange.eatClose && seq.items[replaceEnd] && seq.items[replaceEnd].kind === "char" && seq.items[replaceEnd].ch === ")") replaceEnd++;
+    const ins = parseAsciiToItems(entry.text);
+    for (const it of ins) it.parentSeq = seq;
+    seq.items.splice(replaceStart, replaceEnd - replaceStart, ...ins);
+    cursor.seqId = seq.id; cursor.offset = replaceStart + ins.length;
+    // 中身が空の λ（sum((k : ℕ ↦ ), n)）なら、↦ のあとにカーソルを置く
+    const hole = entry.text.indexOf("↦ )");
+    if (hole >= 0) {
+      for (let q = replaceStart; q < replaceStart + ins.length; q++) {
+        if (seq.items[q].kind === "sym" && seq.items[q].ascii === "|->") { cursor.offset = q + 2; break; }
+      }
+    }
+    acPopup.style.display = "none";
+    acMatches = [];
+    onDocMutated();
+    return;
+  }
   if (entry.kind === "frac") {
     const node = makeFrac([], [], seq);
     seq.items.splice(replaceStart, replaceEnd - replaceStart, node);
@@ -3226,6 +3268,14 @@ function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
     const node = makeAccent(entry.fnName, entry.mark, [], seq);
     seq.items.splice(replaceStart, replaceEnd - replaceStart, node);
     cursor.seqId = node.body.id; cursor.offset = 0;
+  } else if (entry.kind === "bigop" && entry.fnName === "sum") {
+    // Σ_{k<n}：走る添字 k と上限を入れた形で作り、中身にカーソルを置く
+    const info = ctxInfoAtCursor();
+    const k = freshIndex(info, "k");
+    const n = info.nats[0] || "n";
+    const node = makeBigOp("sum", "∑", parseAsciiToItems(`${k}<${n}`), [], [], seq);
+    seq.items.splice(replaceStart, replaceEnd - replaceStart, node);
+    cursor.seqId = node.body.id; cursor.offset = 0;
   } else if (entry.kind === "bigop") {
     const node = makeBigOp(entry.fnName, entry.sym, [], [], [], seq);
     seq.items.splice(replaceStart, replaceEnd - replaceStart, node);
@@ -3249,6 +3299,162 @@ function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
   acPopup.style.display = "none";
   acMatches = [];
   onDocMutated();
+}
+
+// ================================================================
+// 文脈の式の補完（記法の補完）：検査器が返すカーソル行の文脈の式（steps[].terms・seqs）から候補を作る。
+//   |       → 文脈の絶対値 |a_n - α| など（続けて打った文字で絞る。\abs の中でも）
+//   (n ↦    → 数列 (n : ℕ ↦ a_n + b_n) など
+//   \sum    → sum(a, n)・sum((k : ℕ ↦ a_k), n)
+//   Ctrl+Space（⌥Space）→ 文脈の式をすべて（打ちかけの語で絞る）
+// 候補は出すだけで、Tab・Enter で選ぶまで入らない（docs/principles.md の原則 2）。
+// ================================================================
+let ctxInfoCache = new Map(); // 宣言の名前 → 最後に取れた steps（入力の途中で検査が通らないときに使う）
+
+function ctxInfoAtCursor() {
+  const curLine = cursor.lineIdx + 1;
+  const decls = (lastCheckData && lastCheckData.decls) || [];
+  let d = null;
+  for (const x of decls) if (x.line <= curLine) d = x;
+  let steps = d && d.steps && d.steps.length ? d.steps : null;
+  if (d && steps) ctxInfoCache.set(d.name, steps);
+  if (d && !steps) steps = ctxInfoCache.get(d.name) || null;
+  let st = null;
+  for (const x of steps || []) if (x.line <= curLine) st = x;
+  if (!st && steps) st = steps[0];
+  const terms = (st && st.terms) || [];
+  const seqs = new Set((st && st.seqs) || []);
+  const nats = new Set();
+  for (const c of (st && st.ctx) || []) {
+    const m = c.match(/^(\S+) : ℕ(?:\s+\(|$)/);
+    if (m) nats.add(m[1]);
+  }
+  // 見出しを書いている途中（まだ検査が通らない）：宣言の行から `a : ℕ → ℝ`・`n : ℕ` を拾う
+  let li = cursor.lineIdx;
+  while (li > 0 && !/^(thm|axiom|def|rec)\s/.test(serializeSeqToAscii(docLines[li].rootSeq).trim())) li--;
+  for (let k = li; k <= cursor.lineIdx && k < docLines.length; k++) {
+    const t = serializeSeqToAscii(docLines[k].rootSeq);
+    for (const m of t.matchAll(/([A-Za-zͰ-Ͽ][\w']*)\s*:\s*(Nat|ℕ)\s*(->|→)/g)) seqs.add(m[1]);
+    for (const m of t.matchAll(/([A-Za-zͰ-Ͽ][\w']*)\s*:\s*(Nat|ℕ)\s*(?=[,)\]]|$|\|-|⊢)/g)) nats.add(m[1]);
+  }
+  return { terms, seqs: [...seqs], nats: [...nats] };
+}
+
+function mathPreviewHtml(text) {
+  const saved = nextSeqId;
+  const root = createSeq(parseAsciiToItems(text), null, "root");
+  const html = renderItemsSliceHtml(root, 0, root.items.length);
+  for (let id = saved; id < nextSeqId; id++) seqMap.delete(id);
+  nextSeqId = saved;
+  return html.replace(/ data-(?:seq|idx|slot-seq|line-idx)="[^"]*"/g, "");
+}
+
+const squashSp = (t) => t.replace(/\s+/g, "");
+
+function ctxEntry(text, desc) {
+  // sum(a, n) は Σ_{k<n} a_k の形で見せる（入るのは sum(a, n)）
+  const m = text.match(/^sum\(([A-Za-z\u0370-\u03ff]\w*), (.+)\)$/);
+  const shown = m ? `sum((k : ℕ ↦ ${m[1]}_k), ${m[2]})` : text;
+  return { cmd: "", preview: text, previewHtml: mathPreviewHtml(shown), desc, kind: "ctxterm", text };
+}
+
+// 走る文字：文脈で使われていないもの
+function freshIndex(info, prefer) {
+  const used = new Set([...info.seqs, ...info.nats]);
+  for (const v of [prefer, "n", "k", "m", "i", "j"]) if (v && !used.has(v)) return v;
+  return "k";
+}
+
+function lamCandidates(info, v) {
+  const out = [];
+  for (const t of info.terms) if (/^\(.*↦/.test(t)) out.push(t);
+  const sq = info.seqs.slice(0, 3);
+  const x = v || freshIndex(info, "n");
+  for (const a of sq) out.push(`(${x} : ℕ ↦ ${a}_${x})`);
+  for (let i = 0; i < sq.length; i++) for (let j = i + 1; j < sq.length; j++) {
+    const [a, b] = [sq[i], sq[j]];
+    out.push(`(${x} : ℕ ↦ ${a}_${x} + ${b}_${x})`, `(${x} : ℕ ↦ ${a}_${x} - ${b}_${x})`, `(${x} : ℕ ↦ ${a}_${x} * ${b}_${x})`);
+  }
+  for (const a of sq) out.push(`(${x} : ℕ ↦ ${a}_{${x} + 1})`);
+  return [...new Set(out)];
+}
+
+function sumCandidates(info) {
+  const out = [];
+  for (const t of info.terms) if (/^sum\(/.test(t)) out.push(t);
+  const ns = info.nats.length ? info.nats.slice(0, 2) : ["n"];
+  const k = freshIndex(info, "k");
+  for (const n of ns) {
+    for (const a of info.seqs.slice(0, 3)) out.push(`sum(${a}, ${n})`);
+    if (info.seqs.length >= 2) out.push(`sum((${k} : ℕ ↦ ${info.seqs[0]}_${k} + ${info.seqs[1]}_${k}), ${n})`);
+    out.push(`sum((${k} : ℕ ↦ ), ${n})`);
+  }
+  return [...new Set(out)];
+}
+
+// 項の始まりの位置か（直前が空白・開き括弧・演算子・行頭）
+function atTermStart(seq, i) {
+  if (i === 0) return true;
+  const p = seq.items[i - 1];
+  if (p.kind === "sym") return true;
+  return p.kind === "char" && /[\s(\[,=<>+\-*·:]/.test(p.ch);
+}
+
+// 補完の候補（文脈の式）。見つからなければ null
+function contextAutocomplete(seq) {
+  const info = ctxInfoAtCursor();
+  // \abs などで作った絶対値の中
+  if (seq.parentNode && seq.parentNode.kind === "abs" && seq.slotName !== "root") {
+    const typed = squashSp(serializeSeqToAscii(seq));
+    const c = info.terms.filter((t) => t.startsWith("|") && t.endsWith("|")).map((t) => t.slice(1, -1).trim())
+      .filter((t) => squashSp(t).startsWith(typed) && squashSp(t) !== typed);
+    if (c.length) return { matches: c.map((t) => ctxEntry(t, "文脈の式")), range: { seqId: seq.id, startOffset: 0, endOffset: seq.items.length } };
+  }
+  // | のあと
+  for (let i = cursor.offset - 1; i >= 0 && cursor.offset - i <= 40; i--) {
+    const it = seq.items[i];
+    if (it.kind === "char" && it.ch === "|") {
+      if (!atTermStart(seq, i)) break;
+      if (i > 0 && seq.items[i - 1].kind === "char" && seq.items[i - 1].ch === "\\") break;
+      // `Fix ε | hε : …` の | は絶対値ではない（| のすぐあとが空白）
+      if (seq.items[i + 1] && seq.items[i + 1].kind === "char" && seq.items[i + 1].ch === " ") break;
+      const typed = squashSp(serializeSeqToAscii({ items: seq.items.slice(i + 1, cursor.offset) }));
+      const c = info.terms.filter((t) => t.startsWith("|") && t.endsWith("|") && squashSp(t).startsWith("|" + typed) && squashSp(t) !== "|" + typed);
+      if (c.length) return { matches: c.map((t) => ctxEntry(t, "文脈の式")), range: { seqId: seq.id, startOffset: i, endOffset: cursor.offset } };
+      break;
+    }
+    if (it.kind === "char" && /[\s=<>]/.test(it.ch)) break;
+  }
+  // (n ↦ のあと：数列
+  let j = cursor.offset;
+  while (j > 0 && seq.items[j - 1].kind === "char" && seq.items[j - 1].ch === " ") j--;
+  if (j > 0 && seq.items[j - 1].kind === "sym" && seq.items[j - 1].ascii === "|->") {
+    let o = j - 1;
+    while (o > 0 && !(seq.items[o - 1].kind === "char" && seq.items[o - 1].ch === "(") && j - o < 20) o--;
+    if (o > 0 && seq.items[o - 1].kind === "char" && seq.items[o - 1].ch === "(") {
+      const binder = serializeSeqToAscii({ items: seq.items.slice(o, j - 1) }).trim();
+      const m = binder.match(/^([A-Za-z]\w*)\s*(?::\s*(?:Nat|ℕ))?$/);
+      const c = lamCandidates(info, m ? m[1] : null);
+      if (c.length) return { matches: c.map((t) => ctxEntry(t, "数列")), range: { seqId: seq.id, startOffset: o - 1, endOffset: cursor.offset, eatClose: true } };
+    }
+  }
+  return null;
+}
+
+function showContextTerms() {
+  const seq = seqMap.get(cursor.seqId);
+  if (!seq || isCommentLine(seq)) return;
+  const info = ctxInfoAtCursor();
+  let start = cursor.offset;
+  while (start > 0 && seq.items[start - 1].kind === "char" && /[A-Za-z0-9_]/.test(seq.items[start - 1].ch)) start--;
+  const w = squashSp(serializeSeqToAscii({ items: seq.items.slice(start, cursor.offset) }));
+  const all = [...info.terms, ...lamCandidates(info, null), ...sumCandidates(info)];
+  const c = [...new Set(all)].filter((t) => !w || squashSp(t).startsWith(w));
+  if (!c.length) { uiToast("この行の文脈に、補える式がありません"); return; }
+  acMatches = c.map((t) => ctxEntry(t, "文脈の式"));
+  acRange = { seqId: seq.id, startOffset: start, endOffset: cursor.offset, isSlash: false };
+  acIndex = 0;
+  renderAcPopup();
 }
 
 function updateAutocomplete() {
@@ -3275,6 +3481,14 @@ function updateAutocomplete() {
     renderAcPopup();
     return;
   }
+  const ctxAc = contextAutocomplete(seq);
+  if (ctxAc) {
+    acMatches = ctxAc.matches;
+    acRange = { ...ctxAc.range, isSlash: false };
+    acIndex = 0;
+    renderAcPopup();
+    return;
+  }
   let start = cursor.offset;
   while (start > 0 && seq.items[start - 1].kind === "char" && /[A-Za-z0-9_]/.test(seq.items[start - 1].ch)) {
     start--;
@@ -3285,6 +3499,8 @@ function updateAutocomplete() {
   if (hasSlash) {
     const q = word.toLowerCase();
     acMatches = COMMAND_DICT.filter(c => c.cmd.toLowerCase().startsWith(q));
+    // \sum：文脈の数列から sum(a, n) を先に出す（Σ の入力欄より上）
+    if (q.length >= 2 && "sum".startsWith(q)) acMatches = [...sumCandidates(ctxInfoAtCursor()).map((t) => ctxEntry(t, "有限和 Σ")), ...acMatches.filter((c) => c.cmd !== "sum")];
     acRange = { seqId: seq.id, startOffset: start - 1, endOffset: cursor.offset, isSlash: true };
   } else if (word.length >= 2) {
     const q = word.toLowerCase();
@@ -3313,8 +3529,8 @@ function renderAcPopup() {
   }
   acPopup.innerHTML = acMatches.slice(0, 8).map((m, idx) => `
     <div class="ac-item ${idx === acIndex ? 'active' : ''}" onmousedown="confirmAc(${idx}); return false;">
-      <span class="ac-preview">${escHtml(m.preview)}</span>
-      <span class="ac-cmd">${acRange && acRange.isSlash ? '\\' : ''}${escHtml(m.cmd)}</span>
+      <span class="ac-preview${m.previewHtml ? " ac-math" : ""}">${m.previewHtml || escHtml(m.preview)}</span>
+      <span class="ac-cmd">${acRange && acRange.isSlash && m.cmd ? '\\' : ''}${escHtml(m.cmd)}</span>
       <span class="ac-desc">${escHtml(m.desc)}</span>
     </div>
   `).join("");
@@ -3342,6 +3558,13 @@ editorSurface.addEventListener("keydown", (e) => {
     if (k === ",") { e.preventDefault(); openPreferences(); return; }
     if (k === "y") { e.preventDefault(); undoDoc(1); return; }
     if (k === "a") { e.preventDefault(); selectAll(); return; }
+  }
+
+  // 文脈の式の補完（Ctrl+Space・⌥Space）
+  if (e.code === "Space" && (e.ctrlKey || e.altKey) && !e.metaKey) {
+    e.preventDefault();
+    showContextTerms();
+    return;
   }
 
   // Autocomplete navigation

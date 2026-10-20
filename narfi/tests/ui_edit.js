@@ -192,4 +192,73 @@ test("宣言名・4文字以上の名前は立体、変数はイタリック", (
   assert.ok((l2["mc-var"] || "").includes("x"), JSON.stringify(l2));
 });
 
+// ---------------------------------------------------------------- 文脈の式の補完
+const LIM = [
+  "thm shift :",
+  "  a : Nat -> Real, b : Nat -> Real, n : Nat, alpha : Real",
+  "  |- a_0 = a_0",
+  "",
+  "",
+].join("\n");
+const STEP = {
+  line: 1, ctx: ["a : ℕ → ℝ", "b : ℕ → ℝ", "n : ℕ", "α : ℝ"], seqs: ["a", "b"],
+  terms: ["|a_{n + 1} - α|", "a_{n + 1} - α", "(n : ℕ ↦ a_{n + 1})", "|a_n - α|", "a_n - α"],
+};
+function limUi() {
+  const ui = fresh(LIM);
+  ui.api.setCheckData({ decls: [{ name: "shift", line: 1, steps: [STEP] }] });
+  goto(ui, 4, 0);
+  return ui;
+}
+const line4 = (ui) => ui.text().split("\n")[4];
+
+test("| を打つと文脈の絶対値が出て、Tab で入る", () => {
+  const ui = limUi();
+  ui.type("|");
+  assert.ok(ui.api.acMatches.length >= 2, "候補が出ない");
+  ui.type("a_n");
+  // a_ で添字の欄に入るので、絞り込みは a までで行われる。候補を確かめて選ぶ
+  const ui2 = limUi();
+  ui2.type("|");
+  const k = ui2.api.acMatches.findIndex((m) => m.text === "|a_n - α|");
+  assert.ok(k >= 0, "|a_n - α| がない");
+  for (let i = 0; i < k; i++) ui2.key("ArrowDown");
+  ui2.key("Tab");
+  assert.strictEqual(line4(ui2), "abs(a_n - alpha)");
+});
+
+test("Fix ε | hε の | では絶対値の補完を出さない", () => {
+  const ui = limUi();
+  ui.type("Fix e | ");
+  assert.strictEqual(ui.api.acMatches.filter((m) => m.kind === "ctxterm").length, 0);
+});
+
+test("(n |-> で数列の候補が出て、閉じ括弧ごと入る", () => {
+  const ui = limUi();
+  ui.type("(n |->");
+  const k = ui.api.acMatches.findIndex((m) => m.text === "(n : ℕ ↦ a_n + b_n)");
+  assert.ok(k >= 0, "a_n + b_n の候補がない: " + ui.api.acMatches.map((m) => m.text).join(" / "));
+  for (let i = 0; i < k; i++) ui.key("ArrowDown");
+  ui.key("Tab");
+  assert.strictEqual(line4(ui), "(n : Nat |-> a_n + b_n)");
+});
+
+test("\\sum で文脈の数列の和が先に出る。Σ の入力欄は sum((k : Nat |-> …), n) と書かれる", () => {
+  const ui = limUi();
+  ui.type("\\su");
+  assert.strictEqual(ui.api.acMatches[0].text, "sum(a, n)");
+  ui.key("Tab");
+  assert.strictEqual(line4(ui), "sum(a, n)");
+  const ui2 = limUi();
+  ui2.type("\\sum ");   // Σ の入力欄（走る添字 k と上限 n が入っている）
+  ui2.type("a_k");
+  assert.strictEqual(line4(ui2), "sum((k : Nat |-> a_k), n)");
+});
+
+test("Ctrl+Space で文脈の式の一覧", () => {
+  const ui = limUi();
+  ui.key(" ", { code: "Space", ctrlKey: true });
+  assert.ok(ui.api.acMatches.some((m) => m.text === "|a_n - α|"));
+});
+
 console.log(`${n} 件通過`);

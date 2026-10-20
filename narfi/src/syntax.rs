@@ -153,6 +153,19 @@ fn placeholder() -> String {
     })
 }
 
+// 添字で書く数列の名前（show_term_sub の間だけ。a(n) を a_n と書く）
+thread_local! {
+    static SUB_SEQS: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
+}
+
+/// 項を、数列 seqs の適用を添字（a_n・a_{n+1}）にして書く（エディタに入れる形）
+pub fn show_term_sub(t: &Term, seqs: &BTreeSet<String>) -> String {
+    SUB_SEQS.with(|s| *s.borrow_mut() = seqs.clone());
+    let out = show_term(t, 0);
+    SUB_SEQS.with(|s| s.borrow_mut().clear());
+    out
+}
+
 // β 簡約が止まらない（型の合わない項を代入した）ときに、無限ループではなく止めるための深さ
 thread_local! {
     static BETA_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
@@ -578,6 +591,11 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                     let sep = if inner.starts_with('-') { " " } else { "" };
                     (format!("|{sep}{inner}|"), 5)
                 }
+                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) => match a {
+                    Term::Var(x) if x.chars().count() == 1 => (format!("{f}_{x}"), 5),
+                    Term::Num(n) if *n < 10 => (format!("{f}_{n}"), 5),
+                    _ => (format!("{f}_{{{}}}", show_term(a, 0)), 5),
+                },
                 _ => {
                     let a: Vec<String> = args.iter().map(|a| show_term(a, 0)).collect();
                     (format!("{}({})", f, a.join(", ")), 5)

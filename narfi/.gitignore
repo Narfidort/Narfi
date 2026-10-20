@@ -2,3 +2,5 @@
 site/
 .wrangler/
 .dev.vars
+.env
+.env.*

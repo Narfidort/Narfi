@@ -54,6 +54,7 @@ module.exports = function load(htmlPath) {
   get cursor() { return cursor; }, get docLines() { return docLines; },
   get selAnchor() { return selAnchor; }, get history() { return history; },
   hitTestPos,
+  setCheckData(d) { lastCheckData = d; }, get acMatches() { return acMatches; },
 };`);
   } catch (e) {
     console.error("init:", e.message);
