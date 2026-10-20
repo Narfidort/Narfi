@@ -26,7 +26,7 @@ window.NARFI_TUTORIAL = [
         ["h : φ → ψ", "h(p)（p は φ の根拠）"]
       ] },
       { p: "**途中で示したことを増やす**：`k : φ by 根拠`（名前は省略できる）。証明が長ければ `k : φ` の下に字下げして書きます。根拠を書かずに `φ` だけ書くとエラーになり、見つかった根拠が候補として出ます（Tab で入る）。" },
-      { p: "書き方の完全な一覧は [docs/v2/syntax.md](https://github.com/Narfidort/Narfi/blob/main/narfi/docs/v2/syntax.md) にあります。" }
+      { p: "書き方の完全な一覧は [docs/language/syntax.md](https://github.com/Narfidort/Narfi/blob/main/docs/language/syntax.md) にあります。" }
     ]
   },
   {
@@ -124,7 +124,7 @@ window.NARFI_TUTORIAL = [
         ["⌘S / ⌘Z", "保存 / 元に戻す"]
       ] },
       { p: "右の Prose タブでは証明が日本語の文章として、LaTeX タブでは論文に貼れる形で読めます。下の `JP` を押すと、エディタの中も日本語の証明文の形で表示されます（ファイルの中身は変わりません）。" },
-      { p: "書き方の完全な一覧（すべての文・根拠・規則の名前）は [docs/v2/syntax.md](https://github.com/Narfidort/Narfi/blob/main/narfi/docs/v2/syntax.md) にあります。" },
+      { p: "書き方の完全な一覧（すべての文・根拠・規則の名前）は [docs/language/syntax.md](https://github.com/Narfidort/Narfi/blob/main/docs/language/syntax.md) にあります。" },
       { p: "ファイルは左の一覧で作れます（右クリックでフォルダ・名前の変更・削除）。GitHub でログインすると、ほかの端末でも同じファイルが開けます。" }
     ]
   }

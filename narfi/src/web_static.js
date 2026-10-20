@@ -324,7 +324,22 @@
     const me = await cloudFetch("/cloud/me").catch(() => ({ ok: false }));
     cloud.configured = !!me.configured;
     if (!cloud.configured) { setCloudState("off"); return; }
-    if (!me.signed_in) { signedOut(); return; }
+    if (!me.signed_in) {
+      signedOut();
+      // 最初の画面：ログインするか、このブラウザだけで使うかを選ぶ（選んだら覚える）
+      if (!localStorage.getItem("narfi.guest")) {
+        const login = await window.uiModal({
+          title: "Narfi へようこそ",
+          note: "GitHub でログインすると、ファイルがクラウドに保存され、ほかの PC やブラウザでも開けます（自動でログインしたままになります）。ログインしない場合、ファイルはこのブラウザの中だけに保存されます。",
+          okLabel: "GitHub でログイン",
+          cancelLabel: "ログインせずに使う"
+        });
+        if (login) { signIn(); return; }
+        localStorage.setItem("narfi.guest", "1");
+      }
+      return;
+    }
+    localStorage.removeItem("narfi.guest");
     cloud.user = { login: me.login, id: me.id };
     const m = loadSync();
     if (m.user !== me.id) {

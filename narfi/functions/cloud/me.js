@@ -1,6 +1,19 @@
 // GET /cloud/me → ログイン中の利用者と使っている量
 // DELETE /cloud/me → アカウントとクラウドのファイルをすべて消す
-import { MAX_FILES, MAX_TOTAL_BYTES, SESSION_COOKIE, configured, cookie, currentUser, json, sameSite } from "../../server/common.js";
+import {
+  MAX_FILES,
+  MAX_TOTAL_BYTES,
+  SESSION_COOKIE,
+  SESSION_DAYS,
+  configured,
+  cookie,
+  currentUser,
+  getCookie,
+  json,
+  now,
+  sameSite,
+  sha256
+} from "../../server/common.js";
 
 export async function onRequestGet({ request, env }) {
   if (!configured(env)) return json({ ok: false, configured: false });
@@ -9,6 +22,10 @@ export async function onRequestGet({ request, env }) {
   const usage = await env.DB.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes FROM files WHERE user_id = ?")
     .bind(user.id)
     .first();
+  // 使っている間はセッションを延ばす（30 日使わなければ切れる）
+  const token = getCookie(request, SESSION_COOKIE);
+  const exp = now() + SESSION_DAYS * 86400;
+  await env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").bind(exp, await sha256(token)).run();
   return json({
     ok: true,
     configured: true,
@@ -19,7 +36,7 @@ export async function onRequestGet({ request, env }) {
     bytes: usage.bytes,
     max_files: MAX_FILES,
     max_bytes: MAX_TOTAL_BYTES
-  });
+  }, 200, { "Set-Cookie": cookie(SESSION_COOKIE, token, SESSION_DAYS * 86400) });
 }
 
 export async function onRequestDelete({ request, env }) {

@@ -157,7 +157,7 @@ pub struct CheckError {
 type CResult<T> = Result<T, CheckError>;
 
 const BUILTINS: [&str; 8] = ["sorry", "refl", "ring", "linarith", "decide", "EQ2", "or.left", "or.right"];
-/// 自然演繹の規則の名前（短い書き方の別名。docs/v2/syntax.md）。
+/// 自然演繹の規則の名前（短い書き方の別名。docs/language/syntax.md）。
 /// and.intro(p, q) = `p, q`、and.left(h) = `h.left`、imp.elim(f, a) = `f(a)`、all.elim(h, t) = `h(t)`、bot.elim(h)
 const RULES: [&str; 6] = ["and.intro", "and.left", "and.right", "imp.elim", "all.elim", "bot.elim"];
 
@@ -227,7 +227,7 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// goal と仮定の形から、次に書けるもの（docs/v2/syntax.md の早見表と同じ考え方）
+    /// goal と仮定の形から、次に書けるもの（docs/language/syntax.md の早見表と同じ考え方）
     fn hints(&self, ctx: &Ctx, goal: &Formula) -> Vec<(String, String)> {
         let mut out: Vec<(String, String)> = Vec::new();
         let g = self.whnf(goal);

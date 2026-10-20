@@ -1,9 +1,10 @@
-# Narfi v2 仕様（核の論理）
+# Narfi 言語仕様 v2.6 — 核の論理
 
 この文書は **kernel が何を検査するか** を定める。表層の構文（`Fix`・`Obtain`・連鎖など）は
 elab が kernel の証明項に翻訳する（§10）。kernel の外のコードは、この仕様の正しさに関与しない。
 
-v2.0 は多ソート一階述語論理、v2.1 で **単純型理論（HOL）** に広げた。
+v2.0 は多ソート一階述語論理、v2.1 で **単純型理論（HOL）** に広げた。v2.2 で型の定義（typedef）と商、
+v2.5 で値が関数の定義・原始再帰（rec）を足した。表層の書き方は [syntax.md](syntax.md)。
 
 ---
 
@@ -141,7 +142,8 @@ kernel は次の書き換えで同じになる論理式を同じとみなす。
 
 - **α**：束縛変数の名前の違い（`∀x. P(x)` ≡ `∀y. P(y)`、`(x ↦ x)` ≡ `(y ↦ y)`）
 - **β**：λ・集合の適用（`(x ↦ t)(s)` ≡ `t[x := s]`）。代入のたびに済ませる（§3.1.1）ので、
-  kernel が比べる式はいつも β 正規形。
+  kernel が比べる式はいつも β 正規形。値が関数の定義を展開して λ になったものを、さらに適用したもの
+  （`mmul(A, B, n)(i, j)`）も、展開のときに β する（v2.5.10）。
 - **δ**：`def` の展開（`is_lim(a, α)` ≡ その本体、`sq(x)` ≡ `x · x`）。定義は再帰しないので展開は必ず止まる。
 - **ζ**：`let` の展開（`x := t` のもとで `x` ≡ `t`）
 
@@ -198,6 +200,8 @@ kernel は `Σ cᵢ·eᵢ + c·e` を §7.1 で正規化し、定数 `k` にな�
   - ペアノ：`PA1`・`PA2`、加法・乗法の定義（帰納法は規則 `Ind`）
   - 外延性：`funext`（関数）・`propext`（命題）・`setext`（集合）
   - 選択：`choice : (∃x. P(x)) → P(some(P))`（Hilbert の ε）
+  - 再帰定理：`rec.exists : ∃F. F(0) = c ∧ ∀k. F(S(k)) = g(k, F(k))`（v2.5.9。HOL と帰納法から証明できる定理だが、
+    いまは公理として置く。`rec` の定義はこれと選択で作る）
 - **定理** は kernel が証明を検算したあと図式として環境に入る。図式の **パラメータ** は
   1. 型変数 `'a, …`
   2. 文の自由変数（型つき）。関数型・述語型・命題型の変数も含み、λ・集合・論理式を代入できる
@@ -211,6 +215,9 @@ kernel は `Σ cᵢ·eᵢ + c·e` を §7.1 で正規化し、定数 `k` にな�
 - 本体の自由変数は引数だけ。本体に現れる記号は定義済みのものだけ（自分自身は使えない）。
 - 定義は **保存的拡大**（定義を足しても、定義を使わない命題の証明可能性は変わらない）。
 - 型変数を持つ定義はまだ書けない（引数の型が決まらないときはエラー）。
+- 項の定義の値は、数・型の定義で作った型・**関数**（`ℕ × ℕ → ℝ` など。v2.5.10）。命題を値にするなら述語の定義を使う。
+- **原始再帰** `rec f(…, n : ℕ, …) : τ`（0 と n + 1 の 2 つの等式）は、`some({F | F(0) = c ∧ ∀k. F(S(k)) = g(k, F(k))})(n)`
+  という項の定義と、2 つの等式の定理（証明は rec.exists と choice から作られ、kernel が普通に検算する）に展開される。
 
 ### 8.3 型の定義（typedef）
 
@@ -261,35 +268,43 @@ kernel のほかに、`src/syntax.rs` の代入・自由変数の計算（`subst
 ## 9. まだ含めないもの
 
 - 型変数を持つ定義（`def subset(A : 'a → Prop, …)` のような多相な定義）
-- 関数・命題を値とする項の定義（λ で書けば同じことはできる）
+- 命題を値とする項の定義（述語の定義を使う）
 - 積の型（`ℕ × ℕ` の値）。2変数の集合は `{(x, y) : ℕ × ℕ | φ}` で書ける
 
 ## 10. 表層の構文と証明項の対応
 
-| 表層 | 証明項 |
+| 表層（[syntax.md](syntax.md)） | 証明項 |
 |---|---|
-| `Fix x \| h : φ` | `AllI(x, σ, ImpI(h, φ, …))` |
+| `Fix x` / `Fix x \| h : φ` | `AllI(x, σ, …)` / `AllI(x, σ, ImpI(h, φ, …))` |
 | `assume h : φ` | `ImpI(h, φ, …)` |
-| `by_contra h` | `Raa` |
+| `by_contra h` | `Raa(h, φ, …)` |
 | `Obtain x, h₁, h₂ : e` | `ExE(e, x, h, Cut(h₁, …, AndE(…), Cut(h₂, …)))` |
-| `have h : φ := j` | `Cut(h, φ, j, …)` |
-| `suffices ψ := j` | `ImpE(j, …)` |
+| `cases h`（`Case left h₁` / `Case right h₂`） | `OrE` |
+| `induction n`（`Case zero` / `Case succ k, IH : φ`） | `Ind`（文脈の変数なら `AllE(Ind(…), n)`） |
+| `h : φ by j`（後ろに行が続く） | `Cut(h, φ, j, …)`（名前がなければ h = this） |
+| `φ by j`・`j`（goal を閉じる） | j の証明項 |
 | `choose t` / `choose t, j` | `ExI` / `ExI(…, AndI(j, …))` |
 | `choose left` / `right` | `OrI` |
-| `cases h` | `OrE` |
-| `induction n` | `Ind`（文脈の変数なら `AllE(Ind(…), n)`） |
 | `let x := t` | `Let` |
-| `contradiction h k` | `BotE(φ, ImpE(k, h))` |
-| `unfold …` | なし（§6 の δ で kernel は同一視する） |
-| `∴ φ` | なし（elab が読みやすさのために確かめるだけ） |
+| 連鎖 `a = b by … < c by …` | `Trans`（足りないときは `LinArith`） |
+| `∴ φ` | なし（elab が確かめるだけ） |
+| `Obtain N(ε)` の依存の注釈 | なし（elab が確かめるだけ） |
+
+根拠：
+
+| 根拠 | 証明項 |
+|---|---|
+| 仮定 `h` | `Hyp(h)` |
+| 定理・公理の適用 `t(a, b)` | `Thm` に `AllE`・`ImpE` を重ねる |
+| `p, q`（`and.intro(p, q)`） | `AndI` |
+| `h.left` / `h.right`（`and.left(h)` / `and.right(h)`） | `AndE` |
+| `or.left(p)` / `or.right(p)` | `OrI` |
+| `imp.elim(f, a)`・`all.elim(h, t)` | `ImpE`・`AllE` |
+| `bot.elim(h)`、goal と違う ⊥ の根拠 | `BotE` |
+| `refl` / `ring` / `linarith` / `decide` / `sorry` | `Refl` / `Ring` / `LinArith` / `Decide` / `Sorry` |
+| `EQ2(h, hφ)` | `Subst`（elab が φ を見つける） |
 
 仮定を導入する文（`Fix x | h : φ`・`assume h : φ`・`Case succ k, IH : φ`）では、仮定の中身 φ を省略できない（v2.5）。
 φ は goal から一意に決まるので kernel にとっては不要だが、証明を読む人に仮定が見えるようにするため、elab が要求する。
-省略するとエラーになり、goal から決まる φ を help として示す。変数の型（`Fix x` の σ）は省略してよい。
-| `Obtain N(ε)` の依存の注釈 | なし（elab が確かめるだけ） |
-| 連鎖 `a = b by … < c by …` | `Trans`（足りないときは `LinArith`） |
-| `refl` / `ring` / `linarith` / `decide` / `sorry` | `Refl` / `Ring` / `LinArith` / `Decide` / `Sorry` |
-| `EQ2(h, hφ)` | `Subst`（elab が φ を見つける） |
-| `h.left` / `h.right` | `AndE` |
-| `or.left(p)` / `or.right(p)` | `OrI` |
-| 定理名・公理名の適用 `t(a, b)` | `Thm` に `AllE`・`ImpE` を重ねる |
+同じ理由で、事実の行の根拠も省略できない（v2.6）。省略するとエラーになり、elab が探した根拠を直し方として示す
+（設計原則 2：勝手に補わない）。

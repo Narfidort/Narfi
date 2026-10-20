@@ -1,4 +1,4 @@
--- 自然演繹の規則の名前（docs/v2/syntax.md）。短い書き方と同じ証明項になる
+-- 自然演繹の規則の名前（docs/language/syntax.md）。短い書き方と同じ証明項になる
 
 thm r1 :
   P : Prop, Q : Prop

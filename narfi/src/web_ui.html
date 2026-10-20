@@ -4436,7 +4436,7 @@ sidebarEl.addEventListener("drop", (e) => {
 
 // ---- 確認・名前の入力・お知らせ（ブラウザ標準のダイアログの代わり）
 
-function uiModal({ title, note = "", value = null, okLabel = "OK", danger = false }) {
+function uiModal({ title, note = "", value = null, okLabel = "OK", cancelLabel = "キャンセル", danger = false }) {
   return new Promise((resolve) => {
     const back = document.getElementById("modalBack");
     const input = document.getElementById("modalInput");
@@ -4447,6 +4447,7 @@ function uiModal({ title, note = "", value = null, okLabel = "OK", danger = fals
     input.hidden = value === null;
     input.value = value || "";
     ok.textContent = okLabel;
+    cancel.textContent = cancelLabel;
     ok.classList.toggle("danger", danger);
     back.hidden = false;
     const done = (v) => {
@@ -4497,6 +4498,7 @@ function uiToast(msg) {
   toastTimer = setTimeout(() => { t.hidden = true; }, Math.min(9000, 2500 + msg.length * 60));
 }
 
+window.uiModal = uiModal;
 window.uiConfirm = uiConfirm;
 window.uiPrompt = uiPrompt;
 window.uiToast = uiToast;

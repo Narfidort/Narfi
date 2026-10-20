@@ -1,7 +1,7 @@
 //! Narfi の検査器（ライブラリ）。
 //!
 //! コマンド `narfi`（src/main.rs）とブラウザ版（src/wasm.rs、wasm32 向けにビルドしたときだけ）から使う。
-//! 信じる必要があるのは `kernel`（と `syntax`・`types` の一部）だけ。仕様は docs/v2/spec.md。
+//! 信じる必要があるのは `kernel`（と `syntax`・`types` の一部）だけ。仕様は docs/language/（リポジトリ直下）。
 
 pub mod api;
 pub mod arith;
