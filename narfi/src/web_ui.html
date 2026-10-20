@@ -4758,7 +4758,7 @@ function uiToast(msg) {
 }
 
 window.uiModal = uiModal;
-window.openPreferences = () => openPreferences();
+// openPreferences は関数宣言なので、そのまま window.openPreferences として呼べる（web_static.js のメニューから）
 window.uiConfirm = uiConfirm;
 window.uiPrompt = uiPrompt;
 window.uiToast = uiToast;
