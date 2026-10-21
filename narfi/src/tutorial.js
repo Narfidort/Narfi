@@ -472,10 +472,13 @@ window.NARFI_TUTORIAL = [
         "p": "**ねらい**：数列 $a_n$ が $\\alpha$ に収束する（$\\varepsilon$-$N$ 論法）を `def` で定義し、使う。数列は $a : \\mathbb{N} \\to \\mathbb{R}$ と宣言すると $a_n$ と書ける。"
       },
       {
-        "code": "def is_lim(a : Nat -> Real, alpha : Real) :=\n  forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps"
+        "code": "def is_lim(a : Nat -> Real, alpha : Real) :=\n  forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)"
       },
       {
         "p": "読み方：「任意の $\\varepsilon > 0$ に対し、ある $N$ があって、$n \\ge N$ なら $|a_n - \\alpha| < \\varepsilon$」。"
+      },
+      {
+        "p": "2 行目の `notation` は**略記**：`is_lim(a, alpha)` を、教科書と同じ $a_n \\to \\alpha\\ (n \\to \\infty)$ の形で書けるようにする。右辺の $(n \\mapsto a)$ の $n$ は束縛変数なので、使うときはどの文字でもよい（$a_k \\to \\alpha\\ (k \\to \\infty)$）。$a$ の所には $n$ を含む式が入るので、$a_{n+1} \\to \\alpha\\ (n \\to \\infty)$ も書ける。"
       },
       {
         "paper": [
@@ -522,8 +525,12 @@ window.NARFI_TUTORIAL = [
             "絶対値"
           ],
           [
+            "a_{n+1} -> alpha (n -> \\infty)",
+            "$a_{n+1} \\to \\alpha\\ (n \\to \\infty)$。`->` は →、`\\infty` は ∞"
+          ],
+          [
             "(n:Nat |-> a_{n+1})",
-            "「$n$ を $a_{n+1}$ に移す数列」。`|->` は ↦"
+            "「$n$ を $a_{n+1}$ に移す数列」そのもの。`|->` は ↦（略記の右辺で使う）"
           ]
         ]
       }
@@ -533,8 +540,8 @@ window.NARFI_TUTORIAL = [
       "形は練習 8 と同じ。$N$ は $h$ から `Obtain` で取り出したものを、そのまま使う。",
       "最後に要るのは $|a_{n+1} - \\alpha| < \\varepsilon$。$hN$ は「$n + 1 \\ge N$」の根拠があれば $n + 1$ で使える。"
     ],
-    "exercise": "-- 練習 9：1 つずらした数列の極限\n\ndef is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nsorry\n",
-    "answer": "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
+    "exercise": "-- 練習 9：1 つずらした数列の極限\n\ndef is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nsorry\n",
+    "answer": "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
   },
   {
     "title": "10. 背理法",

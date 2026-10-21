@@ -171,6 +171,11 @@ fn main() -> ExitCode {
                 continue;
             }
         };
+        if !diag {
+            for (l, msg, _) in m.warnings() {
+                println!("  警告 {path}:{l}: {msg}");
+            }
+        }
         let reports = match check_module(&mut env, &m, trace, false) {
             Ok(r) => r,
             Err(e) => {

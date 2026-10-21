@@ -83,8 +83,12 @@ pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: 
     // まずそのままパースを試みる。もし編集中（空行や入力途中）でパースエラーになった場合、
     // カーソル行を sorry に置き換えたフォールバックも試して Goal 表示を維持する。
     // 試すたびに環境と記法の表を作り直す（load）。
+    let mut mod_warnings = vec![];
     let (decls, reports, parse_err) = match load(src) {
-        Ok((_, m, r)) => (m.decls_for(&r), r, None),
+        Ok((_, m, r)) => {
+            mod_warnings = m.warnings();
+            (m.decls_for(&r), r, None)
+        }
         Err(e) => {
             let mut lines = vec![];
             lines.extend(cursor_line);
@@ -131,24 +135,34 @@ pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: 
     let notations_json: Vec<String> = with_syntax(|t| {
         t.notations
             .iter()
-            .map(|n| {
-                format!(
-                    "{{\"sym\":{},\"pred\":{},\"latex\":{}}}",
-                    json_str(&n.sym),
-                    json_str(&n.pred),
-                    json_str(&n.latex)
-                )
+            .flat_map(|n| {
+                // 組み込みで読めない新しい記号だけ（→・( などは除く）
+                n.symbols().into_iter().filter(|sym| !crate::parser::lexes_as_itself(sym)).map(move |sym| {
+                    format!(
+                        "{{\"sym\":{},\"pred\":{},\"latex\":{},\"template\":{}}}",
+                        json_str(&sym),
+                        json_str(&n.pred),
+                        json_str(&crate::syntax::lit_latex(&sym)),
+                        json_str(&n.template)
+                    )
+                })
             })
             .collect()
     });
+    // ファイル全体への警告（古い書き方の notation など）。書き換え先は行ごと
+    let warnings_json: Vec<String> = mod_warnings
+        .iter()
+        .map(|(l, m, rep)| format!("{{\"line\":{l},\"msg\":{},\"replace\":{}}}", json_str(m), json_str(rep)))
+        .collect();
 
     format!(
-        "{{\"ok\":{},\"parse_error\":{},\"decls\":[{}],\"notes\":[{}],\"notations\":[{}]}}",
+        "{{\"ok\":{},\"parse_error\":{},\"decls\":[{}],\"notes\":[{}],\"notations\":[{}],\"warnings\":[{}]}}",
         perr_json == "null" && reports.iter().all(|r| r.err.is_none()),
         perr_json,
         decls_json.join(","),
         notes_json.join(","),
-        notations_json.join(",")
+        notations_json.join(","),
+        warnings_json.join(",")
     )
 }
 

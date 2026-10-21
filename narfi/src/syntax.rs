@@ -49,23 +49,150 @@ pub fn not(f: Formula) -> Formula {
 // notation は字句解析・構文解析・表示（Display / LaTeX）のすべてに効くので、
 // スレッドごとの表に置く。読み込みの最初に reset_syntax() で空にする。
 
-/// `notation a "⟶" α := is_lim(a, α)`。式 `t ⟶ u` は Atom(pred, [t, u]) として持つ。
+/// 略記（notation）：型紙 := 述語の適用。docs/language/syntax.md の「略記」。
+///
+/// `notation a → α (n → ∞) := is_lim((n : ℕ ↦ a), α)`
+/// - 右辺の引数にある名前（a・α）が入る所、右辺の λ が束縛する名前（n）が束縛変数、それ以外は書いたとおりの記号。
+/// - 式 `b_k → β (k → ∞)` は Atom("is_lim", [(k ↦ b_k), β]) になる（`(k ↦ b(k))` は b に縮める）。
 #[derive(Clone, Debug)]
 pub struct Notation {
-    pub sym: String,
     pub pred: String,
-    /// 述語の引数の順が (右辺, 左辺) のとき true
-    pub swap: bool,
-    pub latex: String,
+    pub items: Vec<TItem>,
+    /// 述語の引数ごとに、どの入る所から作るか
+    pub args: Vec<NArg>,
+    /// 束縛変数の、宣言に書いた名前（表示の既定）
+    pub binders: Vec<String>,
+    /// 入る所の名前（宣言に書いたもの）
+    pub slots: Vec<String>,
+    /// 宣言の型紙（エディタ・エラーの表示用）
+    pub template: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TItem {
+    Lit(String),
+    Slot(usize),
+    Binder(usize),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum NArg {
+    /// 入る所の式そのもの
+    Slot(usize),
+    /// (束縛変数 : 型 ↦ 入る所の式)
+    Lam(usize, String, usize),
 }
 
 impl Notation {
-    pub fn atom(&self, lhs: Term, rhs: Term) -> Formula {
-        let args = if self.swap { vec![rhs, lhs] } else { vec![lhs, rhs] };
+    /// 型紙に当てはめた入る所・束縛変数から、述語の適用を作る
+    pub fn build(&self, slots: &[Term], binders: &[String]) -> Formula {
+        let args = self
+            .args
+            .iter()
+            .map(|a| match a {
+                NArg::Slot(k) => slots[*k].clone(),
+                NArg::Lam(b, sort, k) => lam_eta(&binders[*b], sort, &slots[*k]),
+            })
+            .collect();
         Formula::Atom(self.pred.clone(), args)
     }
-    fn sides<'t>(&self, ts: &'t [Term]) -> (&'t Term, &'t Term) {
-        if self.swap { (&ts[1], &ts[0]) } else { (&ts[0], &ts[1]) }
+
+    /// 表示：述語の引数 ts から、入る所の式と束縛変数の名前を取り出す
+    pub fn split(&self, ts: &[Term]) -> Option<(Vec<Term>, Vec<String>)> {
+        if ts.len() != self.args.len() {
+            return None;
+        }
+        let mut slots: Vec<Option<Term>> = vec![None; self.slots.len()];
+        let mut binders: Vec<Option<String>> = vec![None; self.binders.len()];
+        // 束縛変数の名前：λ に書かれた名前を使う。なければ宣言の名前（ほかの引数に出てくるなら ' を付ける）
+        let mut used = BTreeSet::new();
+        for t in ts {
+            t.vars(&mut used);
+        }
+        for (a, t) in self.args.iter().zip(ts) {
+            if let (NArg::Lam(b, _, _), Term::Lam(ps, _)) = (a, t)
+                && ps.len() == 1
+                && binders[*b].is_none()
+            {
+                binders[*b] = Some(ps[0].0.clone());
+            }
+        }
+        for (b, name) in binders.iter_mut().enumerate() {
+            if name.is_none() {
+                let mut x = self.binders[b].clone();
+                while used.contains(&x) {
+                    x.push('\'');
+                }
+                *name = Some(x);
+            }
+        }
+        let binders: Vec<String> = binders.into_iter().map(|b| b.unwrap()).collect();
+        for (a, t) in self.args.iter().zip(ts) {
+            match a {
+                NArg::Slot(k) => slots[*k] = Some(t.clone()),
+                NArg::Lam(b, _, k) => {
+                    let x = Term::Var(binders[*b].clone());
+                    slots[*k] = Some(match t {
+                        Term::Lam(ps, body) if ps.len() == 1 => body.subst(&ps[0].0, &x),
+                        _ => apply_term(t, &[x]),
+                    });
+                }
+            }
+        }
+        Some((slots.into_iter().map(|s| s.unwrap_or(Term::Var("?".into()))).collect(), binders))
+    }
+
+    /// 型紙の記号（名前の形でないもの。字句解析に登録する）
+    pub fn symbols(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .filter_map(|i| match i {
+                TItem::Lit(s) if !s.chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_') => Some(s.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 型紙の記号の並び（あいまいさの検査に使う）
+    pub fn lits(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .map(|i| match i {
+                TItem::Lit(s) => s.clone(),
+                TItem::Slot(_) => "\u{0}".into(),
+                TItem::Binder(_) => "\u{1}".into(),
+            })
+            .collect()
+    }
+
+    /// 型紙で書いた文字列（表示）。show は入る所の式の書き方
+    fn render(&self, ts: &[Term], show: &dyn Fn(&Term) -> String, lit: &dyn Fn(&str) -> String, ident: &dyn Fn(&str) -> String) -> Option<String> {
+        let (slots, binders) = self.split(ts)?;
+        let mut out = String::new();
+        for it in &self.items {
+            let piece = match it {
+                TItem::Lit(s) => lit(s),
+                TItem::Slot(k) => show(&slots[*k]),
+                TItem::Binder(b) => ident(&binders[*b]),
+            };
+            let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || piece.starts_with(')') || piece.starts_with(']') || piece == "_" || out.is_empty();
+            if !glue {
+                out.push(' ');
+            }
+            out.push_str(&piece);
+        }
+        Some(out)
+    }
+}
+
+/// (x : σ ↦ t)。ただし t が「関数 f を x に適用しただけ」（f(x)・f_x）なら f に縮める（η。kernel は η を知らないため）
+pub fn lam_eta(x: &str, sort: &str, t: &Term) -> Term {
+    match t {
+        Term::App(f, args) if args.len() == 1 && args[0] == Term::Var(x.to_string()) && f != x && f != "@" && !BUILTIN_FNS.contains(&f.as_str()) => Term::Var(f.clone()),
+        Term::Var(v) if v.strip_suffix(x).and_then(|f| f.strip_suffix('_')).is_some_and(|f| !f.is_empty() && !f.contains('_')) => {
+            Term::Var(v[..v.len() - x.len() - 1].to_string())
+        }
+        _ => Term::Lam(vec![(x.to_string(), sort.to_string())], Box::new(t.clone())),
     }
 }
 
@@ -110,8 +237,22 @@ pub fn with_syntax<R>(f: impl FnOnce(&mut SyntaxTable) -> R) -> R {
     SYNTAX.with(|t| f(&mut t.borrow_mut()))
 }
 
-pub fn notation_for_sym(sym: &str) -> Option<Notation> {
-    with_syntax(|t| t.notations.iter().find(|n| n.sym == sym).cloned())
+/// 型紙の文字を表示に使う形（LaTeX）
+pub fn lit_latex(s: &str) -> String {
+    match s {
+        "→" => "\\to".into(),
+        "⟶" => "\\longrightarrow".into(),
+        "∞" => "\\infty".into(),
+        "~" => "\\sim".into(),
+        "⇝" => "\\rightsquigarrow".into(),
+        "≺" => "\\prec".into(),
+        "≻" => "\\succ".into(),
+        "≼" => "\\preceq".into(),
+        "≽" => "\\succeq".into(),
+        "(" | ")" | "[" | "]" | "," | "|" => s.into(),
+        _ if s.chars().all(|c| c.is_alphabetic()) && s.chars().count() > 1 => format!("\\mathrm{{{s}}}"),
+        _ => ident_to_latex(s),
+    }
 }
 
 /// 表示に使う記法（同じ述語に複数あるときは最初に宣言したもの）
@@ -155,7 +296,26 @@ fn placeholder() -> String {
 
 // 添字で書く数列の名前（show_term_sub の間だけ。a(n) を a_n と書く）
 thread_local! {
-    static SUB_SEQS: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
+    static SUB_SEQS: RefCell<BTreeSet<String>> = const { RefCell::new(BTreeSet::new()) };
+}
+
+/// 1 文字の名前で、引数 1 つに適用されているもの（略記の表示で a(n) を a_n と書くため）
+fn applied_names(ts: &[Term]) -> BTreeSet<String> {
+    fn go(t: &Term, out: &mut BTreeSet<String>) {
+        match t {
+            Term::App(f, args) => {
+                if args.len() == 1 && f.chars().count() == 1 {
+                    out.insert(f.clone());
+                }
+                args.iter().for_each(|a| go(a, out));
+            }
+            Term::Lam(_, b) => go(b, out),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    ts.iter().for_each(|t| go(t, &mut out));
+    out
 }
 
 /// 項を、数列 seqs の適用を添字（a_n・a_{n+1}）にして書く（エディタに入れる形）
@@ -656,10 +816,11 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
             let a: Vec<String> = ts[1..].iter().map(|t| show_term(t, 0)).collect();
             (format!("{}({})", show_term(&ts[0], 5), a.join(", ")), 5)
         }
-        Formula::Atom(p, ts) if ts.len() == 2 && notation_for_pred(p).is_some() => {
+        Formula::Atom(p, ts) if notation_for_pred(p).and_then(|n| n.split(ts)).is_some() => {
             let n = notation_for_pred(p).unwrap();
-            let (l, r) = n.sides(ts);
-            (format!("{} {} {}", show_term(l, 0), n.sym, show_term(r, 0)), 5)
+            let seqs = applied_names(&n.split(ts).unwrap().0);
+            let shown = n.render(ts, &|t| show_term_sub(t, &seqs), &|l| l.to_string(), &|x| x.to_string()).unwrap();
+            (shown, 5)
         }
         Formula::Atom(p, ts) => {
             let a: Vec<String> = ts.iter().map(|t| show_term(t, 0)).collect();
@@ -947,6 +1108,8 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         ),
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
+                // 略記の表示の中の数列：a(n) を a_{n} と書く
+                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) => (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5),
                 ("+" | "-", [a, b]) => (
                     format!("{} {} {}", show_term_latex(a, 1), f, show_term_latex(b, 2)),
                     1,
@@ -1128,13 +1291,14 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             let a: Vec<String> = ts[1..].iter().map(|t| show_term_latex(t, 0)).collect();
             (format!("{}({})", show_term_latex(&ts[0], 5), a.join(", ")), 5)
         }
-        Formula::Atom(p, ts) if ts.len() == 2 && notation_for_pred(p).is_some() => {
+        Formula::Atom(p, ts) if notation_for_pred(p).and_then(|n| n.split(ts)).is_some() => {
             let n = notation_for_pred(p).unwrap();
-            let (l, r) = n.sides(ts);
-            (
-                format!("{} {} {}", show_term_latex(l, 0), n.latex, show_term_latex(r, 0)),
-                5,
-            )
+            let seqs = applied_names(&n.split(ts).unwrap().0);
+            SUB_SEQS.with(|s| *s.borrow_mut() = seqs);
+            // 型紙の中の「(」の前は少し空ける（a_n → α (n → ∞)）
+            let shown = n.render(ts, &|t| show_term_latex(t, 0), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            SUB_SEQS.with(|s| s.borrow_mut().clear());
+            (shown, 5)
         }
         Formula::Atom(p, ts) => {
             let a: Vec<String> = ts.iter().map(|t| show_term_latex(t, 0)).collect();

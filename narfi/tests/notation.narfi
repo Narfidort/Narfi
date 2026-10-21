@@ -1,0 +1,38 @@
+-- 略記（notation）：型紙 := 述語の適用。右辺の λ が束縛変数（docs/language/syntax.md）
+
+def is_lim(a : ℕ → ℝ, α : ℝ) := ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
+notation a → α (n → ∞) := is_lim((n : ℕ ↦ a), α)
+notation a ⟶ α := is_lim(a, α)
+
+-- 束縛変数の文字は自由。a_n は a に縮むので、a ⟶ α と同じもの
+thm notation.same :
+  a : ℕ → ℝ, α : ℝ, h : a ⟶ α
+  ⊢ a_k → α (k → ∞)
+
+h
+
+-- n を含む式が入る
+thm notation.shift :
+  a : ℕ → ℝ, α : ℝ, h : a_n → α (n → ∞)
+  ⊢ a_{m+1} → α (m → ∞)
+
+Fix ε | hε : ε > 0
+  Obtain N, hN : h(ε, hε)
+  choose N
+  Fix n | hn : n ≥ N
+    k : n + 1 ≥ N by linarith
+    hN(n + 1, k)
+
+-- 入る所の式の中に「(」があっても、型紙の「(」と取り違えない
+thm notation.paren :
+  a : ℕ → ℝ, f : ℕ → ℝ, α : ℝ, h : a_n → α + f(0) (n → ∞)
+  ⊢ a ⟶ α + f(0)
+
+h
+
+-- 束縛変数は周りの変数と別物（∀ と同じ）
+thm notation.shadow :
+  a : ℕ → ℝ, α : ℝ, n : ℕ, h : a ⟶ α
+  ⊢ a_n → α (n → ∞)
+
+h

@@ -3,7 +3,7 @@
 //! 行指向で読む。字下げでスコープ（ブロック）を作り、各行を再帰下降でパースする。
 
 use crate::syntax::{
-    Formula, Notation, RELS, Term, holds, not, notation_for_sym, with_syntax,
+    Formula, NArg, Notation, RELS, TItem, Term, holds, not, with_syntax,
 };
 use crate::types::Ty;
 use std::collections::BTreeSet;
@@ -54,8 +54,8 @@ pub struct Def {
 pub enum Item {
     Decl(Decl),
     Def(Def),
-    /// notation 宣言（読み込み時に記法の表へ登録済み）。src は元の行
-    Notation { src: String },
+    /// notation 宣言（読み込み時に記法の表へ登録済み）。src は元の行、warn は古い書き方の警告（文言・書き換え先）
+    Notation { src: String, line: usize, warn: Option<(String, String)> },
     Import { path: String },
     /// 構文エラーで読めなかった宣言（ほかの宣言は読み続ける）
     Broken { name: String, line: usize, msg: String, src: String },
@@ -70,6 +70,16 @@ pub struct Module {
 }
 
 impl Module {
+    /// ファイル全体への警告：(行, 文言, 行の書き換え先)
+    pub fn warnings(&self) -> Vec<(usize, String, String)> {
+        self.items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Notation { line, warn: Some((m, rep)), .. } => Some((*line, m.clone(), rep.clone())),
+                _ => None,
+            })
+            .collect()
+    }
     pub fn decls(&self) -> impl Iterator<Item = &Decl> {
         self.items.iter().filter_map(|i| match i {
             Item::Decl(d) => Some(d),
@@ -647,12 +657,25 @@ fn symbolic_notations() -> Vec<Vec<char>> {
     let mut v: Vec<Vec<char>> = with_syntax(|t| {
         t.notations
             .iter()
-            .map(|n| n.sym.chars().collect::<Vec<char>>())
-            .filter(|cs| !is_ident_start(cs[0]))
+            .flat_map(|n| n.symbols())
+            .filter(|sym| !lexes_as_itself(sym))
+            .map(|sym| sym.chars().collect::<Vec<char>>())
             .collect()
     });
     v.sort_by_key(|cs| std::cmp::Reverse(cs.len()));
     v
+}
+
+/// 組み込みの字句解析で、そのまま 1 つの記号として読めるか（読めない記号だけを notation として登録する）
+pub fn lexes_as_itself(sym: &str) -> bool {
+    matches!(lex_raw(sym, 0, false).as_deref(), Ok([Tok::Sym(x)]) | Ok([Tok::Ident(x)]) if x == sym)
+}
+
+fn tok_text(t: &Tok) -> String {
+    match t {
+        Tok::Ident(x) | Tok::Sym(x) => x.clone(),
+        Tok::Num(n) => n.to_string(),
+    }
 }
 
 fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
@@ -885,11 +908,120 @@ impl P {
             _ => None,
         }
     }
-    /// notation で宣言した中置記号
-    fn peek_notation(&self) -> Option<Notation> {
-        match self.peek() {
-            Some(Tok::Sym(s)) | Some(Tok::Ident(s)) => notation_for_sym(s),
-            _ => None,
+    /// 項のあとに、入る所で始まる略記の続き（型紙の 2 番目の記号）が来ているか
+    fn notation_continues(&self) -> bool {
+        let Some(next) = self.peek().map(tok_text) else { return false };
+        with_syntax(|t| t.notations.iter().any(|n| matches!(n.items.as_slice(), [TItem::Slot(_), TItem::Lit(l), ..] if *l == next)))
+    }
+
+    /// 略記を当てはめる。first は、すでに読んだ最初の入る所の式（型紙が入る所で始まるとき）。
+    /// 長い型紙から試し、当てはまらなければ位置を戻して None
+    fn try_notations(&mut self, first: Option<&Term>) -> Option<Formula> {
+        let next = self.peek().map(tok_text)?;
+        let mut cands: Vec<Notation> = with_syntax(|t| {
+            t.notations
+                .iter()
+                .filter(|n| match (first, n.items.as_slice()) {
+                    (None, [TItem::Lit(l), ..]) => *l == next,
+                    (Some(_), [TItem::Slot(_), TItem::Lit(l), ..]) => *l == next,
+                    _ => false,
+                })
+                .cloned()
+                .collect()
+        });
+        cands.sort_by_key(|n| std::cmp::Reverse(n.items.len()));
+        let save = self.pos;
+        for n in cands {
+            if let Some(f) = self.match_template(&n, first) {
+                return Some(f);
+            }
+            self.pos = save;
+        }
+        None
+    }
+
+    fn match_template(&mut self, n: &Notation, first: Option<&Term>) -> Option<Formula> {
+        let mut slots: Vec<Option<Term>> = vec![None; n.slots.len()];
+        let mut binders: Vec<Option<String>> = vec![None; n.binders.len()];
+        let mut k = 0;
+        if let (Some(t), Some(TItem::Slot(s))) = (first, n.items.first()) {
+            slots[*s] = Some(t.clone());
+            k = 1;
+        }
+        if !self.match_items(n, k, &mut slots, &mut binders) {
+            return None;
+        }
+        let slots: Vec<Term> = slots.into_iter().collect::<Option<_>>()?;
+        let binders: Vec<String> = binders.into_iter().zip(&n.binders).map(|(b, d)| b.unwrap_or_else(|| d.clone())).collect();
+        Some(n.build(&slots, &binders))
+    }
+
+    /// 型紙の k 番目から先を当てはめる。入る所の切れ目は、次の記号が来る所を近い方から順に試す（だめなら次の候補）
+    fn match_items(&mut self, n: &Notation, k: usize, slots: &mut Vec<Option<Term>>, binders: &mut Vec<Option<String>>) -> bool {
+        let Some(item) = n.items.get(k) else { return true };
+        match item {
+            TItem::Lit(l) => {
+                if self.peek().map(tok_text).as_deref() != Some(l.as_str()) {
+                    return false;
+                }
+                self.pos += 1;
+                self.match_items(n, k + 1, slots, binders)
+            }
+            TItem::Binder(b) => {
+                let Some(Tok::Ident(x)) = self.peek().cloned() else { return false };
+                if x.contains('.') || binders[*b].as_ref().is_some_and(|y| *y != x) {
+                    return false;
+                }
+                let before = binders[*b].clone();
+                binders[*b] = Some(x);
+                self.pos += 1;
+                if self.match_items(n, k + 1, slots, binders) {
+                    return true;
+                }
+                binders[*b] = before;
+                false
+            }
+            TItem::Slot(s) => match n.items.get(k + 1) {
+                // 最後の入る所：項をまるごと読む
+                None => match self.term() {
+                    Ok(t) => {
+                        slots[*s] = Some(t);
+                        true
+                    }
+                    Err(_) => false,
+                },
+                Some(TItem::Lit(l)) => {
+                    let start = self.pos;
+                    let mut depth = 0i32;
+                    for j in start..self.toks.len() {
+                        let tx = tok_text(&self.toks[j]);
+                        if depth == 0 && j > start && tx == *l {
+                            let mut sub = P::new(self.toks[start..j].to_vec(), self.line, self.tyenv.clone());
+                            if let Ok(t) = sub.term() {
+                                if sub.at_end() {
+                                    slots[*s] = Some(t);
+                                    self.pos = j;
+                                    if self.match_items(n, k + 1, slots, binders) {
+                                        return true;
+                                    }
+                                    slots[*s] = None;
+                                }
+                            }
+                        }
+                        match tx.as_str() {
+                            "(" | "[" | "{" => depth += 1,
+                            ")" | "]" | "}" => depth -= 1,
+                            _ => {}
+                        }
+                        if depth < 0 {
+                            break;
+                        }
+                    }
+                    self.pos = start;
+                    false
+                }
+                _ => false,
+            },
         }
     }
 
@@ -1053,7 +1185,7 @@ impl P {
             if let Ok(f) = self.formula() {
                 if self.eat_sym(")")
                     && self.peek_rel().is_none()
-                    && self.peek_notation().is_none()
+                    && !self.notation_continues()
                     && !self.is_term_op()
                 {
                     return Ok(f);
@@ -1061,7 +1193,15 @@ impl P {
             }
             self.pos = save;
         }
+        // 記号で始まる略記（\lim … など）
+        if let Some(f) = self.try_notations(None) {
+            return Ok(f);
+        }
         let t = self.term()?;
+        // 入る所で始まる略記（a ⟶ α、a → α (n → ∞) など）
+        if let Some(f) = self.try_notations(Some(&t)) {
+            return Ok(f);
+        }
         if let Some(r) = self.peek_rel() {
             self.pos += 1;
             let u = self.term()?;
@@ -1077,11 +1217,6 @@ impl P {
             } else {
                 Formula::Atom(r, vec![t, u])
             });
-        }
-        if let Some(n) = self.peek_notation() {
-            self.pos += 1;
-            let u = self.term()?;
-            return Ok(n.atom(t, u));
         }
         let (p, args) = match t {
             Term::App(p, args) if p == "@" => return Ok(Formula::Atom(p, args)),
@@ -1497,10 +1632,12 @@ fn parse_item_at(
             return Ok(());
         }
         "notation" => {
-            let n = parse_notation(&l.text, l.no)?;
+            let (n, warn) = parse_notation(&l.text, l.no)?;
             with_syntax(|t| t.notations.push(n));
             items.push(Item::Notation {
                 src: l.text.clone(),
+                line: l.no,
+                warn,
             });
             *i += 1;
             return Ok(());
@@ -1566,10 +1703,7 @@ fn parse_item_at(
             header.push(*i);
         }
     } else {
-        while !lines[*i].text.contains('⊢')
-            && !lines[*i].text.contains("|-")
-            && !lines[*i].text.contains("\\vdash")
-        {
+        while !has_turnstile(&lines[*i].text) {
             *i += 1;
             if *i >= lines.len() || starts_decl(&lines[*i].text) && lines[*i].indent == 0 {
                 return Err(ParseError {
@@ -1677,12 +1811,14 @@ pub fn parse_module(
             if e.msg.starts_with("import ") || e.msg.starts_with("循環 import") {
                 return Err(e);
             }
-            let name = lines[start]
+            // notation の行は「notation」と出す（型紙の最初の語は名前ではない）
+            let name = if decl_keyword(&lines[start].text) == "notation" { Some("notation".to_string()) } else { None };
+            let name = name.or_else(|| lines[start]
                 .text
                 .split_whitespace()
                 .nth(1)
                 .map(|w| w.trim_end_matches([':', '(']).split('(').next().unwrap_or("").to_string())
-                .filter(|w| !w.is_empty())
+                .filter(|w| !w.is_empty()))
                 .unwrap_or_else(|| "（構文エラー）".into());
             i = start + 1;
             while i < lines.len() && !(lines[i].indent == 0 && starts_decl(&lines[i].text)) {
@@ -1783,89 +1919,137 @@ fn parse_import(text: &str, line: usize) -> PResult<String> {
     Ok(path)
 }
 
-/// `notation a "⟶" α := is_lim(a, α)`
-fn parse_notation(text: &str, line: usize) -> PResult<Notation> {
+/// `notation 型紙 := 述語(引数, …)`（docs/language/syntax.md の「略記」）
+/// - 右辺の引数は名前（入る所）か (n : ℕ ↦ 名前)（n が束縛変数、名前は n を含んでよい式が入る所）
+/// - 型紙のそれ以外の名前・記号は、書いたとおりの文字
+///
+/// 古い書き方 `notation a "⟶" α := …` は読めるが、警告と書き換え先（引用符を外したもの）を返す
+fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String, String)>)> {
     let err = |msg: String| Err(ParseError { line, msg });
-    let norm = normalize_japanese_sugar(text);
-    let rest = norm.trim_start().strip_prefix("notation").unwrap_or(&norm);
-    let (lhs, rest) = match rest.split_once('"') {
-        Some(x) => x,
-        None => return err("notation の記号は \"…\" で囲む：notation a \"⟶\" α := is_lim(a, α)".into()),
+    let rest = text.trim_start().strip_prefix("notation").unwrap_or(text);
+    let Some((lhs, rhs)) = rest.split_once(":=") else {
+        return err("notation は「notation 型紙 := 述語(引数, …)」と書く：notation a ⟶ α := is_lim(a, α)".into());
     };
-    let (raw_sym, rest) = match rest.split_once('"') {
-        Some(x) => x,
-        None => return err("notation の記号の \" が閉じていない".into()),
-    };
-    let raw_sym = raw_sym.trim();
-    let sym = expand_tex_macros(raw_sym).trim().to_string();
-    if sym.is_empty() || sym.chars().any(|c| c.is_whitespace() || c == '"') {
-        return err(format!("notation の記号「{sym}」には空白を含められない"));
+    let mut warn = None;
+    let mut lhs = lhs.to_string();
+    if lhs.contains('"') {
+        lhs = lhs.replace('"', " ");
+        let new_line = format!("notation {} := {}", lhs.split_whitespace().collect::<Vec<_>>().join(" "), rhs.trim());
+        warn = Some(("notation の記号を \"…\" で囲む書き方は古い（引用符は要らない）。行末で Tab を押すと書き換わる".to_string(), new_line));
     }
-    // 組み込みの記号（→ < + など）と同じなら、式の読み方が変わってしまうので禁止
-    if let Ok(toks) = lex_raw(&sym, line, false) {
-        if let [Tok::Sym(b)] = toks.as_slice() {
-            return err(format!(
-                "記号「{raw_sym}」は組み込みの「{b}」と衝突する（例えば \"⟶\"（\\longrightarrow）を使う）"
-            ));
-        }
-    }
-    if notation_for_sym(&sym).is_some() {
-        return err(format!("記号「{sym}」の notation はすでにある"));
-    }
-    let mut p = P::new(lex_raw(&expand_tex_macros(lhs), line, false)?, line, vec![]);
-    let l = p.ident()?;
-    p.expect_end()?;
-    let mut p = P::new(lex(rest, line)?, line, vec![]);
-    let r = p.ident()?;
-    p.expect_sym(":=")?;
+    // 右辺：述語(引数, …)
+    let mut p = P::new(lex(rhs, line)?, line, vec![]);
     let target = p.formula()?;
     p.expect_end()?;
-    let (pred, swap) = match &target {
-        Formula::Atom(pred, ts) if l != r => match ts.as_slice() {
-            [Term::Var(x), Term::Var(y)] if *x == l && *y == r => (pred.clone(), false),
-            [Term::Var(x), Term::Var(y)] if *x == r && *y == l => (pred.clone(), true),
-            _ => return err(format!("notation の右辺は {pred}({l}, {r}) の形にする")),
-        },
-        _ => {
-            return err(format!(
-                "notation の右辺は述語の適用 P({l}, {r}) の形にする（「{target}」）"
-            ));
-        }
+    let Formula::Atom(pred, rargs) = &target else {
+        return err(format!("notation の右辺は述語の適用 P(a, b, …) にする（「{target}」）"));
     };
-    let latex = notation_latex(raw_sym, &sym);
-    Ok(Notation {
-        sym,
-        pred,
-        swap,
-        latex,
-    })
+    if RELS.contains(&pred.as_str()) || pred == "@" {
+        return err(format!("notation の右辺は名前の付いた述語の適用にする（「{target}」）"));
+    }
+    let mut slots: Vec<String> = vec![];
+    let mut binders: Vec<String> = vec![];
+    let mut args = vec![];
+    for a in rargs {
+        let slot_of = |x: &str, slots: &mut Vec<String>| -> PResult<usize> {
+            if slots.iter().any(|s| s == x) {
+                return Err(ParseError { line, msg: format!("notation の右辺で「{x}」が 2 回使われている（入る所はそれぞれ 1 回）") });
+            }
+            slots.push(x.to_string());
+            Ok(slots.len() - 1)
+        };
+        match a {
+            Term::Var(x) => args.push(NArg::Slot(slot_of(x, &mut slots)?)),
+            Term::Lam(ps, body) if ps.len() == 1 && matches!(&**body, Term::Var(_)) => {
+                let Term::Var(x) = &**body else { unreachable!() };
+                let (b, sort) = &ps[0];
+                if binders.contains(b) {
+                    return err(format!("notation の束縛変数「{b}」が 2 回束縛されている"));
+                }
+                binders.push(b.clone());
+                let k = slot_of(x, &mut slots)?;
+                args.push(NArg::Lam(binders.len() - 1, sort.clone(), k));
+            }
+            _ => {
+                return err(format!(
+                    "notation の右辺の引数は、名前か (n : ℕ ↦ 名前) にする（「{a}」）"
+                ))
+            }
+        }
+    }
+    if let Some(b) = binders.iter().find(|b| slots.contains(b)) {
+        return err(format!("「{b}」が入る所と束縛変数の両方に使われている"));
+    }
+    // 型紙：空白で区切った塊ごとに字句解析する。読めない記号の塊は、新しい記号として 1 つの記号にする
+    let mut toks: Vec<Tok> = vec![];
+    for chunk in expand_tex_macros(&lhs).split_whitespace() {
+        match lex_raw(chunk, line, true) {
+            Ok(ts) => toks.extend(ts),
+            Err(_) if !chunk.chars().any(|c| c.is_alphanumeric() || c == '_' || c == '(' || c == ')') => toks.push(Tok::Sym(chunk.to_string())),
+            Err(e) => return Err(e),
+        }
+    }
+    let mut items = vec![];
+    let mut seen = vec![0usize; slots.len()];
+    let mut bseen = vec![0usize; binders.len()];
+    for t in &toks {
+        let tx = tok_text(t);
+        if let Some(k) = slots.iter().position(|s| *s == tx) {
+            seen[k] += 1;
+            items.push(TItem::Slot(k));
+        } else if let Some(b) = binders.iter().position(|s| *s == tx) {
+            bseen[b] += 1;
+            items.push(TItem::Binder(b));
+        } else {
+            if let Tok::Ident(x) = t
+                && let Some((f, _)) = x.split_once('_')
+                && slots.iter().any(|s| s == f)
+            {
+                return err(format!(
+                    "型紙では「{x}」ではなく「{f}」と書く（{f} に式が入る。添字の文字を含む式にするには、右辺を ({} : ℕ ↦ {f}) にする）",
+                    &x[f.len() + 1..]
+                ));
+            }
+            items.push(TItem::Lit(tx));
+        }
+    }
+    if let Some(k) = seen.iter().position(|&c| c != 1) {
+        return err(format!("型紙に入る所「{}」をちょうど 1 回書く（{} 回）", slots[k], seen[k]));
+    }
+    if let Some(b) = bseen.iter().position(|&c| c == 0) {
+        return err(format!("型紙に束縛変数「{}」を書く（使う人が文字を選べるように）", binders[b]));
+    }
+    if !items.iter().any(|i| matches!(i, TItem::Lit(_))) {
+        return err("型紙には記号か文字を少なくとも 1 つ書く".into());
+    }
+    if items.windows(2).any(|w| !matches!(w[0], TItem::Lit(_)) && !matches!(w[1], TItem::Lit(_))) {
+        return err("型紙の入る所・束縛変数のあいだには、記号か文字を置く".into());
+    }
+    if matches!(items.first(), Some(TItem::Binder(_))) {
+        return err("型紙は束縛変数で始められない".into());
+    }
+    let template = lhs.split_whitespace().collect::<Vec<_>>().join(" ");
+    let n = Notation { pred: pred.clone(), items, args, binders, slots, template: template.clone() };
+    // あいまいさ：型紙（入る所を名前に置き換えたもの）が、今ある書き方（略記を含む）でまるごと読めるなら拒む
+    let probe: Vec<Tok> = n
+        .items
+        .iter()
+        .map(|i| match i {
+            TItem::Slot(k) => Tok::Ident(format!("x{k}")),
+            TItem::Binder(b) => Tok::Ident(n.binders[*b].clone()),
+            TItem::Lit(l) => toks.iter().find(|t| tok_text(t) == *l).cloned().unwrap_or(Tok::Sym(l.clone())),
+        })
+        .collect();
+    let mut pp = P::new(probe, line, vec![]);
+    if pp.formula().is_ok() && pp.at_end() {
+        return err(format!("型紙「{template}」は、すでにある書き方でも読めてしまう（あいまいになる）。別の記号を使う"));
+    }
+    if let Some(o) = with_syntax(|t| t.notations.iter().find(|o| o.lits() == n.lits()).cloned()) {
+        return err(format!("型紙「{template}」は、略記「{}」（{}）と同じ形でぶつかる", o.template, o.pred));
+    }
+    Ok((n, warn))
 }
 
-fn notation_latex(raw: &str, sym: &str) -> String {
-    if raw.starts_with('\\') {
-        return raw.to_string();
-    }
-    let known = match sym {
-        "⟶" => Some("\\longrightarrow"),
-        "⇝" => Some("\\rightsquigarrow"),
-        "⇀" => Some("\\rightharpoonup"),
-        "↦" => Some("\\mapsto"),
-        "≺" => Some("\\prec"),
-        "≻" => Some("\\succ"),
-        "≼" => Some("\\preceq"),
-        "≽" => Some("\\succeq"),
-        "⊥⊥" => Some("\\perp\\!\\!\\!\\perp"),
-        "~" => Some("\\sim"),
-        _ => None,
-    };
-    match known {
-        Some(k) => k.to_string(),
-        None if sym.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => {
-            format!("\\mathrel{{\\mathrm{{{}}}}}", sym.replace('_', "\\_"))
-        }
-        None => format!("\\mathrel{{\\text{{{sym}}}}}"),
-    }
-}
 
 /// `def is_lim(a : ℕ → ℝ, α : ℝ) := φ`（述語）/ `def sq(x : ℕ) : ℕ := x · x`（項）
 fn parse_def(text: &str, line: usize) -> PResult<Def> {
@@ -2172,6 +2356,11 @@ fn known_type(t: &Ty) -> bool {
         Ty::Base(b) => !TYPE_NAMES.contains(&b.as_str()) && !with_syntax(|tb| tb.types.contains(b)),
         _ => false,
     })
+}
+
+/// 行に ⊢ があるか（`|->`（↦）の `|-` は ⊢ ではない）
+fn has_turnstile(text: &str) -> bool {
+    text.contains('⊢') || text.contains("\\vdash") || text.match_indices("|-").any(|(k, _)| !text[k + 2..].starts_with('>'))
 }
 
 fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {

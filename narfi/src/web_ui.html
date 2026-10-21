@@ -1635,6 +1635,20 @@ function parseAsciiToItems(str) {
       continue;
     }
 
+    // \infty・\prec などの記号のコマンド（ファイルに書かれた形）は、記号にする
+    if (ch === "\\" && /[A-Za-z]/.test(str[i + 1] || "")) {
+      let j = i + 1;
+      while (j < str.length && /[A-Za-z]/.test(str[j])) j++;
+      const entry = COMMAND_DICT.find((c) => c.kind === "sym" && c.cmd === str.substring(i + 1, j));
+      if (entry) {
+        items.push(makeSym(entry.ascii, entry.display, entry.cls));
+        i = j;
+        // 「\prec b」の空白は区切り（書き出すときにまた付く）。「\le b」の空白は残す
+        if (entry.ascii.startsWith("\\") && str[i] === " " && /[A-Za-z]/.test(str[i + 1] || "")) i++;
+        continue;
+      }
+    }
+
     // 8. Identifier / Keyword / Greek word
     if (/[A-Za-zα-ωΑ-Ω]/.test(ch)) {
       let j = i + 1;
@@ -2144,11 +2158,9 @@ function getInferredFixHypFormula(lineNo, rootSeq) {
   for (const d of lastCheckData.decls) {
     if (d.error && d.error.line === lineNo && d.error.fix) return { append: d.error.fix };
   }
-  // 古い書き方の警告：行ごと書き換える
-  for (const d of lastCheckData.decls) {
-    for (const w of (d.warnings || [])) {
-      if (w.line === lineNo && w.replace !== null && w.replace !== undefined) return { replace: w.replace };
-    }
+  // 古い書き方の警告：行ごと書き換える（宣言の中の警告と、notation などファイル全体への警告）
+  for (const w of [...lastCheckData.decls.flatMap((d) => d.warnings || []), ...(lastCheckData.warnings || [])]) {
+    if (w.line === lineNo && w.replace !== null && w.replace !== undefined) return { replace: w.replace };
   }
   if (!matchKeywordPrefix(items, "Fix ")) return "";
   const barIdx = findCharIndexInItems(items, "|", 4);
@@ -2332,12 +2344,12 @@ function computeHeaderLines() {
     const t = serializeSeqToAscii(docLines[i].rootSeq).trim();
     if (/^(thm|axiom|def|rec|typedef|notation|import)\b/.test(t) && docLines[i].indent === 0) {
       set.add(i + 1);
-      inHead = /^thm\b/.test(t) && !/\|-|⊢/.test(t);
+      inHead = /^thm\b/.test(t) && !/\|-(?!>)|⊢/.test(t);
       continue;
     }
     if (inHead) {
       set.add(i + 1);
-      if (/\|-|⊢/.test(t)) inHead = false;
+      if (/\|-(?!>)|⊢/.test(t)) inHead = false;
     }
   }
   lensHeaderLines = set;
@@ -2724,6 +2736,7 @@ function renderEditor() {
     if (lastCheckData.parse_error && lastCheckData.parse_error.line) {
       errLines.add(lastCheckData.parse_error.line);
     }
+    for (const w of (lastCheckData.warnings || [])) warnLines.add(w.line);
     for (const d of (lastCheckData.decls || [])) {
       for (const w of (d.warnings || [])) warnLines.add(w.line);
       if (d.error && d.error.line) errLines.add(d.error.line);
@@ -3928,7 +3941,7 @@ function renderGoalInspector() {
           fixes.map((f) => `<button class="hint" data-append="${escHtml(f)}">${escHtml(f.trim())}</button>`).join("") + `</div>`;
       }
     }
-    for (const w of (activeDecl.warnings || [])) {
+    for (const w of [...(activeDecl.warnings || []), ...(lastCheckData.warnings || [])]) {
       if (w.line === curLine) html += `<div class="warn-banner">Ln ${w.line}: ${escHtml(w.msg)}${w.replace !== null ? "（行末で Tab）" : ""}</div>`;
     }
 
