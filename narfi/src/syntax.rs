@@ -56,7 +56,10 @@ pub fn not(f: Formula) -> Formula {
 /// - 式 `b_k → β (k → ∞)` は Atom("is_lim", [(k ↦ b_k), β]) になる（`(k ↦ b(k))` は b に縮める）。
 #[derive(Clone, Debug)]
 pub struct Notation {
+    /// 右辺の述語・関数の名前
     pub pred: String,
+    /// 命題になる略記（述語）か、値になる略記（関数）か
+    pub kind: NKind,
     pub items: Vec<TItem>,
     /// 述語の引数ごとに、どの入る所から作るか
     pub args: Vec<NArg>,
@@ -66,6 +69,12 @@ pub struct Notation {
     pub slots: Vec<String>,
     /// 宣言の型紙（エディタ・エラーの表示用）
     pub template: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NKind {
+    Pred,
+    Func,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -86,15 +95,27 @@ pub enum NArg {
 impl Notation {
     /// 型紙に当てはめた入る所・束縛変数から、述語の適用を作る
     pub fn build(&self, slots: &[Term], binders: &[String]) -> Formula {
-        let args = self
-            .args
+        Formula::Atom(self.pred.clone(), self.build_args(slots, binders))
+    }
+
+    /// 値になる略記：関数の適用
+    pub fn build_term(&self, slots: &[Term], binders: &[String]) -> Term {
+        Term::App(self.pred.clone(), self.build_args(slots, binders))
+    }
+
+    fn build_args(&self, slots: &[Term], binders: &[String]) -> Vec<Term> {
+        self.args
             .iter()
             .map(|a| match a {
                 NArg::Slot(k) => slots[*k].clone(),
                 NArg::Lam(b, sort, k) => lam_eta(&binders[*b], sort, &slots[*k]),
             })
-            .collect();
-        Formula::Atom(self.pred.clone(), args)
+            .collect()
+    }
+
+    /// 入る所 k が型紙の端（最初か最後）にあるか。値になる略記の端には 1 つのまとまりだけが入る
+    pub fn slot_at_edge(&self, k: usize) -> bool {
+        matches!(self.items.first(), Some(TItem::Slot(s)) if *s == k) || matches!(self.items.last(), Some(TItem::Slot(s)) if *s == k)
     }
 
     /// 表示：述語の引数 ts から、入る所の式と束縛変数の名前を取り出す
@@ -166,16 +187,49 @@ impl Notation {
     }
 
     /// 型紙で書いた文字列（表示）。show は入る所の式の書き方
-    fn render(&self, ts: &[Term], show: &dyn Fn(&Term) -> String, lit: &dyn Fn(&str) -> String, ident: &dyn Fn(&str) -> String) -> Option<String> {
+    /// show は入る所の式の書き方（2 つ目の引数は、括弧が要るほど強く結びつく位置か）
+    fn render(&self, ts: &[Term], show: &dyn Fn(&Term, u8) -> String, lit: &dyn Fn(&str) -> String, ident: &dyn Fn(&str) -> String) -> Option<String> {
         let (slots, binders) = self.split(ts)?;
         let mut out = String::new();
+        // 下に添字の付く演算子（lim_( … )）は lim_{ … } と書く。closers は、その「(」に対応する括弧の深さ
+        let mut depth = 0usize;
+        let mut closers: Vec<usize> = vec![];
+        let mut open_next = false;
         for it in &self.items {
             let piece = match it {
+                TItem::Lit(s) if s.ends_with('_') && crate::parser::UNDER_OPS.contains(&&s[..s.len() - 1]) => {
+                    open_next = true;
+                    // 文字の表示でも \lim と書く（読み直したとき max_{i} が 1 つの名前 max_i にならないように）
+                    let op = &s[..s.len() - 1];
+                    let shown = lit(op);
+                    if shown == op { format!("\\{op}_") } else { format!("{shown}_") }
+                }
+                TItem::Lit(s) if s == "(" && open_next => {
+                    open_next = false;
+                    depth += 1;
+                    closers.push(depth);
+                    "{".to_string()
+                }
+                TItem::Lit(s) if s == "(" => {
+                    depth += 1;
+                    lit(s)
+                }
+                TItem::Lit(s) if s == ")" => {
+                    let close = closers.last() == Some(&depth);
+                    depth = depth.saturating_sub(1);
+                    if close {
+                        closers.pop();
+                        "}".to_string()
+                    } else {
+                        lit(s)
+                    }
+                }
                 TItem::Lit(s) => lit(s),
-                TItem::Slot(k) => show(&slots[*k]),
+                // 値になる略記の端の入る所は 1 つのまとまり（足し算・掛け算は括弧に入れる）
+                TItem::Slot(k) => show(&slots[*k], if self.kind == NKind::Func && self.slot_at_edge(*k) { 4 } else { 0 }),
                 TItem::Binder(b) => ident(&binders[*b]),
             };
-            let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || piece.starts_with(')') || piece.starts_with(']') || piece == "_" || out.is_empty();
+            let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || out.ends_with('{') || piece.starts_with(')') || piece.starts_with(']') || piece == "}" || piece == "_" || out.is_empty();
             if !glue {
                 out.push(' ');
             }
@@ -201,6 +255,8 @@ pub struct SyntaxTable {
     pub notations: Vec<Notation>,
     /// def で定義した述語の名前 → 引数の数
     pub defs: HashMap<String, usize>,
+    /// そのうち値を返す関数（項の定義・rec）
+    pub fns: BTreeSet<String>,
     /// 定義の本体に現れた述語（あとから同じ名前を def して循環させないため）
     pub def_preds: BTreeSet<String>,
     /// typedef で作った型・定数
@@ -250,6 +306,7 @@ pub fn lit_latex(s: &str) -> String {
         "≼" => "\\preceq".into(),
         "≽" => "\\succeq".into(),
         "(" | ")" | "[" | "]" | "," | "|" => s.into(),
+        _ if crate::parser::UNDER_OPS.contains(&s) => format!("\\{s}"),
         _ if s.chars().all(|c| c.is_alphabetic()) && s.chars().count() > 1 => format!("\\mathrm{{{s}}}"),
         _ => ident_to_latex(s),
     }
@@ -257,7 +314,12 @@ pub fn lit_latex(s: &str) -> String {
 
 /// 表示に使う記法（同じ述語に複数あるときは最初に宣言したもの）
 pub fn notation_for_pred(pred: &str) -> Option<Notation> {
-    with_syntax(|t| t.notations.iter().find(|n| n.pred == pred).cloned())
+    with_syntax(|t| t.notations.iter().find(|n| n.pred == pred && n.kind == NKind::Pred).cloned())
+}
+
+/// 値になる略記で、表示に使うもの（関数 f に複数あるときは最初に宣言したもの）
+pub fn notation_for_fn(f: &str) -> Option<Notation> {
+    with_syntax(|t| t.notations.iter().find(|n| n.pred == f && n.kind == NKind::Func).cloned())
 }
 
 // ---------------------------------------------------------------- 定義・図式の具体化
@@ -320,9 +382,13 @@ fn applied_names(ts: &[Term]) -> BTreeSet<String> {
 
 /// 項を、数列 seqs の適用を添字（a_n・a_{n+1}）にして書く（エディタに入れる形）
 pub fn show_term_sub(t: &Term, seqs: &BTreeSet<String>) -> String {
-    SUB_SEQS.with(|s| *s.borrow_mut() = seqs.clone());
-    let out = show_term(t, 0);
-    SUB_SEQS.with(|s| s.borrow_mut().clear());
+    show_term_sub_prec(t, seqs, 0)
+}
+
+fn show_term_sub_prec(t: &Term, seqs: &BTreeSet<String>, prec: u8) -> String {
+    let before = SUB_SEQS.with(|s| std::mem::replace(&mut *s.borrow_mut(), seqs.clone()));
+    let out = show_term(t, prec);
+    SUB_SEQS.with(|s| *s.borrow_mut() = before);
     out
 }
 
@@ -726,6 +792,12 @@ pub fn show_term(t: &Term, prec: u8) -> String {
             format!("{}({})", show_term(&args[0], 5), a.join(", "))
         }
         Term::Set(ps, phi) => format!("{{{} | {}}}", binder_typed(ps), show_formula(phi, 0)),
+        Term::App(f, args) if notation_for_fn(f).and_then(|n| n.split(args)).is_some() => {
+            let n = notation_for_fn(f).unwrap();
+            let seqs = applied_names(&n.split(args).unwrap().0);
+            let s = n.render(args, &|t, p| show_term_sub_prec(t, &seqs, p), &|l| l.to_string(), &|x| x.to_string()).unwrap();
+            if prec > 4 { format!("({s})") } else { s }
+        }
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 ("+" | "-" | "∪" | "∩" | "\\", [a, b]) => {
@@ -819,7 +891,7 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
         Formula::Atom(p, ts) if notation_for_pred(p).and_then(|n| n.split(ts)).is_some() => {
             let n = notation_for_pred(p).unwrap();
             let seqs = applied_names(&n.split(ts).unwrap().0);
-            let shown = n.render(ts, &|t| show_term_sub(t, &seqs), &|l| l.to_string(), &|x| x.to_string()).unwrap();
+            let shown = n.render(ts, &|t, p| show_term_sub_prec(t, &seqs, p), &|l| l.to_string(), &|x| x.to_string()).unwrap();
             (shown, 5)
         }
         Formula::Atom(p, ts) => {
@@ -1092,6 +1164,14 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
         Term::Lam(ps, b) => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
+        Term::App(f, args) if notation_for_fn(f).and_then(|n| n.split(args)).is_some() => {
+            let n = notation_for_fn(f).unwrap();
+            let seqs = applied_names(&n.split(args).unwrap().0);
+            let before = SUB_SEQS.with(|s| std::mem::replace(&mut *s.borrow_mut(), seqs));
+            let s = n.render(args, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            SUB_SEQS.with(|s| *s.borrow_mut() = before);
+            if prec > 4 { format!("\\left({s}\\right)") } else { s }
+        }
         Term::App(f, args) if f == "@" && !args.is_empty() => {
             let a: Vec<String> = args[1..].iter().map(|a| show_term_latex(a, 0)).collect();
             // 行列の式の成分は (AB)_{ij} と書く
@@ -1296,7 +1376,7 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             let seqs = applied_names(&n.split(ts).unwrap().0);
             SUB_SEQS.with(|s| *s.borrow_mut() = seqs);
             // 型紙の中の「(」の前は少し空ける（a_n → α (n → ∞)）
-            let shown = n.render(ts, &|t| show_term_latex(t, 0), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            let shown = n.render(ts, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
             SUB_SEQS.with(|s| s.borrow_mut().clear());
             (shown, 5)
         }

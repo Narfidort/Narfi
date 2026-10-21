@@ -3,7 +3,7 @@
 //! 行指向で読む。字下げでスコープ（ブロック）を作り、各行を再帰下降でパースする。
 
 use crate::syntax::{
-    Formula, NArg, Notation, RELS, TItem, Term, holds, not, with_syntax,
+    Formula, NArg, NKind, Notation, RELS, TItem, Term, holds, not, with_syntax,
 };
 use crate::types::Ty;
 use std::collections::BTreeSet;
@@ -364,6 +364,9 @@ fn tex_macro_replacement(cmd: &str) -> Option<&'static str> {
     })
 }
 
+/// 下に添字の付く演算子（エディタの「下に添字」の入力欄。意味は notation で付ける）
+pub const UNDER_OPS: [&str; 9] = ["lim", "limsup", "liminf", "max", "min", "sup", "inf", "argmax", "argmin"];
+
 /// 文字列中の `\forall` や `\frac{a}{b}` などの TeX 表記を展開する前処理
 pub fn expand_tex_macros(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
@@ -376,6 +379,10 @@ pub fn expand_tex_macros(s: &str) -> String {
             let mut j = st;
             while j < cs.len() && (cs[j].is_ascii_alphanumeric() || cs[j] == '_') {
                 j += 1;
+            }
+            // \lim_{…} の「_」はコマンドの名前に含めない
+            if j > st + 1 && cs[j - 1] == '_' && UNDER_OPS.contains(&cs[st..j - 1].iter().collect::<String>().as_str()) {
+                j -= 1;
             }
             if j > st {
                 let cmd: String = cs[st..j].iter().collect();
@@ -415,6 +422,22 @@ pub fn expand_tex_macros(s: &str) -> String {
                         i = end_k;
                         continue;
                     }
+                } else if UNDER_OPS.contains(&cmd.as_str()) {
+                    // 下に添字の付く演算子：\lim_{n → ∞}・\max_{x ∈ A}・\max_i は lim_(n → ∞)・max_(x ∈ A)・max_(i)。
+                    // 添字は名前でも 1 つの組にする（max_i という 1 つの名前にしない）。意味は notation で付ける
+                    out.push_str(&cmd);
+                    let mut k = j;
+                    if k < cs.len() && cs[k] == '_' {
+                        if let Some((inner, end_k)) = extract_braced(&cs, k + 1) {
+                            out.push_str(&format!("_({})", expand_tex_macros(inner.trim())));
+                            k = end_k;
+                        } else if k + 1 < cs.len() && cs[k + 1].is_alphanumeric() {
+                            out.push_str(&format!("_({})", cs[k + 1]));
+                            k += 2;
+                        }
+                    }
+                    i = k;
+                    continue;
                 } else if let Some(rep) = tex_macro_replacement(&cmd) {
                     out.push_str(rep);
                     i = j;
@@ -490,25 +513,29 @@ const IMPLICIT_STOP: [&str; 14] =
 
 struct SubScope {
     seqs: BTreeSet<String>,
+    /// 添字 2 つの関数（`F : ℕ × ℕ → σ`）。`F_i^j` は F(i, j)
+    idx2: BTreeSet<String>,
     declared: BTreeSet<String>,
 }
 
 impl SubScope {
     fn new(vars: &[(String, String)]) -> SubScope {
         let is_seq = |t: &str| t.strip_prefix("ℕ →").is_some_and(|r| !r.contains('→') && !r.contains('×'));
+        let is_idx2 = |t: &str| t.strip_prefix("ℕ × ℕ →").is_some_and(|r| !r.contains('→') && !r.contains('×'));
         SubScope {
             seqs: vars.iter().filter(|(_, t)| is_seq(t)).map(|(x, _)| x.clone()).collect(),
+            idx2: vars.iter().filter(|(_, t)| is_idx2(t)).map(|(x, _)| x.clone()).collect(),
             declared: vars.iter().map(|(x, _)| x.clone()).collect(),
         }
     }
 
     /// x が数列の添字の形なら (数列, 添字)
     fn split(&self, x: &str) -> Option<(String, Term)> {
-        if self.seqs.is_empty() || self.declared.contains(x) {
+        if (self.seqs.is_empty() && self.idx2.is_empty()) || self.declared.contains(x) {
             return None;
         }
         if let Some((b, i)) = x.split_once('_') {
-            if self.seqs.contains(b) && !i.is_empty() {
+            if (self.seqs.contains(b) || self.idx2.contains(b)) && !i.is_empty() {
                 let idx = if let Ok(n) = i.parse::<i64>() { Term::Num(n) } else { Term::Var(i.to_string()) };
                 return Some((b.to_string(), idx));
             }
@@ -531,10 +558,20 @@ impl SubScope {
                 Some((b, i)) => Term::App(b, vec![i]),
                 None => t.clone(),
             },
+            // 上付き：関数に付いたら引数（u^n は u(n)、F_i^j は F(i, j)）、数に付いたら冪（a_n^2 は a(n)²）
+            Term::App(f, args) if f == "^" && args.len() == 2 => {
+                let base = self.term(&args[0]);
+                let e = self.term(&args[1]);
+                match &base {
+                    Term::Var(u) if self.seqs.contains(u) && !self.declared.contains(&format!("{u}^")) => Term::App(u.clone(), vec![e]),
+                    Term::App(g, a1) if self.idx2.contains(g) && a1.len() == 1 => Term::App(g.clone(), vec![a1[0].clone(), e]),
+                    _ => Term::App("^".into(), vec![base, e]),
+                }
+            }
             Term::App(f, args) => {
                 let args: Vec<Term> = args.iter().map(|a| self.term(a)).collect();
                 match f.strip_suffix('_') {
-                    Some(b) if self.seqs.contains(b) && !self.declared.contains(f) => Term::App(b.to_string(), args),
+                    Some(b) if (self.seqs.contains(b) || self.idx2.contains(b)) && !self.declared.contains(f) => Term::App(b.to_string(), args),
                     _ => Term::App(f.clone(), args),
                 }
             }
@@ -921,6 +958,7 @@ impl P {
         let mut cands: Vec<Notation> = with_syntax(|t| {
             t.notations
                 .iter()
+                .filter(|n| n.kind == NKind::Pred)
                 .filter(|n| match (first, n.items.as_slice()) {
                     (None, [TItem::Lit(l), ..]) => *l == next,
                     (Some(_), [TItem::Slot(_), TItem::Lit(l), ..]) => *l == next,
@@ -940,7 +978,41 @@ impl P {
         None
     }
 
+    /// 値になる略記を当てはめる（term_atom・term_unary から）。first はすでに読んだ 1 つのまとまり
+    fn try_term_notations(&mut self, first: Option<&Term>) -> Option<Term> {
+        let next = self.peek().map(tok_text)?;
+        let mut cands: Vec<Notation> = with_syntax(|t| {
+            t.notations
+                .iter()
+                .filter(|n| n.kind == NKind::Func)
+                .filter(|n| match (first, n.items.as_slice()) {
+                    (None, [TItem::Lit(l), ..]) => *l == next,
+                    (Some(_), [TItem::Slot(_), TItem::Lit(l), ..]) => *l == next,
+                    _ => false,
+                })
+                .cloned()
+                .collect()
+        });
+        if cands.is_empty() {
+            return None;
+        }
+        cands.sort_by_key(|n| std::cmp::Reverse(n.items.len()));
+        let save = self.pos;
+        for n in cands {
+            if let Some((slots, binders)) = self.match_parts(&n, first) {
+                return Some(n.build_term(&slots, &binders));
+            }
+            self.pos = save;
+        }
+        None
+    }
+
     fn match_template(&mut self, n: &Notation, first: Option<&Term>) -> Option<Formula> {
+        let (slots, binders) = self.match_parts(n, first)?;
+        Some(n.build(&slots, &binders))
+    }
+
+    fn match_parts(&mut self, n: &Notation, first: Option<&Term>) -> Option<(Vec<Term>, Vec<String>)> {
         let mut slots: Vec<Option<Term>> = vec![None; n.slots.len()];
         let mut binders: Vec<Option<String>> = vec![None; n.binders.len()];
         let mut k = 0;
@@ -953,7 +1025,7 @@ impl P {
         }
         let slots: Vec<Term> = slots.into_iter().collect::<Option<_>>()?;
         let binders: Vec<String> = binders.into_iter().zip(&n.binders).map(|(b, d)| b.unwrap_or_else(|| d.clone())).collect();
-        Some(n.build(&slots, &binders))
+        Some((slots, binders))
     }
 
     /// 型紙の k 番目から先を当てはめる。入る所の切れ目は、次の記号が来る所を近い方から順に試す（だめなら次の候補）
@@ -982,8 +1054,8 @@ impl P {
                 false
             }
             TItem::Slot(s) => match n.items.get(k + 1) {
-                // 最後の入る所：項をまるごと読む
-                None => match self.term() {
+                // 最後の入る所：命題になる略記は項をまるごと、値になる略記は 1 つのまとまりを読む
+                None => match if n.kind == NKind::Func { self.term_unary() } else { self.term() } {
                     Ok(t) => {
                         slots[*s] = Some(t);
                         true
@@ -1320,6 +1392,11 @@ impl P {
         }
         let mut a = self.term_atom()?;
         loop {
+            // 入る所で始まる値の略記（a ⊕ b）：左右に 1 つのまとまり
+            if let Some(t) = self.try_term_notations(Some(&a)) {
+                a = t;
+                continue;
+            }
             if self.eat_sym("²") {
                 a = Term::App("^".into(), vec![a, Term::Num(2)]);
             } else if self.eat_sym("³") {
@@ -1335,6 +1412,10 @@ impl P {
     }
     /// 項の後ろに続く適用 t(s…)(u…)：関数を返す項を、さらに適用する
     fn term_atom(&mut self) -> PResult<Term> {
+        // 記号で始まる値の略記（\max A・\max_{x ∈ A} f など）
+        if let Some(t) = self.try_term_notations(None) {
+            return Ok(t);
+        }
         let mut t = self.term_atom0()?;
         while self.is_sym("(") && !matches!(t, Term::Num(_)) {
             self.pos += 1;
@@ -1570,7 +1651,7 @@ fn subscript_apps(decl: &mut Decl) {
         }
     }
     let sc = SubScope::new(&vars);
-    if sc.seqs.is_empty() {
+    if sc.seqs.is_empty() && sc.idx2.is_empty() {
         return;
     }
     for c in &mut decl.ctx {
@@ -2029,7 +2110,9 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
         return err("型紙は束縛変数で始められない".into());
     }
     let template = lhs.split_whitespace().collect::<Vec<_>>().join(" ");
-    let n = Notation { pred: pred.clone(), items, args, binders, slots, template: template.clone() };
+    // 右辺が値を返す関数（項の定義・rec）なら値になる略記、それ以外は命題になる略記
+    let kind = if with_syntax(|t| t.fns.contains(pred)) { NKind::Func } else { NKind::Pred };
+    let n = Notation { pred: pred.clone(), kind, items, args, binders, slots, template: template.clone() };
     // あいまいさ：型紙（入る所を名前に置き換えたもの）が、今ある書き方（略記を含む）でまるごと読めるなら拒む
     let probe: Vec<Tok> = n
         .items
@@ -2040,8 +2123,9 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
             TItem::Lit(l) => toks.iter().find(|t| tok_text(t) == *l).cloned().unwrap_or(Tok::Sym(l.clone())),
         })
         .collect();
-    let mut pp = P::new(probe, line, vec![]);
-    if pp.formula().is_ok() && pp.at_end() {
+    let mut pp = P::new(probe.clone(), line, vec![]);
+    let mut pt = P::new(probe, line, vec![]);
+    if (pp.formula().is_ok() && pp.at_end()) || (pt.term().is_ok() && pt.at_end()) {
         return err(format!("型紙「{template}」は、すでにある書き方でも読めてしまう（あいまいになる）。別の記号を使う"));
     }
     if let Some(o) = with_syntax(|t| t.notations.iter().find(|o| o.lits() == n.lits()).cloned()) {
@@ -2308,6 +2392,9 @@ fn register_def(d: &Def) -> PResult<()> {
             ));
         }
         t.defs.insert(d.name.clone(), d.params.len());
+        if d.term.is_some() {
+            t.fns.insert(d.name.clone());
+        }
         t.def_preds.extend(preds);
         Ok(())
     })

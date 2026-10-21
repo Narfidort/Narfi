@@ -36,3 +36,50 @@ thm notation.shadow :
   ⊢ a_n → α (n → ∞)
 
 h
+
+-- 下に添字の付く演算子の型紙（エディタの \lim・\max の入力欄。意味は notation で付ける）
+notation \lim_{n → ∞} a = α := is_lim((n : ℕ ↦ a), α)
+
+thm notation.lim :
+  a : ℕ → ℝ, α : ℝ, h : a ⟶ α
+  ⊢ \lim_{k → ∞} a_k = α
+
+h
+
+-- 値になる略記：右辺が関数（項の定義）なら値。端の入る所には 1 つのまとまりが入る
+def plus(x : ℝ, y : ℝ) : ℝ := x + y
+notation x ⊕ y := plus(x, y)
+
+thm notation.value :
+  a : ℝ, b : ℝ, c : ℝ
+  ⊢ a ⊕ b + c = plus(a, b) + c
+
+refl
+
+def top(f : ℕ → ℝ, m : ℕ) : ℝ := f(m)
+notation \max_{i ≤ m} f := top((i : ℕ ↦ f), m)
+
+thm notation.max :
+  a : ℕ → ℝ, m : ℕ
+  ⊢ \max_{j ≤ m} (a_j + 1) = top((j : ℕ ↦ a_j + 1), m)
+
+refl
+
+-- 上付き：関数に付いたら引数（下が先、上が後）、数に付いたら冪
+thm script.two :
+  F : ℕ × ℕ → ℝ, i : ℕ, j : ℕ, h : F_{i+1}^j > 0
+  ⊢ F(i + 1, j) > 0
+
+h
+
+thm script.seq :
+  u : ℕ → ℝ, n : ℕ, h : u^{n+1} > 0
+  ⊢ u(n + 1) > 0
+
+h
+
+thm script.power :
+  a : ℕ → ℝ, n : ℕ, h : a_n^2 > 0
+  ⊢ a(n)^2 > 0
+
+h

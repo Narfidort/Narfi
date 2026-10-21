@@ -613,6 +613,24 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-size: 0.68em;
 }
 /* Accent Node (vec, hat, bar, tilde) */
+/* 下に添字の付く演算子（lim・max・sup …） */
+.mc-oplim {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 3px;
+  line-height: 1.05;
+}
+.mc-oplim-name {
+  font-family: "KaTeX_Main", serif;
+  font-style: normal;
+  color: var(--text);
+}
+.mc-oplim-sub {
+  font-size: 0.68em;
+}
+.mc-oplim-sub .mc-slot.empty:not(.focused-slot) { display: none; }
 .mc-accent {
   display: inline-flex;
   flex-direction: column;
@@ -1190,7 +1208,16 @@ const COMMAND_DICT = [
   { cmd: "prod", preview: "∏", desc: "product ∏_{}^{}", kind: "bigop", fnName: "prod", sym: "∏" },
   { cmd: "int", preview: "∫", desc: "integral ∫_{}^{}", kind: "bigop", fnName: "int", sym: "∫" },
   { cmd: "sub", preview: "x_i", desc: "subscript", kind: "sub" },
-  { cmd: "sup", preview: "x^n", desc: "superscript", kind: "sup" },
+  { cmd: "superscript", preview: "x^n", desc: "superscript（^ でも入る）", kind: "sup" },
+  { cmd: "lim", preview: "lim", desc: "limit lim_{…}（意味は notation で）", kind: "oplim", fnName: "lim" },
+  { cmd: "limsup", preview: "lim sup", desc: "lim sup_{…}", kind: "oplim", fnName: "limsup" },
+  { cmd: "liminf", preview: "lim inf", desc: "lim inf_{…}", kind: "oplim", fnName: "liminf" },
+  { cmd: "max", preview: "max", desc: "max_{…}（意味は notation で）", kind: "oplim", fnName: "max" },
+  { cmd: "min", preview: "min", desc: "min_{…}", kind: "oplim", fnName: "min" },
+  { cmd: "sup", preview: "sup", desc: "supremum sup_{…}", kind: "oplim", fnName: "sup" },
+  { cmd: "inf", preview: "inf", desc: "infimum inf_{…}", kind: "oplim", fnName: "inf" },
+  { cmd: "argmax", preview: "argmax", desc: "argmax_{…}", kind: "oplim", fnName: "argmax" },
+  { cmd: "argmin", preview: "argmin", desc: "argmin_{…}", kind: "oplim", fnName: "argmin" },
   // Logic & Proof Symbols
   { cmd: "forall", preview: "∀", desc: "forall", kind: "sym", ascii: "forall", display: "∀", cls: "" },
   { cmd: "all", preview: "∀", desc: "forall", kind: "sym", ascii: "forall", display: "∀", cls: "" },
@@ -1403,6 +1430,13 @@ function makeSqrt(bodyItems = [], parentSeq = null) {
 function makeDelim(fnName, leftCh, rightCh, bodyItems = [], parentSeq = null) {
   const node = { kind: "delim", fnName, leftCh, rightCh, body: null, parentSeq };
   node.body = createSeq(bodyItems, node, "body");
+  return node;
+}
+// 下に添字の付く演算子（\lim_{n → ∞}・\max_{x ∈ A}）。下の添字は body に持つ。意味は持たない（notation で付ける）
+const OPLIM_NAMES = { lim: "lim", limsup: "lim sup", liminf: "lim inf", max: "max", min: "min", sup: "sup", inf: "inf", argmax: "arg max", argmin: "arg min" };
+function makeOpLim(fnName, subItems = [], parentSeq = null) {
+  const node = { kind: "oplim", fnName, body: null, parentSeq };
+  node.body = createSeq(subItems, node, "body");
   return node;
 }
 function makeAccent(fnName, mark, bodyItems = [], parentSeq = null) {
@@ -1635,6 +1669,24 @@ function parseAsciiToItems(str) {
       continue;
     }
 
+    // 下に添字の付く演算子：\lim_{…}・\max_i・\sup
+    const opm = ch === "\\" && str.slice(i).match(/^\\(limsup|liminf|lim|max|min|sup|inf|argmax|argmin)(?![A-Za-z])/);
+    if (opm) {
+      let k = i + opm[0].length;
+      let subItems = [];
+      if (str[k] === "_" && str[k + 1] === "{") {
+        const close = findMatchingClose(str, k + 1, "{", "}");
+        if (close > k + 1) { subItems = parseAsciiToItems(str.substring(k + 2, close)); k = close + 1; }
+      } else if (str[k] === "_" && /[A-Za-z0-9]/.test(str[k + 1] || "")) {
+        subItems = parseAsciiToItems(str[k + 1]); k += 2;
+      } else if (str[k] === " ") {
+        k += 1;  // \max A の区切りの空白（書き出すときにまた付く）
+      }
+      items.push(makeOpLim(opm[1], subItems));
+      i = k;
+      continue;
+    }
+
     // \infty・\prec などの記号のコマンド（ファイルに書かれた形）は、記号にする
     if (ch === "\\" && /[A-Za-z]/.test(str[i + 1] || "")) {
       let j = i + 1;
@@ -1827,6 +1879,9 @@ function serializeSeqToAscii(seq) {
       out += `binom(${serializeSeqToAscii(it.num).trim() || "0"}, ${serializeSeqToAscii(it.den).trim() || "0"})`;
     } else if (it.kind === "accent") {
       out += `${it.fnName}(${serializeSeqToAscii(it.body).trim()})`;
+    } else if (it.kind === "oplim") {
+      const sub = serializeSeqToAscii(it.body).trim();
+      out += sub ? `\\${it.fnName}_{${sub}}` : `\\${it.fnName} `;
     } else if (it.kind === "bigop") {
       const sub = serializeSeqToAscii(it.sub).trim(), sup = serializeSeqToAscii(it.sup).trim(), body = serializeSeqToAscii(it.body).trim();
       const lt = it.fnName === "sum" && sub.match(/^([A-Za-z\u0370-\u03ff]\w*)\s*<\s*(.+)$/);
@@ -2071,6 +2126,12 @@ function renderSingleItemHtml(seq, it, idx, charCls) {
       `<span class="mc-delim-char">${escHtml(it.leftCh)}</span>` +
       renderSlotSeqHtml(it.body) +
       `<span class="mc-delim-char">${escHtml(it.rightCh)}</span>` +
+      `</span>`;
+  }
+  if (it.kind === "oplim") {
+    return `<span class="mc-oplim" data-seq="${seq.id}" data-idx="${idx}">` +
+      `<span class="mc-oplim-name">${escHtml(OPLIM_NAMES[it.fnName] || it.fnName)}</span>` +
+      `<span class="mc-oplim-sub">${renderSlotSeqHtml(it.body)}</span>` +
       `</span>`;
   }
   if (it.kind === "accent") {
@@ -3291,6 +3352,10 @@ function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
     cursor.seqId = node.body.id; cursor.offset = 0;
   } else if (entry.kind === "inner") {
     const node = makeDelim("inner", "⟨", "⟩", [], seq);
+    seq.items.splice(replaceStart, replaceEnd - replaceStart, node);
+    cursor.seqId = node.body.id; cursor.offset = 0;
+  } else if (entry.kind === "oplim") {
+    const node = makeOpLim(entry.fnName, [], seq);
     seq.items.splice(replaceStart, replaceEnd - replaceStart, node);
     cursor.seqId = node.body.id; cursor.offset = 0;
   } else if (entry.kind === "accent") {

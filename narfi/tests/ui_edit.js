@@ -261,4 +261,16 @@ test("Ctrl+Space で文脈の式の一覧", () => {
   assert.ok(ui.api.acMatches.some((m) => m.text === "|a_n - α|"));
 });
 
+
+test("\\lim で下に添字の入力欄ができ、\\lim_{…} と書かれる", () => {
+  const ui = fresh("");
+  ui.type("\\lim ");
+  const node = ui.api.docLines[0].rootSeq.items.find((i) => i.kind === "oplim");
+  assert.ok(node, "oplim がない");
+  ui.type("n->");
+  ui.key("ArrowRight");
+  ui.type(" a_n");
+  assert.strictEqual(ui.text(), "\\lim_{n->} a_n");
+});
+
 console.log(`${n} 件通過`);
