@@ -2,7 +2,7 @@
 
 import reals.rat
 
-def cauchy(a : ℕ → ℚ) := ∀ε:ℚ>0. ∃N:ℕ. ∀m≥N. ∀n≥N. |a(m) - a(n)| < ε
+def cauchy(a : ℕ → ℚ) :⇔ ∀ε:ℚ>0. ∃N:ℕ. ∀m≥N. ∀n≥N. |a(m) - a(n)| < ε
 
 -- 定数列はコーシー列
 thm cauchy.const :
@@ -23,7 +23,7 @@ typedef CauSeq := {a : ℕ → ℚ | cauchy(a)}
 
 
 -- 同値関係：差が 0 に収束する
-def seq_eq(a : CauSeq, b : CauSeq) := ∀ε:ℚ>0. ∃N:ℕ. ∀n≥N. |CauSeq.rep(a)(n) - CauSeq.rep(b)(n)| < ε
+def seq_eq(a : CauSeq, b : CauSeq) :⇔ ∀ε:ℚ>0. ∃N:ℕ. ∀n≥N. |CauSeq.rep(a)(n) - CauSeq.rep(b)(n)| < ε
 notation a ~ b := seq_eq(a, b)
 
 thm seq_eq.refl :
@@ -57,7 +57,7 @@ thm seq_eq.trans :
 Fix ε | hε : ε > 0
   Obtain N₁, hN₁ : h1(ε/2, half_pos(hε))
   Obtain N₂, hN₂ : h2(ε/2, half_pos(hε))
-  let N := max(N₁, N₂)
+  let N := max{N₁, N₂}
   choose N
   Fix n | hn : n ≥ N
     |CauSeq.rep(a)(n) - CauSeq.rep(c)(n)|

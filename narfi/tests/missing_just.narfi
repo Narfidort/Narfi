@@ -16,7 +16,7 @@ p : P
 Q ∧ P
 
 thm m3 :
-  P : Prop, Q : Prop, f : P → Q, a : P
+  P : Prop, Q : Prop, f : P ⇒ Q, a : P
   ⊢ Q
 
 Q

@@ -20,7 +20,7 @@ thm u.decide :
 decide
 
 thm u.fix.escape :
-  h : ∀x. P(x) → Q
+  h : ∀x. P(x) ⇒ Q
   ⊢ Q
 h(hx)
 
@@ -57,7 +57,7 @@ cases h
     b
 
 thm u.assume :
-  ⊢ P → Q
+  ⊢ P ⇒ Q
 assume h : P
   h
 
@@ -116,7 +116,7 @@ Fix y
   h(z)
 
 thm u.unfinished :
-  h : P, k : P → Q
+  h : P, k : P ⇒ Q
   ⊢ Q ∧ P
 have q : Q := k(h)
 

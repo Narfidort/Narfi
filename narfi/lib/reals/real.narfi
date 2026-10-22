@@ -6,7 +6,7 @@ import reals.cauchy
 thm seq_eq.class :
   a : CauSeq, b : CauSeq,
   h : a ~ b
-  ⊢ ∀x:CauSeq. b ~ x → a ~ x
+  ⊢ ∀x:CauSeq. b ~ x ⇒ a ~ x
 
 Fix x
   assume hb : b ~ x
@@ -35,8 +35,8 @@ thm cls.sound :
   h : a ~ b
   ⊢ cls(a) = cls(b)
 
-i1 : ∀x:CauSeq. b ~ x → a ~ x by seq_eq.class(h)
-i2 : ∀x:CauSeq. a ~ x → b ~ x by seq_eq.class(seq_eq.symm(h))
+i1 : ∀x:CauSeq. b ~ x ⇒ a ~ x by seq_eq.class(h)
+i2 : ∀x:CauSeq. a ~ x ⇒ b ~ x by seq_eq.class(seq_eq.symm(h))
 hs : {x : CauSeq | a ~ x} = {x : CauSeq | b ~ x} by setext(i2, i1)
 cls(a)
   = RealC.abs({x : CauSeq | a ~ x})   by refl

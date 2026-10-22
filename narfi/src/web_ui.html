@@ -1225,13 +1225,13 @@ const COMMAND_DICT = [
   { cmd: "ex", preview: "∃", desc: "exists", kind: "sym", ascii: "exists", display: "∃", cls: "" },
   { cmd: "to", preview: "→", desc: "->", kind: "sym", ascii: "->", display: "→", cls: "" },
   { cmd: "rightarrow", preview: "→", desc: "->", kind: "sym", ascii: "->", display: "→", cls: "" },
-  { cmd: "implies", preview: "→", desc: "->", kind: "sym", ascii: "->", display: "→", cls: "" },
-  { cmd: "Rightarrow", preview: "⇒", desc: "->", kind: "sym", ascii: "->", display: "→", cls: "" },
-  { cmd: "iff", preview: "↔", desc: "<->", kind: "sym", ascii: "<->", display: "↔", cls: "" },
+  { cmd: "implies", preview: "⇒", desc: "ならば（=>）", kind: "sym", ascii: "=>", display: "⇒", cls: "" },
+  { cmd: "Rightarrow", preview: "⇒", desc: "ならば（=>）", kind: "sym", ascii: "=>", display: "⇒", cls: "" },
+  { cmd: "iff", preview: "⇔", desc: "同値（<=>）", kind: "sym", ascii: "<=>", display: "⇔", cls: "" },
   { cmd: "longrightarrow", preview: "⟶", desc: "notation (a ⟶ α)", kind: "sym", ascii: "\\longrightarrow", display: "⟶", cls: "" },
   { cmd: "lto", preview: "⟶", desc: "notation (a ⟶ α)", kind: "sym", ascii: "\\longrightarrow", display: "⟶", cls: "" },
   { cmd: "leftrightarrow", preview: "↔", desc: "<->", kind: "sym", ascii: "<->", display: "↔", cls: "" },
-  { cmd: "Leftrightarrow", preview: "⇔", desc: "<->", kind: "sym", ascii: "<->", display: "↔", cls: "" },
+  { cmd: "Leftrightarrow", preview: "⇔", desc: "同値（<=>）", kind: "sym", ascii: "<=>", display: "⇔", cls: "" },
   { cmd: "impliedby", preview: "⇐", desc: "<-", kind: "sym", ascii: "<-", display: "⇐", cls: "" },
   { cmd: "Leftarrow", preview: "⇐", desc: "<-", kind: "sym", ascii: "<-", display: "⇐", cls: "" },
   { cmd: "and", preview: "∧", desc: "and", kind: "sym", ascii: "and", display: "∧", cls: "" },
@@ -1263,6 +1263,7 @@ const COMMAND_DICT = [
   { cmd: "notin", preview: "∉", desc: "notin", kind: "sym", ascii: "notin", display: "∉", cls: "" },
   { cmd: "subset", preview: "⊂", desc: "subset", kind: "sym", ascii: "subset", display: "⊂", cls: "" },
   { cmd: "subseteq", preview: "⊆", desc: "subseteq", kind: "sym", ascii: "subseteq", display: "⊆", cls: "" },
+  { cmd: "subsetneq", preview: "⊊", desc: "proper subset", kind: "sym", ascii: "subsetneq", display: "⊊", cls: "" },
   { cmd: "supset", preview: "⊃", desc: "supset", kind: "sym", ascii: "supset", display: "⊃", cls: "" },
   { cmd: "supseteq", preview: "⊇", desc: "supseteq", kind: "sym", ascii: "supseteq", display: "⊇", cls: "" },
   { cmd: "cup", preview: "∪", desc: "union", kind: "sym", ascii: "union", display: "∪", cls: "" },
@@ -1634,6 +1635,8 @@ function parseAsciiToItems(str) {
     }
 
     // 5. Multi-char ASCII operators
+    if (str.startsWith("<=>", i)) { items.push(makeSym("<=>", "⇔")); i += 3; continue; }
+    if (str.startsWith("=>", i)) { items.push(makeSym("=>", "⇒")); i += 2; continue; }
     if (str.startsWith("<->", i)) { items.push(makeSym("<->", "↔")); i += 3; continue; }
     if (str.startsWith("->", i)) { items.push(makeSym("->", "→")); i += 2; continue; }
     if (str.startsWith("<-", i)) { items.push(makeSym("<-", "⇐")); i += 2; continue; }
@@ -1905,8 +1908,8 @@ const DEFAULT_ASCII_DOC = `-- Narfi へようこそ。証明を書くと、各�
 
 axiom triangle    : forall x:Real. forall y:Real. abs(x + y) <= abs(x) + abs(y)
 axiom pos_half    : x : Real, h : x > 0 |- x/2 > 0
-axiom ge.max.left  : n : Nat, h : n >= max(a, b) |- n >= a
-axiom ge.max.right : n : Nat, h : n >= max(a, b) |- n >= b
+axiom ge.max.left  : n : Nat, h : n >= max{a, b} |- n >= a
+axiom ge.max.right : n : Nat, h : n >= max{a, b} |- n >= b
 
 thm conv.add :
   a : Nat -> Real, b : Nat -> Real,
@@ -1917,7 +1920,7 @@ thm conv.add :
 Fix eps | h_{eps} : eps > 0
   Obtain N_1(eps), hN_1 : conv_a(eps/2, pos_half(h_{eps}))
   Obtain N_2(eps), hN_2 : conv_b(eps/2, pos_half(h_{eps}))
-  let N := max(N_1, N_2)
+  let N := max{N_1, N_2}
   choose N
   Fix n | h_{n} : n >= N
     abs((a_n + b_n) - (alpha + beta))
@@ -3244,8 +3247,13 @@ function insertCharAtCursor(ch) {
       seq.items.splice(cursor.offset - 1, 1, makeSym("->", "→"));
       onDocMutated(); return;
     }
+    // ならば・同値は ⇒・⇔（→ は関数の型と極限。docs/language/notation.md）
     if (prev1Sym === "<=" && ch === ">") {
-      seq.items.splice(cursor.offset - 1, 1, makeSym("<->", "↔"));
+      seq.items.splice(cursor.offset - 1, 1, makeSym("<=>", "⇔"));
+      onDocMutated(); return;
+    }
+    if (prev1 === "=" && ch === ">") {
+      seq.items.splice(cursor.offset - 1, 1, makeSym("=>", "⇒"));
       onDocMutated(); return;
     }
     // ⊢ は `\|-`（または \vdash・\turnstile）で入れる。`|-` は絶対値とマイナス（|-x|）のために変換しない
@@ -4663,11 +4671,12 @@ async function testAiConnection() {
 }
 
 const AI_SPEC = `You help write proofs in Narfi, a forward natural-deduction proof language checked by a small kernel.
-Write ASCII: forall, exists, ->, and, or, not, |-, <=, >=, !=, Real, Nat, Prop, abs(x) or |x|, a_n (subscript = a(n)), (n:Nat |-> t) for functions.
+Write ASCII: forall, exists, => (implies), <=> (iff), and, or, not, |-, <=, >=, !=, Real, Nat, Prop, abs(x) or |x|, max{a, b}, a_n (subscript = a(n)), (n:Nat |-> t) for functions.
+"->" is only for function types (Nat -> Real). Predicate definitions use ":<=>" (def pos(x : Real) :<=> x > 0), value definitions use ":=".
 A theorem: "thm name :" then hypotheses "x : Real, h : x > 0" and "|- goal", a blank line, then the proof. Nesting is by 2-space indentation.
 Proof statements (one per line):
 - Fix x            (goal forall x. P)        Fix eps | heps : eps > 0   (goal forall eps>0. P)
-- assume h : P     (goal P -> Q or not P)
+- assume h : P     (goal P => Q or not P)
 - choose t         (goal exists x. P; then prove P[t])   choose left / choose right (goal P or Q)
 - Obtain x, hx : h (h : exists x. P)
 - cases h          (h : P or Q) then indented "Case left h1" and "Case right h2", each with an indented proof

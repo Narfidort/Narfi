@@ -32,7 +32,7 @@ thm wrong.eps :
 Fix ε | hε : ε > 0
   Obtain N₁(ε), hN₁ : conv_a(ε, hε)
   Obtain N₂(ε), hN₂ : conv_b(ε, hε)
-  let N := max(N₁, N₂)
+  let N := max{N₁, N₂}
   choose N
   Fix n | hn : n ≥ N
     |c(n) - (α + β)|
@@ -43,7 +43,7 @@ Fix ε | hε : ε > 0
 
 
 -- 展開での変数の捕獲：上界 n を代入しても、定義の中の束縛変数 n とは別物
-def bounded_by(a : ℕ → ℕ, M : ℕ) := ∀n:ℕ. a(n) ≤ M
+def bounded_by(a : ℕ → ℕ, M : ℕ) :⇔ ∀n:ℕ. a(n) ≤ M
 
 thm wrong.capture :
   a : ℕ → ℕ,

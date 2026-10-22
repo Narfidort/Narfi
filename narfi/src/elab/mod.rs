@@ -316,8 +316,8 @@ impl<'a> Checker<'a> {
                 Formula::Imp(c, _) => out.push((format!("Fix {x} | {} : {c}", hname(x)), "goal が ∀（条件つき）".into())),
                 _ => out.push((format!("Fix {x}"), "goal が ∀".into())),
             },
-            Formula::Imp(a, b) if **b == Formula::Bot => out.push((format!("assume h : {a}"), "goal が ¬（→ ⊥）".into())),
-            Formula::Imp(a, _) => out.push((format!("assume h : {a}"), "goal が →".into())),
+            Formula::Imp(a, b) if **b == Formula::Bot => out.push((format!("assume h : {a}"), "goal が ¬（⇒ ⊥）".into())),
+            Formula::Imp(a, _) => out.push((format!("assume h : {a}"), "goal が ⇒".into())),
             Formula::And(..) => out.push(("根拠1, 根拠2".into(), "goal が ∧：両側を並べる".into())),
             Formula::Or(..) => {
                 out.push(("choose left".into(), "goal が ∨：左を示す".into()));

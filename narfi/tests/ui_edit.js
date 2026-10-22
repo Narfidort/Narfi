@@ -273,4 +273,13 @@ test("\\lim で下に添字の入力欄ができ、\\lim_{…} と書かれる",
   assert.strictEqual(ui.text(), "\\lim_{n->} a_n");
 });
 
+
+test("=> は ⇒（ならば）、<=> は ⇔（同値）。-> は →（関数の型）のまま", () => {
+  const ui = fresh("");
+  ui.type("P => Q <=> R : Nat -> Real");
+  const syms = ui.api.docLines[0].rootSeq.items.filter((i) => i.kind === "sym").map((i) => i.display).join(" ");
+  assert.strictEqual(syms, "⇒ ⇔ ℕ →");
+  assert.strictEqual(ui.text(), "P => Q <=> R : Nat -> Real");
+});
+
 console.log(`${n} 件通過`);

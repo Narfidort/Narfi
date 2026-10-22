@@ -47,16 +47,16 @@ fn bad_definitions_are_rejected() {
     let dir = std::env::temp_dir().join(format!("narfi-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let cases = [
-        ("notation a -> b := P(a, b)", "あいまい"),
-        ("def P(a : ℕ, b : ℕ) := a = b\nnotation a ~> b := P(a, b)\nnotation x ~> y := P(y, x)", "あいまい"),
-        ("def P(a : ℕ → ℝ, b : ℝ) := a(0) = b\nnotation a_n ~> b (n) := P((n : ℕ ↦ a), b)", "「a」と書く"),
-        ("def P(a : ℕ, b : ℕ) := a = b\nnotation a ~> a := P(a, a)", "2 回"),
-        ("def P(a : ℕ → ℝ, b : ℝ) := a(0) = b\nnotation a ~> b := P((n : ℕ ↦ a), b)", "束縛変数「n」を書く"),
-        ("def P(a : ℕ, b : ℕ) := a = b\nnotation a b := P(a, b)", "少なくとも 1 つ"),
-        ("def r(a) := r(a)", "自身を使っている"),
-        ("def p(x) := q(x)\ndef q(x) := p(x)", "定義済みの記号でもない"),
-        ("def bad(a) := a(n) > 0", "定義済みの記号でもない"),
-        ("def pos(x) := x > 0\nthm t : ⊢ pos(1, 2)\nsorry", "引数 1 個の定義"),
+        ("def P(a : ℕ, b : ℕ) :⇔ a = b\nnotation a => b := P(a, b)", "あいまい"),
+        ("def P(a : ℕ, b : ℕ) :⇔ a = b\nnotation a ~> b := P(a, b)\nnotation x ~> y := P(y, x)", "あいまい"),
+        ("def P(a : ℕ → ℝ, b : ℝ) :⇔ a(0) = b\nnotation a_n ~> b (n) := P((n : ℕ ↦ a), b)", "「a」と書く"),
+        ("def P(a : ℕ, b : ℕ) :⇔ a = b\nnotation a ~> a := P(a, a)", "2 回"),
+        ("def P(a : ℕ → ℝ, b : ℝ) :⇔ a(0) = b\nnotation a ~> b := P((n : ℕ ↦ a), b)", "束縛変数「n」を書く"),
+        ("def P(a : ℕ, b : ℕ) :⇔ a = b\nnotation a b := P(a, b)", "少なくとも 1 つ"),
+        ("def r(a) :⇔ r(a)", "自身を使っている"),
+        ("def p(x) :⇔ q(x)\ndef q(x) :⇔ p(x)", "定義済みの記号でもない"),
+        ("def bad(a) :⇔ a(n) > 0", "定義済みの記号でもない"),
+        ("def pos(x) :⇔ x > 0\nthm t : ⊢ pos(1, 2)\nsorry", "引数 1 個の定義"),
     ];
     for (i, (src, msg)) in cases.iter().enumerate() {
         let f = dir.join(format!("case{i}.narfi"));
@@ -82,7 +82,7 @@ fn omitted_hypothesis_is_an_error() {
     std::fs::create_dir_all(&dir).unwrap();
     let cases = [
         ("thm t :\n  ⊢ ∀ε:ℝ>0. ε > 0\n\nFix ε | hε\n  hε\n", "`hε : ε > 0` と書く"),
-        ("thm t :\n  P : Prop\n  ⊢ P → P\n\nassume h\n  h\n", "`h : P` と書く"),
+        ("thm t :\n  P : Prop\n  ⊢ P ⇒ P\n\nassume h\n  h\n", "`h : P` と書く"),
     ];
     for (i, (src, msg)) in cases.iter().enumerate() {
         let f = dir.join(format!("case{i}.narfi"));
@@ -162,15 +162,14 @@ fn fact_lines_and_old_forms() {
     assert!(out.contains("✓ t") && out.contains("警告") && out.contains("k : P by h"), "{out}");
 }
 
-/// 古い書き方の notation（記号を "…" で囲む）は読めるが警告になる
+/// 記号を "…" で囲む notation（v2.8 までの書き方）は構文エラー
 #[test]
-fn old_notation_syntax_warns() {
+fn quoted_notation_is_an_error() {
     let dir = std::env::temp_dir().join(format!("narfi-notation-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let f = dir.join("old.narfi");
-    std::fs::write(&f, "def P(a : ℕ, b : ℕ) := a = b\nnotation a \"≺\" b := P(a, b)\nthm t :\n  ⊢ 1 ≺ 1\n\nrefl\n").unwrap();
+    std::fs::write(&f, "def P(a : ℕ, b : ℕ) :⇔ a = b\nnotation a \"≺\" b := P(a, b)\n").unwrap();
     let out = run(&[f.to_str().unwrap()]);
-    assert!(out.contains("警告") && out.contains("引用符は要らない"), "{out}");
-    assert!(out.contains("✓ t"), "{out}");
+    assert!(out.contains("構文エラー") && out.contains("引用符"), "{out}");
 }
 

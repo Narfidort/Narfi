@@ -8,8 +8,8 @@ h.right, h.left
 
 
 thm ex1.imp_trans :
-  h : P → Q, k : Q → R
-  ⊢ P → R
+  h : P ⇒ Q, k : Q ⇒ R
+  ⊢ P ⇒ R
 
 assume hp : P
   k(h(hp))
@@ -29,8 +29,8 @@ cases h
 
 
 thm ex1.contrapositive :
-  h : P → Q
-  ⊢ ¬Q → ¬P
+  h : P ⇒ Q
+  ⊢ ¬Q ⇒ ¬P
 
 assume hnq : ¬Q
   assume hp : P
@@ -47,7 +47,7 @@ Fix x
 
 
 thm ex2.exists_imp :
-  h : ∀x. P(x) → Q(x), e : ∃x. P(x)
+  h : ∀x. P(x) ⇒ Q(x), e : ∃x. P(x)
   ⊢ ∃x. Q(x)
 
 Obtain a, ha : e

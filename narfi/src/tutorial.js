@@ -138,7 +138,7 @@ window.NARFI_TUTORIAL = [
     "title": "3. 「ならば」を示す・使う",
     "blocks": [
       {
-        "p": "**ねらい**：「$P$ ならば $Q$」（$P \\to Q$）を示すには、$P$ を仮定して $Q$ を示す。高校の数学と同じ。"
+        "p": "**ねらい**：「$P$ ならば $Q$」（$P \\Rightarrow Q$）を示すには、$P$ を仮定して $Q$ を示す。高校の数学と同じ。"
       },
       {
         "paper": [
@@ -147,7 +147,7 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "code": "thm gt_two :\n  x : Real\n  |- x > 2 -> x > 1\n\nassume h : x > 2\n  linarith"
+        "code": "thm gt_two :\n  x : Real\n  |- x > 2 => x > 1\n\nassume h : x > 2\n  linarith"
       },
       {
         "steps": [
@@ -165,16 +165,16 @@ window.NARFI_TUTORIAL = [
         "p": "**字下げ**が「仮定が使える範囲」です。`assume` の下は 1 段（スペース 2 つ）下げて書きます。"
       },
       {
-        "p": "逆に「ならば」の仮定 $f : P \\to Q$ を**使う**ときは、$P$ の根拠 $p$ を渡して `f(p)` と書くと $Q$ になります（三段論法）。"
+        "p": "逆に「ならば」の仮定 $f : P \\Rightarrow Q$ を**使う**ときは、$P$ の根拠 $p$ を渡して `f(p)` と書くと $Q$ になります（三段論法）。"
       },
       {
-        "code": "thm syllogism :\n  P : Prop, Q : Prop, f : P -> Q, p : P\n  |- Q\n\nf(p)"
+        "code": "thm syllogism :\n  P : Prop, Q : Prop, f : P => Q, p : P\n  |- Q\n\nf(p)"
       },
       {
         "type": [
           [
-            "->",
-            "→（ならば）"
+            "=>",
+            "⇒（ならば）"
           ],
           [
             "Prop",
@@ -191,13 +191,13 @@ window.NARFI_TUTORIAL = [
         ]
       }
     ],
-    "task": "$P \\to Q$、$Q \\to R$ ならば $P \\to R$ を示す。",
+    "task": "$P \\Rightarrow Q$、$Q \\Rightarrow R$ ならば $P \\Rightarrow R$ を示す。",
     "hints": [
       "示すのは「$P$ ならば $R$」。まず `assume p : P`。",
       "$f(p)$ で $Q$ が手に入る。それを $g$ に渡すと $R$。`g(f(p))` と一度に書いてもよい。"
     ],
-    "exercise": "-- 練習 3：ならば を 2 回使う\n\nthm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P -> Q, g : Q -> R\n  |- P -> R\n\nsorry\n",
-    "answer": "thm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P -> Q, g : Q -> R\n  |- P -> R\n\nassume p : P\n  g(f(p))\n"
+    "exercise": "-- 練習 3：ならば を 2 回使う\n\nthm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P => Q, g : Q => R\n  |- P => R\n\nsorry\n",
+    "answer": "thm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P => Q, g : Q => R\n  |- P => R\n\nassume p : P\n  g(f(p))\n"
   },
   {
     "title": "4. 「かつ」",
@@ -212,7 +212,7 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "code": "thm pos_add :\n  x : Real, y : Real\n  |- x > 0 and y > 0 -> x + y > 0\n\nassume h : x > 0 and y > 0\n  hx : x > 0 by h.left\n  hy : y > 0 by h.right\n  linarith"
+        "code": "thm pos_add :\n  x : Real, y : Real\n  |- x > 0 and y > 0 => x + y > 0\n\nassume h : x > 0 and y > 0\n  hx : x > 0 by h.left\n  hy : y > 0 by h.right\n  linarith"
       },
       {
         "steps": [
@@ -248,8 +248,8 @@ window.NARFI_TUTORIAL = [
       "`assume h : P and Q`。",
       "`h.right` が $Q$、`h.left` が $P$。2 つを `,` で並べると $Q \\land P$ になる（`h.right, h.left`）。"
     ],
-    "exercise": "-- 練習 4：かつ の順番を入れ替える\n\nthm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q -> Q and P\n\nsorry\n",
-    "answer": "thm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q -> Q and P\n\nassume h : P and Q\n  h.right, h.left\n"
+    "exercise": "-- 練習 4：かつ の順番を入れ替える\n\nthm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q => Q and P\n\nsorry\n",
+    "answer": "thm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q => Q and P\n\nassume h : P and Q\n  h.right, h.left\n"
   },
   {
     "title": "5. 「または」",
@@ -299,13 +299,13 @@ window.NARFI_TUTORIAL = [
         ]
       }
     ],
-    "task": "$P \\lor Q$、$P \\to R$、$Q \\to R$ から $R$ を示す。",
+    "task": "$P \\lor Q$、$P \\Rightarrow R$、$Q \\Rightarrow R$ から $R$ を示す。",
     "hints": [
       "`cases h` で 2 つの場合に分ける。",
       "左の場合は `f(hp)`、右の場合は `g(hq)`。"
     ],
-    "exercise": "-- 練習 5：場合分け\n\nthm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P -> R, g : Q -> R\n  |- R\n\nsorry\n",
-    "answer": "thm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P -> R, g : Q -> R\n  |- R\n\ncases h\n  Case left hp\n    f(hp)\n  Case right hq\n    g(hq)\n"
+    "exercise": "-- 練習 5：場合分け\n\nthm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P => R, g : Q => R\n  |- R\n\nsorry\n",
+    "answer": "thm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P => R, g : Q => R\n  |- R\n\ncases h\n  Case left hp\n    f(hp)\n  Case right hq\n    g(hq)\n"
   },
   {
     "title": "6. 「すべての」",
@@ -472,7 +472,7 @@ window.NARFI_TUTORIAL = [
         "p": "**ねらい**：数列 $a_n$ が $\\alpha$ に収束する（$\\varepsilon$-$N$ 論法）を `def` で定義し、使う。数列は $a : \\mathbb{N} \\to \\mathbb{R}$ と宣言すると $a_n$ と書ける。"
       },
       {
-        "code": "def is_lim(a : Nat -> Real, alpha : Real) :=\n  forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)"
+        "code": "def is_lim(a : Nat -> Real, alpha : Real) :<=>\n  forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)"
       },
       {
         "p": "読み方：「任意の $\\varepsilon > 0$ に対し、ある $N$ があって、$n \\ge N$ なら $|a_n - \\alpha| < \\varepsilon$」。"
@@ -540,8 +540,8 @@ window.NARFI_TUTORIAL = [
       "形は練習 8 と同じ。$N$ は $h$ から `Obtain` で取り出したものを、そのまま使う。",
       "最後に要るのは $|a_{n+1} - \\alpha| < \\varepsilon$。$hN$ は「$n + 1 \\ge N$」の根拠があれば $n + 1$ で使える。"
     ],
-    "exercise": "-- 練習 9：1 つずらした数列の極限\n\ndef is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nsorry\n",
-    "answer": "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
+    "exercise": "-- 練習 9：1 つずらした数列の極限\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nsorry\n",
+    "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\nnotation a -> alpha (n -> \\infty) := is_lim((n : Nat |-> a), alpha)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
   },
   {
     "title": "10. 背理法",
@@ -571,7 +571,7 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "p": "「でない」（$\\lnot P$）は Narfi の中では「$P$ ならば矛盾」（$P \\to \\bot$）として扱われます。だから「$P$ でない」を示すには `assume p : P` として矛盾を示し、使うには `hn(p)` と $P$ の根拠を渡します。"
+        "p": "「でない」（$\\lnot P$）は Narfi の中では「$P$ ならば矛盾」（$P \\Rightarrow \\bot$）として扱われます。だから「$P$ でない」を示すには `assume p : P` として矛盾を示し、使うには `hn(p)` と $P$ の根拠を渡します。"
       },
       {
         "type": [
@@ -612,8 +612,8 @@ window.NARFI_TUTORIAL = [
             "絶対値"
           ],
           [
-            "<= >= != -> <->",
-            "≤ ≥ ≠ → ↔"
+            "<= >= != => <=>",
+            "≤ ≥ ≠ ⇒ ⇔"
           ],
           [
             "\\|- , \\vdash",
@@ -680,7 +680,7 @@ window.NARFI_TUTORIAL = [
             "Fix x（条件つき ∀ε>0 なら Fix ε | hε : ε > 0）"
           ],
           [
-            "φ → ψ（ならば）、¬φ",
+            "φ ⇒ ψ（ならば）、¬φ",
             "assume h : φ"
           ],
           [
@@ -727,7 +727,7 @@ window.NARFI_TUTORIAL = [
             "h(具体的な値)"
           ],
           [
-            "h : φ → ψ",
+            "h : φ ⇒ ψ",
             "h(φ の根拠)"
           ]
         ]

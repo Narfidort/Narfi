@@ -2,13 +2,13 @@
 
 thm r1 :
   P : Prop, Q : Prop
-  |- P and Q -> Q and P
+  |- P and Q => Q and P
 
 assume h : P and Q
   and.intro(and.right(h), and.left(h))
 
 thm r2 :
-  P : Prop, Q : Prop, f : P -> Q, a : P
+  P : Prop, Q : Prop, f : P => Q, a : P
   |- Q
 
 imp.elim(f, a)

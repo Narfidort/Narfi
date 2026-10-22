@@ -14,7 +14,7 @@ thm conv.add :
 Fix ε | hε : ε > 0
   Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
   Obtain N₂(ε), hN₂ : conv_b(ε/2, pos_half(hε))
-  let N := max(N₁, N₂)
+  let N := max{N₁, N₂}
   choose N
   Fix n | hn : n ≥ N
     |(a(n) + b(n)) - (α + β)|

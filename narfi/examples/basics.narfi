@@ -49,7 +49,7 @@ h
 
 
 thm or_elim :
-  h : P ∨ Q, hpr : P → R, hqr : Q → R
+  h : P ∨ Q, hpr : P ⇒ R, hqr : Q ⇒ R
   ⊢ R
 
 cases h
@@ -68,7 +68,7 @@ by_contra hn
   h(hn)
 
 
--- 否定の直接証明は assume（→導入）
+-- 否定の直接証明は assume（⇒導入）
 thm not_not_intro :
   h : P
   ⊢ ¬¬P

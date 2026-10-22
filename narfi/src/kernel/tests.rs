@@ -52,7 +52,7 @@ fn thm(vars: &[(&str, &str)], hyps: &[(&str, &str)], concl: &str, proof: Proof) 
 #[test]
 fn accepts_modus_ponens() {
     let p = Proof::ImpE(b(hyp("k")), b(hyp("h")));
-    assert_eq!(thm(&[("x", "ℕ")], &[("h", "P(x)"), ("k", "P(x) → P(0)")], "P(0)", p), Ok(()));
+    assert_eq!(thm(&[("x", "ℕ")], &[("h", "P(x)"), ("k", "P(x) ⇒ P(0)")], "P(0)", p), Ok(()));
 }
 
 #[test]
@@ -247,12 +247,12 @@ fn lambda_must_have_the_right_type() {
 /// 述語の変数に集合を代入すると、適用の位置で β 簡約される
 #[test]
 fn set_instantiation() {
-    let h = ("h", "∀Q:ℕ → Prop. Q(0) → Q(0)");
+    let h = ("h", "∀Q:ℕ → Prop. Q(0) ⇒ Q(0)");
     let set = Term::Set(vec![("n".into(), "ℕ".into())], Box::new(f("n > 5")));
     let p = Proof::AllE(b(hyp("h")), set.clone());
-    assert_eq!(thm(&[], &[h], "0 > 5 → 0 > 5", p), Ok(()));
+    assert_eq!(thm(&[], &[h], "0 > 5 ⇒ 0 > 5", p), Ok(()));
     let p = Proof::AllE(b(hyp("h")), set);
-    rejected(thm(&[], &[h], "1 > 5 → 1 > 5", p), "定理の結論");
+    rejected(thm(&[], &[h], "1 > 5 ⇒ 1 > 5", p), "定理の結論");
 }
 
 /// 選択公理は「存在するなら」という仮定つき。仮定なしに P(some(P)) は出ない
@@ -265,7 +265,7 @@ fn choice_needs_existence() {
         vars: vec![("P".into(), "'a → Prop".into())],
         hyps: vec![],
         // パーサは 'a を読めないので、仮の型名 AA で書いてから置き換える
-        concl: f("(∃x:AA. P(x)) → P(some(P))").map_sorts(&|s| if s == "AA" { "'a".into() } else { s.into() }),
+        concl: f("(∃x:AA. P(x)) ⇒ P(some(P))").map_sorts(&|s| if s == "AA" { "'a".into() } else { s.into() }),
         is_axiom: true,
         core: true,
     };

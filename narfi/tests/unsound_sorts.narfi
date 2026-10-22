@@ -11,7 +11,7 @@ linarith
 -- ℝ についての仮定を ℕ の変数に使うことはできない（埋め込みは自動では入れない）
 thm u.nat.real :
   n : ℕ,
-  h : ∀x:ℝ. x ≥ 0 → x · x ≥ 0
+  h : ∀x:ℝ. x ≥ 0 ⇒ x · x ≥ 0
   ⊢ n · n ≥ 0
 
 h(n, linarith)

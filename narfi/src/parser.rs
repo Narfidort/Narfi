@@ -305,8 +305,11 @@ fn tex_macro_replacement(cmd: &str) -> Option<&'static str> {
     Some(match cmd {
         "all" | "forall" => "∀",
         "ex" | "exists" => "∃",
-        "to" | "imp" | "rightarrow" | "implies" | "Rightarrow" => "→",
-        "iff" | "leftrightarrow" | "Leftrightarrow" => "↔",
+        // ならば・同値は ⇒・⇔（→ は関数の型と極限、↔ は使わない。docs/language/notation.md）
+        "to" | "rightarrow" => "→",
+        "imp" | "implies" | "Rightarrow" | "Longrightarrow" => "⇒",
+        "iff" | "Leftrightarrow" | "Longleftrightarrow" => "⇔",
+        "leftrightarrow" => "↔",
         "and" | "land" | "wedge" => "∧",
         "or" | "lor" | "vee" => "∨",
         "not" | "neg" | "lnot" => "¬",
@@ -324,6 +327,7 @@ fn tex_macro_replacement(cmd: &str) -> Option<&'static str> {
         "notin" => "∉",
         "subset" => "⊂",
         "subseteq" => "⊆",
+        "subsetneq" => "⊊",
         "supset" => "⊃",
         "supseteq" => "⊇",
         "equiv" => "≡",
@@ -513,29 +517,25 @@ const IMPLICIT_STOP: [&str; 14] =
 
 struct SubScope {
     seqs: BTreeSet<String>,
-    /// 添字 2 つの関数（`F : ℕ × ℕ → σ`）。`F_i^j` は F(i, j)
-    idx2: BTreeSet<String>,
     declared: BTreeSet<String>,
 }
 
 impl SubScope {
     fn new(vars: &[(String, String)]) -> SubScope {
         let is_seq = |t: &str| t.strip_prefix("ℕ →").is_some_and(|r| !r.contains('→') && !r.contains('×'));
-        let is_idx2 = |t: &str| t.strip_prefix("ℕ × ℕ →").is_some_and(|r| !r.contains('→') && !r.contains('×'));
         SubScope {
             seqs: vars.iter().filter(|(_, t)| is_seq(t)).map(|(x, _)| x.clone()).collect(),
-            idx2: vars.iter().filter(|(_, t)| is_idx2(t)).map(|(x, _)| x.clone()).collect(),
             declared: vars.iter().map(|(x, _)| x.clone()).collect(),
         }
     }
 
     /// x が数列の添字の形なら (数列, 添字)
     fn split(&self, x: &str) -> Option<(String, Term)> {
-        if (self.seqs.is_empty() && self.idx2.is_empty()) || self.declared.contains(x) {
+        if self.seqs.is_empty() || self.declared.contains(x) {
             return None;
         }
         if let Some((b, i)) = x.split_once('_') {
-            if (self.seqs.contains(b) || self.idx2.contains(b)) && !i.is_empty() {
+            if self.seqs.contains(b) && !i.is_empty() {
                 let idx = if let Ok(n) = i.parse::<i64>() { Term::Num(n) } else { Term::Var(i.to_string()) };
                 return Some((b.to_string(), idx));
             }
@@ -558,20 +558,10 @@ impl SubScope {
                 Some((b, i)) => Term::App(b, vec![i]),
                 None => t.clone(),
             },
-            // 上付き：関数に付いたら引数（u^n は u(n)、F_i^j は F(i, j)）、数に付いたら冪（a_n^2 は a(n)²）
-            Term::App(f, args) if f == "^" && args.len() == 2 => {
-                let base = self.term(&args[0]);
-                let e = self.term(&args[1]);
-                match &base {
-                    Term::Var(u) if self.seqs.contains(u) && !self.declared.contains(&format!("{u}^")) => Term::App(u.clone(), vec![e]),
-                    Term::App(g, a1) if self.idx2.contains(g) && a1.len() == 1 => Term::App(g.clone(), vec![a1[0].clone(), e]),
-                    _ => Term::App("^".into(), vec![base, e]),
-                }
-            }
             Term::App(f, args) => {
                 let args: Vec<Term> = args.iter().map(|a| self.term(a)).collect();
                 match f.strip_suffix('_') {
-                    Some(b) if (self.seqs.contains(b) || self.idx2.contains(b)) && !self.declared.contains(f) => Term::App(b.to_string(), args),
+                    Some(b) if self.seqs.contains(b) && !self.declared.contains(f) => Term::App(b.to_string(), args),
                     _ => Term::App(f.clone(), args),
                 }
             }
@@ -770,6 +760,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
                     "notin" => Tok::Sym("∉".into()),
                     "subset" => Tok::Sym("⊂".into()),
                     "subseteq" => Tok::Sym("⊆".into()),
+                    "subsetneq" => Tok::Sym("⊊".into()),
                     "supset" => Tok::Sym("⊃".into()),
                     "supseteq" => Tok::Sym("⊇".into()),
                     "equiv" => Tok::Sym("≡".into()),
@@ -808,6 +799,11 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             continue;
         }
         let three: String = cs[i..(i + 3).min(cs.len())].iter().collect();
+        if three == "<=>" {
+            out.push(Tok::Sym("⇔".to_string()));
+            i += 3;
+            continue;
+        }
         if three == "<->" {
             out.push(Tok::Sym("↔".to_string()));
             i += 3;
@@ -821,6 +817,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
         let two: String = cs[i..(i + 2).min(cs.len())].iter().collect();
         let sym2 = match two.as_str() {
             ":=" => Some(":="),
+            "=>" => Some("⇒"),
             "->" => Some("→"),
             "<-" => Some("⇐"),
             "<=" | "=<" => Some("≤"),
@@ -839,9 +836,9 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
         let sym = match c {
             '*' => "·".to_string(),
             '²' | '³' | '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
-            | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆'
+            | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆' | '⊊'
             | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−'
-            | '·' | '/' | '^' | '⇐' | '∴' | '×' | '{' | '}' | '↦' | '[' | ']' => {
+            | '·' | '/' | '^' | '⇐' | '⇒' | '⇔' | '∴' | '×' | '{' | '}' | '↦' | '[' | ']' => {
                 if c == '−' {
                     "-".to_string()
                 } else {
@@ -1157,7 +1154,10 @@ impl P {
     // ------------------------------------------------ 論理式
     pub fn formula(&mut self) -> PResult<Formula> {
         let a = self.imp()?;
-        if self.eat_sym("↔") {
+        if self.is_sym("↔") {
+            return self.err("同値は ⇔（ASCII では <=>）で書く");
+        }
+        if self.eat_sym("⇔") {
             let b = self.formula()?;
             return Ok(Formula::And(
                 Box::new(Formula::Imp(Box::new(a.clone()), Box::new(b.clone()))),
@@ -1168,7 +1168,10 @@ impl P {
     }
     fn imp(&mut self) -> PResult<Formula> {
         let a = self.disj()?;
-        if self.eat_sym("→") {
+        if self.is_sym("→") {
+            return self.err("ならばは ⇒（ASCII では =>）で書く（→ は関数の型 ℕ → ℝ に使う）");
+        }
+        if self.eat_sym("⇒") {
             let b = self.imp()?;
             return Ok(Formula::Imp(Box::new(a), Box::new(b)));
         }
@@ -1281,6 +1284,8 @@ impl P {
                 "∈" => return self.mem(&t, &u),
                 "∉" => return Ok(not(self.mem(&t, &u)?)),
                 "⊆" | "⊂" => return self.subset(&t, &u),
+                // 真部分集合：A ⊆ B かつ A ≠ B
+                "⊊" => return Ok(Formula::And(Box::new(self.subset(&t, &u)?), Box::new(not(Formula::Atom("=".into(), vec![t, u]))))),
                 "⊇" | "⊃" => return self.subset(&u, &t),
                 _ => {}
             }
@@ -1442,6 +1447,25 @@ impl P {
             }
             Some(Tok::Ident(x)) => {
                 self.pos += 1;
+                // 最大・最小は max{a, b}・min{a, b}（教科書の書き方。docs/language/notation.md）
+                if (x == "max" || x == "min") && self.is_sym("(") {
+                    return self.err(format!("{x} は {x}{{a, b}} と書く"));
+                }
+                if (x == "max" || x == "min") && self.eat_sym("{") {
+                    let mut args = vec![self.term()?];
+                    while self.eat_sym(",") {
+                        args.push(self.term()?);
+                    }
+                    self.expect_sym("}")?;
+                    if args.len() < 2 {
+                        return self.err(format!("{x}{{…}} には 2 つ以上の項を書く"));
+                    }
+                    let mut t = args.pop().unwrap();
+                    while let Some(a) = args.pop() {
+                        t = Term::App(x.clone(), vec![a, t]);
+                    }
+                    return Ok(t);
+                }
                 if self.eat_sym("(") {
                     let mut args = Vec::new();
                     if !self.eat_sym(")") {
@@ -1651,7 +1675,7 @@ fn subscript_apps(decl: &mut Decl) {
         }
     }
     let sc = SubScope::new(&vars);
-    if sc.seqs.is_empty() && sc.idx2.is_empty() {
+    if sc.seqs.is_empty() {
         return;
     }
     for c in &mut decl.ctx {
@@ -2004,19 +2028,16 @@ fn parse_import(text: &str, line: usize) -> PResult<String> {
 /// - 右辺の引数は名前（入る所）か (n : ℕ ↦ 名前)（n が束縛変数、名前は n を含んでよい式が入る所）
 /// - 型紙のそれ以外の名前・記号は、書いたとおりの文字
 ///
-/// 古い書き方 `notation a "⟶" α := …` は読めるが、警告と書き換え先（引用符を外したもの）を返す
 fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String, String)>)> {
     let err = |msg: String| Err(ParseError { line, msg });
     let rest = text.trim_start().strip_prefix("notation").unwrap_or(text);
     let Some((lhs, rhs)) = rest.split_once(":=") else {
         return err("notation は「notation 型紙 := 述語(引数, …)」と書く：notation a ⟶ α := is_lim(a, α)".into());
     };
-    let mut warn = None;
-    let mut lhs = lhs.to_string();
+    let warn = None;
+    let lhs = lhs.to_string();
     if lhs.contains('"') {
-        lhs = lhs.replace('"', " ");
-        let new_line = format!("notation {} := {}", lhs.split_whitespace().collect::<Vec<_>>().join(" "), rhs.trim());
-        warn = Some(("notation の記号を \"…\" で囲む書き方は古い（引用符は要らない）。行末で Tab を押すと書き換わる".to_string(), new_line));
+        return err("notation の記号は引用符で囲まない：notation a ⟶ α := is_lim(a, α)".into());
     }
     // 右辺：述語(引数, …)
     let mut p = P::new(lex(rhs, line)?, line, vec![]);
@@ -2155,8 +2176,26 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
             p.expect_sym(",")?;
         }
     }
-    let result = if p.eat_sym(":") { Some(p.ty()?) } else { None };
-    p.expect_sym(":=")?;
+    // 述語の定義は :⇔、値の定義（: 型 を書いたもの）は :=（docs/language/notation.md）
+    let result = if p.is_sym(":") && !matches!(p.toks.get(p.pos + 1), Some(Tok::Sym(s)) if s == "⇔") {
+        p.pos += 1;
+        Some(p.ty()?)
+    } else {
+        None
+    };
+    let is_pred = matches!(result.as_deref(), None | Some("Prop"));
+    if is_pred {
+        if p.is_sym(":=") {
+            return p.err("述語の定義は :⇔（ASCII では :<=>）で書く（:= は値の定義 def f(x : ℝ) : ℝ := …）");
+        }
+        p.expect_sym(":")?;
+        p.expect_sym("⇔")?;
+    } else {
+        if p.is_sym(":") {
+            return p.err("値の定義は := で書く（:⇔ は述語の定義）");
+        }
+        p.expect_sym(":=")?;
+    }
     p.tyenv = params.iter().filter(|(_, t)| !t.contains('→') && t != "?").cloned().collect();
     let names: Vec<String> = params.iter().map(|(x, _)| x.clone()).collect();
     let is_global = |v: &str| with_syntax(|t| t.defs.contains_key(v) || t.consts.contains(v));

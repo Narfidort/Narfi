@@ -396,7 +396,7 @@ mod tests {
     /// 各行の文脈の式（記法の補完に使う）：定義を展開した形も、数列は添字で
     #[test]
     fn steps_carry_context_terms() {
-        let src = "def is_lim(a : Nat -> Real, alpha : Real) := forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nFix eps | heps : eps > 0\nsorry\n";
+        let src = "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : is_lim(a, alpha)\n  |- is_lim((n:Nat |-> a_{n+1}), alpha)\n\nFix eps | heps : eps > 0\nsorry\n";
         let out = super::check_json(src, None, &|s| crate::module::load_and_check(s, None));
         for t in ["|a_{n + 1} - α|", "|a_n - α|", "(n : ℕ ↦ a_{n + 1})"] {
             assert!(out.contains(&super::json_str(t)), "{t} がない: {out}");

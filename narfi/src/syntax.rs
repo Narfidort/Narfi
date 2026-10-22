@@ -34,8 +34,8 @@ pub enum Formula {
     Bot,
 }
 
-pub const RELS: [&str; 17] = [
-    "=", "≠", "<", "≤", ">", "≥", "∈", "∉", "⊂", "⊆", "⊃", "⊇", "≡", "≈", "∼", "≅", "∣",
+pub const RELS: [&str; 18] = [
+    "=", "≠", "<", "≤", ">", "≥", "∈", "∉", "⊂", "⊆", "⊊", "⊃", "⊇", "≡", "≈", "∼", "≅", "∣",
 ];
 pub const ORDER_RELS: [&str; 9] = ["<", "≤", ">", "≥", "∈", "⊂", "⊆", "⊃", "⊇"];
 
@@ -817,6 +817,7 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                         .collect();
                     (format!("[{}]", rows.join(", ")), 9)
                 }
+                ("max" | "min", [a, b]) => (format!("{f}{{{}, {}}}", show_term(a, 0), show_term(b, 0)), 5),
                 ("abs", [a]) => {
                     // `|-x|` は `|-`（⊢）と読まれるので、空白を入れて `| -x|` と書く
                     let inner = show_term(a, 0);
@@ -876,6 +877,17 @@ fn binder(q: &str, x: &str, ty: &str) -> String {
     }
 }
 
+/// (a ⇒ b) ∧ (b ⇒ a) を a ⇔ b として表示するための (a, b)
+fn iff_parts(f: &Formula) -> Option<(&Formula, &Formula)> {
+    match f {
+        Formula::And(x, y) => match (&**x, &**y) {
+            (Formula::Imp(a, b), Formula::Imp(c, d)) if a == d && b == c && **b != Formula::Bot && **a != Formula::Bot => Some((a, b)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 pub fn show_formula(f: &Formula, prec: u8) -> String {
     let (s, p) = match f {
         Formula::Bot => ("⊥".to_string(), 5),
@@ -906,13 +918,17 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
             _ => (format!("¬{}", show_formula(a, 4)), 4),
         },
         Formula::Imp(a, b) => (
-            format!("{} → {}", show_formula(a, 2), show_formula(b, 1)),
+            format!("{} ⇒ {}", show_formula(a, 2), show_formula(b, 1)),
             1,
         ),
         Formula::Or(a, b) => (
             format!("{} ∨ {}", show_formula(a, 2), show_formula(b, 3)),
             2,
         ),
+        Formula::And(..) if iff_parts(f).is_some() => {
+            let (a, b) = iff_parts(f).unwrap();
+            (format!("{} ⇔ {}", show_formula(a, 1), show_formula(b, 1)), 0)
+        }
         Formula::And(a, b) => (
             format!("{} ∧ {}", show_formula(a, 3), show_formula(b, 4)),
             3,
@@ -1190,6 +1206,7 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 // 略記の表示の中の数列：a(n) を a_{n} と書く
                 (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) => (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5),
+                ("max" | "min", [a, b]) => (format!("\\{f}\\{{{}, {}\\}}", show_term_latex(a, 0), show_term_latex(b, 0)), 5),
                 ("+" | "-", [a, b]) => (
                     format!("{} {} {}", show_term_latex(a, 1), f, show_term_latex(b, 2)),
                     1,
@@ -1397,7 +1414,7 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
         },
         Formula::Imp(a, b) => (
             format!(
-                "{} \\to {}",
+                "{} \\Rightarrow {}",
                 show_formula_latex(a, 2),
                 show_formula_latex(b, 1)
             ),
@@ -1411,6 +1428,10 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             ),
             2,
         ),
+        Formula::And(..) if iff_parts(f).is_some() => {
+            let (a, b) = iff_parts(f).unwrap();
+            (format!("{} \\Leftrightarrow {}", show_formula_latex(a, 1), show_formula_latex(b, 1)), 0)
+        }
         Formula::And(a, b) => (
             format!(
                 "{} \\land {}",

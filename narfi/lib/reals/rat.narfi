@@ -4,8 +4,8 @@
 
 axiom abs.sub_comm : ∀x:ℚ. ∀y:ℚ. |x - y| = |y - x|
 axiom abs.triangle : ∀x:ℚ. ∀y:ℚ. |x + y| ≤ |x| + |y|
-axiom le_max_left  : ∀a:ℕ. ∀b:ℕ. max(a, b) ≥ a
-axiom le_max_right : ∀a:ℕ. ∀b:ℕ. max(a, b) ≥ b
+axiom le_max_left  : ∀a:ℕ. ∀b:ℕ. max{a, b} ≥ a
+axiom le_max_right : ∀a:ℕ. ∀b:ℕ. max{a, b} ≥ b
 
 thm abs.zero :
   ⊢ |0| = 0
@@ -19,17 +19,17 @@ thm half_pos :
 linarith
 
 thm ge.max.left :
-  n : ℕ, h : n ≥ max(a, b)
+  n : ℕ, h : n ≥ max{a, b}
   ⊢ n ≥ a
 
 n
-  ≥ max(a, b)   by h
+  ≥ max{a, b}   by h
   ≥ a           by le_max_left(a, b)
 
 thm ge.max.right :
-  n : ℕ, h : n ≥ max(a, b)
+  n : ℕ, h : n ≥ max{a, b}
   ⊢ n ≥ b
 
 n
-  ≥ max(a, b)   by h
+  ≥ max{a, b}   by h
   ≥ b           by le_max_right(a, b)

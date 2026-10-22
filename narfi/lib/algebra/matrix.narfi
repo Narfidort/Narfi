@@ -31,7 +31,7 @@ Fix n
 
 -- 2 より小さい自然数は 0 か 1
 thm nat.lt2 :
-  ⊢ ∀n:ℕ. n < 2 → n = 0 ∨ n = 1
+  ⊢ ∀n:ℕ. n < 2 ⇒ n = 0 ∨ n = 1
 
 Fix n | h : n < 2
   c : n = 0 ∨ (∃m:ℕ. n = S(m)) by nat.cases(n)
@@ -57,7 +57,7 @@ Fix n | h : n < 2
           linarith
 
 -- クロネッカーのデルタ δ(i, j)：i = j なら 1、そうでなければ 0
-def isdelta(i : ℕ, j : ℕ, x : ℝ) := (i = j ∧ x = 1) ∨ (¬(i = j) ∧ x = 0)
+def isdelta(i : ℕ, j : ℕ, x : ℝ) :⇔ (i = j ∧ x = 1) ∨ (¬(i = j) ∧ x = 0)
 def delta(i : ℕ, j : ℕ) : ℝ := some({x : ℝ | isdelta(i, j, x)})
 
 thm delta.exists :
@@ -94,7 +94,7 @@ Fix i
       bot.elim(b.left(e))
 
 thm delta.diff :
-  ⊢ ∀i:ℕ. ∀j:ℕ. ¬(i = j) → delta(i, j) = 0
+  ⊢ ∀i:ℕ. ∀j:ℕ. ¬(i = j) ⇒ delta(i, j) = 0
 
 Fix i, j
   assume ne : ¬(i = j)
@@ -192,7 +192,7 @@ Fix A
     = 0                                                                          by m
 
 thm cayley_hamilton2 :
-  ⊢ ∀A:ℕ × ℕ → ℝ. ∀i:ℕ. ∀j:ℕ. i < 2 → j < 2 → mmul(A, A, 2)(i, j) - mtr(A, 2) * A(i, j) + det2(A) * mid(i, j) = 0
+  ⊢ ∀A:ℕ × ℕ → ℝ. ∀i:ℕ. ∀j:ℕ. i < 2 ⇒ j < 2 ⇒ mmul(A, A, 2)(i, j) - mtr(A, 2) * A(i, j) + det2(A) * mid(i, j) = 0
 
 Fix A, i, j
   assume hi : i < 2
