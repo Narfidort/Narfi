@@ -1040,6 +1040,11 @@ pub fn ident_to_latex(s: &str) -> String {
                 }
                 return s.to_string();
             }
+            // ギリシャ文字 + 数字添字 (例: δ₁ -> \delta_{1})
+            if cs.len() >= 2 && greek_char_to_latex(cs[0]).is_some() && cs[1..].iter().all(|c| ('₀'..='₉').contains(c)) {
+                let ds: String = cs[1..].iter().map(|c| ((*c as u32 - '₀' as u32) as u8 + b'0') as char).collect();
+                return format!("{}_{{{ds}}}", greek_char_to_latex(cs[0]).unwrap());
+            }
             // 1文字英字 + 数字添字 (例: N₁, a₂, x₀)
             if cs.len() == 2 && cs[0].is_ascii_alphabetic() && ('₀'..='₉').contains(&cs[1]) {
                 let d = (cs[1] as u32 - '₀' as u32) as u8 + b'0';
@@ -1053,6 +1058,14 @@ pub fn ident_to_latex(s: &str) -> String {
                 if cs[1].is_ascii_alphabetic() {
                     return format!("h_{{{}}}", cs[1]);
                 }
+            }
+            // 仮定の名前 h + 変数（hδ₁・hN₂・hx₀）-> h_{\delta_{1}}（添字を 2 重にしない）
+            if cs.len() >= 3
+                && cs[0] == 'h'
+                && (cs[1].is_alphabetic() && !cs[1].is_ascii_lowercase() || cs[1].is_ascii_alphabetic())
+                && cs[2..].iter().all(|c| ('₀'..='₉').contains(c))
+            {
+                return format!("h_{{{}}}", ident_to_latex(&cs[1..].iter().collect::<String>()));
             }
             // hN₁ -> h_{N_1}
             if cs.len() == 3 && s.starts_with("hN") && ('₀'..='₉').contains(&cs[2]) {

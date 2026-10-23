@@ -32,6 +32,8 @@ fn wrong_proofs_fail() {
         let passed: Vec<&str> = out.lines().filter(|l| l.trim_start().starts_with('✓')).collect();
         assert!(passed.is_empty(), "{f} で通ってしまった証明: {passed:?}\n{out}");
         assert!(out.contains('✗'), "{out}");
+        // 書き方が古くなって構文エラーで落ちているなら、確かめたい誤りを確かめていない
+        assert!(!out.contains("構文エラー"), "{f} が構文エラーで失敗している（確かめたい誤りではない）\n{out}");
     }
 }
 
@@ -173,3 +175,31 @@ fn quoted_notation_is_an_error() {
     assert!(out.contains("構文エラー") && out.contains("引用符"), "{out}");
 }
 
+
+/// ベンチマーク（lib/bench、docs/bench.md）：構文エラーがないこと、通っている定理が通り続けること
+#[test]
+fn benchmarks() {
+    let passing = [
+        ("calculus", "cont.add"),
+        ("calculus", "squeeze"),
+        ("complex", "cabs.mul"),
+        ("functional_analysis", "parallelogram"),
+        ("linear_algebra", "ch2"),
+        ("logic", "injective.comp"),
+        ("logic", "surjective.comp"),
+        ("number_theory", "dvd.trans"),
+        ("number_theory", "even.add"),
+        ("number_theory", "odd.sq"),
+        ("numerical", "contraction"),
+        ("probability", "ex.add"),
+    ];
+    for f in ["calculus", "complex", "functional_analysis", "graph", "linear_algebra", "logic", "measure", "number_theory", "numerical", "probability", "sets"] {
+        let out = run(&[&format!("lib/bench/{f}.narfi")]);
+        assert!(!out.contains("構文エラー"), "lib/bench/{f}.narfi に構文エラー\n{out}");
+        for (g, name) in passing {
+            if g == f {
+                assert!(out.lines().any(|l| l.trim_start().starts_with(&format!("✓ {name}"))), "lib/bench/{f}.narfi の {name} が通らなくなった\n{out}");
+            }
+        }
+    }
+}

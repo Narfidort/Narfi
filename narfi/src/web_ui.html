@@ -613,6 +613,11 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-size: 0.68em;
 }
 /* Accent Node (vec, hat, bar, tilde) */
+/* ``` の中の Markdown（エディタ） */
+.mc-md { font-family: -apple-system, "Hiragino Sans", sans-serif; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
+.mc-md-h { font-weight: 600; color: var(--text); font-size: 15px; }
+.mc-md-fence { display: inline-block; width: 100%; border-top: 1px dashed var(--border); opacity: 0.6; }
+.prose-md { margin: 10px 0 14px; padding: 4px 12px; border-left: 2px solid var(--border); }
 /* 下に添字の付く演算子（lim・max・sup …） */
 .mc-oplim {
   display: inline-flex;
@@ -1352,7 +1357,7 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "induction", preview: "induction", desc: "induction n" },
   { cmd: "let", preview: "let", desc: "local def: let x := t" },
   { cmd: "def", preview: "def", desc: "def P(a, b) := φ" },
-  { cmd: "notation", preview: "notation", desc: "notation a \"⟶\" b := P(a, b)" },
+  { cmd: "notation", preview: "notation", desc: "notation a ⟶ b := P(a, b)" },
   { cmd: "import", preview: "import", desc: "import analysis.limits" },
   { cmd: "thm", preview: "thm", desc: "theorem: thm name :" },
   { cmd: "axiom", preview: "axiom", desc: "axiom name : Γ ⊢ φ" },
@@ -1945,14 +1950,18 @@ function loadSourceIntoDoc(srcText) {
   seqMap.clear();
   nextSeqId = 1;
   const rawLines = srcText.replace(/\r\n/g, "\n").split("\n");
-  docLines = rawLines.map(raw => {
+  const fences = computeFences(rawLines);
+  docLines = rawLines.map((raw, li) => {
     const m = raw.match(/^( *)/);
     const spaces = m ? m[1].length : 0;
     const indent = Math.floor(spaces / 2);
     const content = raw.substring(indent * 2);
-    const rootSeq = createSeq(parseAsciiToItems(content), null, "root");
+    // ``` の中は文字のまま（数式として読まない）
+    const rootSeq = createSeq(fences.inside.has(li) ? Array.from(content).map(makeChar) : parseAsciiToItems(content), null, "root");
     return { indent, rootSeq };
   });
+  fenceLines = fences.inside;
+  fenceMarks = fences.marks;
   if (docLines.length === 0) {
     docLines = [{ indent: 0, rootSeq: createSeq([], null, "root") }];
   }
@@ -2790,6 +2799,7 @@ const editorSurface = document.getElementById("editorSurface");
 const acPopup = document.getElementById("acPopup");
 
 function renderEditor() {
+  refreshFences();
   pendingHypSuggestion = null;
   declNames = collectDeclNames();
   selHL = selHighlights();
@@ -2852,7 +2862,7 @@ function renderEditor() {
     html += `<div class="${cls.join(' ')}" data-line-idx="${i}">` +
       `<div class="mc-gutter">${lineNo}</div>` +
       `<div class="mc-indent-guides">${guides}</div>` +
-      `<div class="mc-content" data-line-idx="${i}">${renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
+      `<div class="mc-content" data-line-idx="${i}">${fenceLines.has(i) && i !== cursor.lineIdx ? renderFenceLineHtml(ln, i) : renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
       `</div>`;
     for (const g of (thereforeAfter.get(i) || []).reverse()) {
       html += `<div class="mc-line mc-therefore" title="このブロックで示したこと（表示だけ）"><div class="mc-gutter"></div>` +
@@ -3149,9 +3159,32 @@ function handleBackspace() {
 // 8. Typing, Shortcuts (/ _ ^ | <= ->) & Autocomplete (r + Tab)
 // ================================================================
 
+// ``` で囲んだ行（Markdown の注釈。Prose に出る）：数式にせず文字のまま持ち、カーソルのない行は Markdown として描く
+let fenceLines = new Set();   // 囲みの中の行と、``` の行（docLines の番号）
+let fenceMarks = new Set();   // ``` の行
+function lineTextOf(ln) {
+  return ln.rootSeq.items.map((x) => (x.kind === "char" ? x.ch : "\u0001")).join("");
+}
+function computeFences(texts) {
+  const inside = new Set(), marks = new Set();
+  let open = false;
+  texts.forEach((t, i) => {
+    if (t.trim().startsWith("```")) { marks.add(i); inside.add(i); open = !open; }
+    else if (open) inside.add(i);
+  });
+  return { inside, marks };
+}
+function refreshFences() {
+  const f = computeFences(docLines.map(lineTextOf));
+  fenceLines = f.inside;
+  fenceMarks = f.marks;
+}
+
 function isCommentLine(seq) {
   const root = getRootSeq(seq);
   if (!root) return false;
+  const li = docLines.findIndex((l) => l.rootSeq === root);
+  if (li >= 0 && fenceLines.has(li)) return true;
   let prefix = "";
   for (let i = 0; i < Math.min(4, root.items.length); i++) {
     if (root.items[i].kind === "char") prefix += root.items[i].ch;
@@ -3904,6 +3937,36 @@ function renderKatex(tex, displayMode = false) {
   }
 }
 
+// ``` の中の 1 行を Markdown として描く（エディタ。カーソルのない行だけ）
+function renderFenceLineHtml(ln, i) {
+  const t = ln.rootSeq.items.map((x) => x.ch || "").join("");
+  if (fenceMarks.has(i)) return `<span class="mc-md-fence" data-slot-seq="${ln.rootSeq.id}">\u2009</span>`;
+  let h;
+  const hm = t.match(/^(#{1,6})\s+(.*)$/);
+  if (hm) h = `<span class="mc-md-h">${renderInlineMarkdownMath(hm[2])}</span>`;
+  else if (/^\s*[-*]\s+/.test(t)) h = `<span class="mc-md-li">• ${renderInlineMarkdownMath(t.replace(/^\s*[-*]\s+/, ""))}</span>`;
+  else h = renderInlineMarkdownMath(t) || "&nbsp;";
+  return `<span class="mc-md" data-slot-seq="${ln.rootSeq.id}">${h}</span>`;
+}
+
+// 注釈の Markdown（見出し・箇条書き・段落）を描く（Prose）
+function renderMarkdownBlock(md) {
+  const lines = String(md || "").split("\n");
+  let out = "", para = [], list = [];
+  const flushPara = () => { if (para.length) { out += `<p style="margin:6px 0;line-height:1.75;">${renderInlineMarkdownMath(para.join(" "))}</p>`; para = []; } };
+  const flushList = () => { if (list.length) { out += `<ul style="margin:4px 0 8px 1.2em;padding:0;line-height:1.7;">${list.map((x) => `<li>${renderInlineMarkdownMath(x)}</li>`).join("")}</ul>`; list = []; } };
+  for (const l of lines) {
+    const hm = l.match(/^(#{1,6})\s+(.*)$/);
+    if (hm) { flushPara(); flushList(); out += `<div style="font-weight:600;font-size:${hm[1].length <= 2 ? 16 : 14.5}px;margin:14px 0 4px;">${renderInlineMarkdownMath(hm[2])}</div>`; continue; }
+    if (/^\s*[-*]\s+/.test(l)) { flushPara(); list.push(l.replace(/^\s*[-*]\s+/, "")); continue; }
+    if (!l.trim()) { flushPara(); flushList(); continue; }
+    flushList();
+    para.push(l.trim());
+  }
+  flushPara(); flushList();
+  return out;
+}
+
 function renderInlineMarkdownMath(md) {
   const s = String(md || "");
   const dispParts = s.split(/\$\$([\s\S]+?)\$\$/g);
@@ -4253,6 +4316,8 @@ function renderProseTab(data) {
       const n = it.note;
       if (n.kind === "heading") {
         html += `<h3 style="margin:14px 0 6px 0;font-size:15px;">${renderInlineMarkdownMath(n.text.replace(/^#+\s*/, ""))}</h3>`;
+      } else if (n.kind === "markdown") {
+        html += `<div class="prose-md">${renderMarkdownBlock(n.text)}</div>`;
       } else {
         html += `<div style="color:var(--text-dim);margin:4px 0;">${renderInlineMarkdownMath(n.text)}</div>`;
       }

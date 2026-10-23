@@ -1,0 +1,50 @@
+# 確率・統計
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+import algebra.sum
+
+```
+### 期待値の線形性（有限の場合）
+**定理**　値 $X_k, Y_k$ を確率 $p_k$ でとる確率変数（$k = 0, \dots, n-1$）について $E[X + Y] = E[X] + E[Y]$。
+
+**証明**　$E[X + Y] = \sum_{k<n} p_k (X_k + Y_k) = \sum_{k<n} p_k X_k + \sum_{k<n} p_k Y_k = E[X] + E[Y]$。$\blacksquare$
+
+**Narfi での課題**
+- 構造：確率空間・確率変数・期待値 $E[X]$ を表す仕組みがない。今は有限の場合を、確率と値の数列で書く。
+- 記法：$E[X]$ が書けず `ex(p, X, n)` と書く（F1：確率の記法）。
+- 根拠：関数どうしの等式（$k \mapsto p_k(X_k + Y_k)$ と $k \mapsto p_kX_k + p_kY_k$）を `ring` で示せず、各点で `ring` を使ってから `funext` で包む。
+```
+
+def ex(p : ℕ → ℝ, X : ℕ → ℝ, n : ℕ) : ℝ := sum((k : ℕ ↦ p_k * X_k), n)
+
+thm ex.add :
+  p : ℕ → ℝ, X : ℕ → ℝ, Y : ℕ → ℝ, n : ℕ
+  ⊢ ex(p, (k : ℕ ↦ X_k + Y_k), n) = ex(p, X, n) + ex(p, Y, n)
+
+pe : ∀k:ℕ. p_k * (X_k + Y_k) = p_k * X_k + p_k * Y_k
+  Fix k
+    ring
+e : (k : ℕ ↦ p_k * (X_k + Y_k)) = (k : ℕ ↦ p_k * X_k + p_k * Y_k) by funext((k : ℕ ↦ p_k * (X_k + Y_k)), (k : ℕ ↦ p_k * X_k + p_k * Y_k), pe)
+ex(p, (k : ℕ ↦ X_k + Y_k), n)
+  = sum((k : ℕ ↦ p_k * (X_k + Y_k)), n)                  by refl
+  = sum((k : ℕ ↦ p_k * X_k + p_k * Y_k), n)              by EQ2(e, refl)
+  = sum((k : ℕ ↦ p_k * X_k), n) + sum((k : ℕ ↦ p_k * Y_k), n)   by sum.add((k : ℕ ↦ p_k * X_k), (k : ℕ ↦ p_k * Y_k), n)
+  = ex(p, X, n) + ex(p, Y, n)                             by refl
+
+```
+### 分散の公式（目標）
+**定理**　$\sum_k p_k = 1$ のとき $V[X] = E[X^2] - E[X]^2$。ここで $V[X] = E[(X - E[X])^2]$。
+
+**証明**　$m = E[X]$ とおくと
+$$\sum_k p_k (X_k - m)^2 = \sum_k p_k X_k^2 - 2m \sum_k p_k X_k + m^2 \sum_k p_k = E[X^2] - 2m^2 + m^2.\ \blacksquare$$
+
+**Narfi での課題**
+- ライブラリ：和の線形性（`sum.add`・`sum.smul`）を何度も使い、そのたびに関数の等式を `funext` で作る必要がある。Σ の中の式を直接変形できる仕組みが欲しい（証明は未着手）。
+```
+
+thm var.formula :
+  p : ℕ → ℝ, X : ℕ → ℝ, n : ℕ, hp : sum(p, n) = 1
+  ⊢ ex(p, (k : ℕ ↦ (X_k - ex(p, X, n))^2), n) = ex(p, (k : ℕ ↦ X_k^2), n) - ex(p, X, n)^2
+
+sorry

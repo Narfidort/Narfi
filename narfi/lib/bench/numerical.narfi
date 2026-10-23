@@ -1,0 +1,42 @@
+# 数値解析
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+-- ライブラリにまだない補題（公理として置く）
+axiom pow.zero     : ∀x:ℝ. x^0 = 1
+axiom pow.succ     : ∀x:ℝ. ∀n:ℕ. x^(n + 1) = x * x^n
+axiom mul.le.left  : c : ℝ, a : ℝ, b : ℝ, hc : c ≥ 0, h : a ≤ b ⊢ c * a ≤ c * b
+
+```
+### 縮小写像の反復の誤差
+**定理**　$0 \le L$ で、すべての $k$ について $|x_{k+1} - p| \le L\,|x_k - p|$ ならば、$|x_n - p| \le L^n |x_0 - p|$。
+
+**証明**　$n$ についての帰納法。$n = 0$ では等号。$n = k$ で成り立つとすると
+$$|x_{k+1} - p| \le L\,|x_k - p| \le L \cdot L^k |x_0 - p| = L^{k+1} |x_0 - p|.\ \blacksquare$$
+
+**Narfi での課題**
+- ライブラリ：冪 $x^n$（指数が変数）の性質、不等式に非負の数を掛ける補題がない（上で公理として置いた）。
+- 帰納法：`Case succ k` の goal は $x_{S(k)}$ のように後者 $S(k)$ で書かれ、紙の $k+1$ と合わせるのに書き換えが要る。
+```
+
+thm contraction :
+  x : ℕ → ℝ, p : ℝ, L : ℝ, hL : L ≥ 0,
+  h : ∀k:ℕ. |x_{k+1} - p| ≤ L * |x_k - p|
+  ⊢ ∀n:ℕ. |x_n - p| ≤ L^n * |x_0 - p|
+
+Fix n
+  induction n
+    Case zero
+      |x_0 - p|
+        = 1 * |x_0 - p|       by ring
+        = L^0 * |x_0 - p|     by EQ2(pow.zero(L), refl)
+    Case succ k, IH : |x_k - p| ≤ L^k * |x_0 - p|
+      s : S(k) = k + 1 by ring
+      e : L^(k + 1) = L * L^k by pow.succ(L, k)
+      |x_{S(k)} - p|
+        = |x_{k+1} - p|            by EQ2(s, refl)
+        ≤ L * |x_k - p|            by h(k)
+        ≤ L * (L^k * |x_0 - p|)    by mul.le.left(hL, IH)
+        = (L * L^k) * |x_0 - p|    by ring
+        = L^(k + 1) * |x_0 - p|    by EQ2(e, refl)
+        = L^S(k) * |x_0 - p|       by EQ2(s, refl)

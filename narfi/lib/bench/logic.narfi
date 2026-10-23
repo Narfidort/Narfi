@@ -1,0 +1,44 @@
+# 論理と写像
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+def injective(f : ℝ → ℝ) :⇔ ∀x:ℝ. ∀y:ℝ. f(x) = f(y) ⇒ x = y
+def surjective(f : ℝ → ℝ) :⇔ ∀y:ℝ. ∃x:ℝ. f(x) = y
+
+```
+### 単射の合成は単射
+**定理**　$f, g$ が単射ならば $g \circ f$ も単射。
+
+**証明**　$g(f(x)) = g(f(y))$ とする。$g$ が単射なので $f(x) = f(y)$、$f$ が単射なので $x = y$。$\blacksquare$
+
+**Narfi での課題**
+- 記法：合成 $g \circ f$ が書けず、$(x \mapsto g(f(x)))$ と書く（B：`∘`）。
+```
+
+thm injective.comp :
+  f : ℝ → ℝ, g : ℝ → ℝ, hf : injective(f), hg : injective(g)
+  ⊢ injective((x : ℝ ↦ g(f(x))))
+
+Fix x, y
+  assume h : g(f(x)) = g(f(y))
+    k : f(x) = f(y) by hg(f(x), f(y), h)
+    hf(x, y, k)
+
+```
+### 全射の合成は全射
+**定理**　$f, g$ が全射ならば $g \circ f$ も全射。
+
+**証明**　$z$ をとる。$g(y) = z$ となる $y$、$f(x) = y$ となる $x$ をとると、$g(f(x)) = g(y) = z$。$\blacksquare$
+```
+
+thm surjective.comp :
+  f : ℝ → ℝ, g : ℝ → ℝ, hf : surjective(f), hg : surjective(g)
+  ⊢ surjective((x : ℝ ↦ g(f(x))))
+
+Fix z
+  Obtain y, hy : hg(z)
+  Obtain x, hx : hf(y)
+  choose x
+  g(f(x))
+    = g(y)   by EQ2(hx, refl)
+    = z      by hy

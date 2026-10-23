@@ -131,10 +131,25 @@ impl Locale {
             *c += 1;
             k
         });
-        let mut out = variants[k % variants.len()].to_string();
-        for (k, v) in vals {
-            out = out.replace(&format!("{{{k}}}"), v);
+        // {名前} を 1 回の走査で置き換える（入れた値の中の「{f}」などを、もう一度置き換えないように）
+        let tpl = variants[k % variants.len()];
+        let mut out = String::new();
+        let mut rest = tpl;
+        while let Some(st) = rest.find('{') {
+            out.push_str(&rest[..st]);
+            let after = &rest[st + 1..];
+            match after.find('}').map(|e| (&after[..e], e)) {
+                Some((name, e)) if vals.iter().any(|(k, _)| *k == name) => {
+                    out.push_str(vals.iter().find(|(k, _)| *k == name).unwrap().1);
+                    rest = &after[e + 1..];
+                }
+                _ => {
+                    out.push('{');
+                    rest = after;
+                }
+            }
         }
+        out.push_str(rest);
         out
     }
 }
@@ -333,6 +348,14 @@ mod tests {
             assert_ne!(loc, std, "{std} に英語の読みがない");
             assert_eq!(to_standard(&loc).as_deref(), Some(std), "{std} → {loc} → 戻らない");
         }
+    }
+
+    /// 入れた値の中の {f} を、別の値でもう一度置き換えない（仮定の名前 h_{f} が化けたバグ）
+    #[test]
+    fn template_values_are_not_replaced_again() {
+        let ja = locale("ja").unwrap();
+        let s = ja.t("ctx_hyp", &[("h", "h_{f}"), ("f", "P(f)")]);
+        assert!(s.contains("h_{f}") && s.contains("P(f)"), "{s}");
     }
 
     #[test]

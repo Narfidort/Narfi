@@ -1,0 +1,68 @@
+# 数論
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+```
+### 整除の推移律
+**定理**　$a \mid b$ かつ $b \mid c$ ならば $a \mid c$。
+
+**証明**　$b = ak$、$c = bl$ となる整数 $k, l$ をとる。$c = bl = a(kl)$ なので $a \mid c$。$\blacksquare$
+
+**Narfi での課題**
+- 記法：`∣` は組み込みの関係として読めるが意味（定義）がない。今は `dvd(a, b)` と書く（B：`a ∣ b`）。
+- 記法：`a k`（文字どうしの積）は書けず、`a * k` と書く（notation.md で「a b（空白）」に決定、未実装）。
+- 根拠：「$b = ak$ を代入する」が `by hk` では通らず、`EQ2(hk, refl)` と書く必要がある（紙の「代入」に当たる短い根拠がない）。
+```
+
+def dvd(a : ℤ, b : ℤ) :⇔ ∃k:ℤ. b = a * k
+
+thm dvd.trans :
+  a : ℤ, b : ℤ, c : ℤ, hab : dvd(a, b), hbc : dvd(b, c)
+  ⊢ dvd(a, c)
+
+Obtain k, hk : hab
+Obtain l, hl : hbc
+choose k * l
+c
+  = b * l           by hl
+  = (a * k) * l     by EQ2(hk, refl)
+  = a * (k * l)     by ring
+
+```
+### 偶数どうしの和は偶数
+**定理**　$m, n$ が偶数ならば $m + n$ も偶数。
+
+**証明**　$m = 2k$、$n = 2l$ とおくと $m + n = 2(k + l)$。$\blacksquare$
+```
+
+def even(n : ℤ) :⇔ ∃k:ℤ. n = 2k
+
+thm even.add :
+  m : ℤ, n : ℤ, hm : even(m), hn : even(n)
+  ⊢ even(m + n)
+
+Obtain k, hk : hm
+Obtain l, hl : hn
+choose k + l
+m + n
+  = 2k + 2l      by hk, hl
+  = 2(k + l)     by ring
+
+```
+### 奇数の平方は奇数
+**定理**　$n$ が奇数ならば $n^2$ も奇数。
+
+**証明**　$n = 2k + 1$ とおくと $n^2 = 4k^2 + 4k + 1 = 2(2k^2 + 2k) + 1$。$\blacksquare$
+```
+
+def odd(n : ℤ) :⇔ ∃k:ℤ. n = 2k + 1
+
+thm odd.sq :
+  n : ℤ, h : odd(n)
+  ⊢ odd(n^2)
+
+Obtain k, hk : h
+choose 2k^2 + 2k
+n^2
+  = (2k + 1)^2           by EQ2(hk, refl)
+  = 2(2k^2 + 2k) + 1     by ring

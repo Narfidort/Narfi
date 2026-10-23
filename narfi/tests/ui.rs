@@ -4,7 +4,18 @@
 use std::path::Path;
 use std::process::Command;
 
-const FILES: [&str; 20] = [
+const FILES: [&str; 31] = [
+    "lib/bench/calculus.narfi",
+    "lib/bench/complex.narfi",
+    "lib/bench/functional_analysis.narfi",
+    "lib/bench/graph.narfi",
+    "lib/bench/linear_algebra.narfi",
+    "lib/bench/logic.narfi",
+    "lib/bench/measure.narfi",
+    "lib/bench/number_theory.narfi",
+    "lib/bench/numerical.narfi",
+    "lib/bench/probability.narfi",
+    "lib/bench/sets.narfi",
     "tests/notation.narfi",
     "lib/algebra/matrix.narfi",
     "tests/rec.narfi",

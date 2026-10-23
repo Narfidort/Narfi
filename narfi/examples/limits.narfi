@@ -1,15 +1,15 @@
--- def・notation・import：極限の加法性を a ⟶ α の記法で書く
+-- def・notation・import：極限の加法性を a_n → α (n → ∞) の記法で書く
 --
--- 数列の和は λ で書く：(n ↦ a(n) + b(n)) は「n に a(n) + b(n) を対応させる数列」
+-- 数列の和は a_n + b_n と書ける（記法の右辺の λ が n を束縛する）
 
 import analysis.limits
 
 
 thm conv.add :
   a : ℕ → ℝ, b : ℕ → ℝ,
-  conv_a : a ⟶ α,
-  conv_b : b ⟶ β
-  ⊢ (n ↦ a(n) + b(n)) ⟶ α + β
+  conv_a : a_n → α (n → ∞),
+  conv_b : b_n → β (n → ∞)
+  ⊢ a_n + b_n → α + β (n → ∞)
 
 Fix ε | hε : ε > 0
   Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
@@ -27,8 +27,8 @@ Fix ε | hε : ε > 0
 -- 定理として使うときは記法のまま単一化される（関数の穴に λ が入る）
 thm conv.add3 :
   a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
-  ha : a ⟶ α, hb : b ⟶ β, hc : c ⟶ γ
-  ⊢ (n ↦ (a(n) + b(n)) + c(n)) ⟶ (α + β) + γ
+  ha : a_n → α (n → ∞), hb : b_n → β (n → ∞), hc : c_n → γ (n → ∞)
+  ⊢ (a_n + b_n) + c_n → (α + β) + γ (n → ∞)
 
 conv.add(conv.add(ha, hb), hc)
 
@@ -37,7 +37,7 @@ conv.add(conv.add(ha, hb), hc)
 -- 明示的に展開する：unfold と定義の同値 is_lim.def
 thm conv.unfold :
   a : ℕ → ℝ,
-  h : a ⟶ α
+  h : a_n → α (n → ∞)
   ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
 
 h
@@ -46,6 +46,6 @@ h
 thm conv.fold :
   a : ℕ → ℝ,
   h : ∀ε:ℝ>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
-  ⊢ a ⟶ α
+  ⊢ a_n → α (n → ∞)
 
 is_lim.def.right(h)

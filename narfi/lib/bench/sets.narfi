@@ -1,0 +1,104 @@
+# 集合と写像
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+```
+**この分野の共通の課題**
+- 記法：`∪`・`∩`・`∖` は組み込みの記号として読めるが意味（定義）がない。今は `cup(A, B)`・`cap(A, B)` と名前で定義して書く（B：`A ∪ B`）。
+- 記法：補集合 $A^\complement$・逆像 $f^{-1}[B]$・像 $f[A]$ の記法がない（notation.md で決定済み・未実装）。
+- 核：集合を返す定義に要素を当てた形（`cup(A, B)(x)`、つまり $x \in A \cup B$）を、検査器が中身（$x \in A \lor x \in B$）まで開けない。このファイルの証明は、ここが直れば通るはずのもの。
+```
+
+def cup(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∨ x ∈ B}
+def cap(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∧ x ∈ B}
+def compl(A : ℝ → Prop) : ℝ → Prop := {x : ℝ | ¬(x ∈ A)}
+def preimage(f : ℝ → ℝ, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | f(x) ∈ B}
+def image(f : ℝ → ℝ, A : ℝ → Prop) : ℝ → Prop := {y : ℝ | ∃x:ℝ. x ∈ A ∧ f(x) = y}
+
+```
+### 逆像は和集合を保つ
+**定理**　$f^{-1}[A \cup B] = f^{-1}[A] \cup f^{-1}[B]$。
+
+**証明**　$x \in f^{-1}[A \cup B] \iff f(x) \in A \cup B \iff f(x) \in A \lor f(x) \in B \iff x \in f^{-1}[A] \cup f^{-1}[B]$。$\blacksquare$
+```
+
+thm preimage.cup :
+  f : ℝ → ℝ, A : ℝ → Prop, B : ℝ → Prop
+  ⊢ preimage(f, cup(A, B)) = cup(preimage(f, A), preimage(f, B))
+
+h1 : ∀x:ℝ. x ∈ preimage(f, cup(A, B)) ⇒ x ∈ cup(preimage(f, A), preimage(f, B))
+  Fix x
+    assume h : x ∈ preimage(f, cup(A, B))
+      k : f(x) ∈ A ∨ f(x) ∈ B by h
+      cases k
+        Case left k1
+          choose left
+          k1
+        Case right k2
+          choose right
+          k2
+h2 : ∀x:ℝ. x ∈ cup(preimage(f, A), preimage(f, B)) ⇒ x ∈ preimage(f, cup(A, B))
+  Fix x
+    assume h : x ∈ cup(preimage(f, A), preimage(f, B))
+      cases h
+        Case left k1
+          choose left
+          k1
+        Case right k2
+          choose right
+          k2
+setext(h1, h2)
+
+```
+### ド・モルガンの法則
+**定理**　$(A \cup B)^\complement = A^\complement \cap B^\complement$。
+
+**証明**　$x \notin A \cup B \iff \lnot(x \in A \lor x \in B) \iff x \notin A \land x \notin B$。$\blacksquare$
+```
+
+thm de_morgan :
+  A : ℝ → Prop, B : ℝ → Prop
+  ⊢ compl(cup(A, B)) = cap(compl(A), compl(B))
+
+h1 : ∀x:ℝ. x ∈ compl(cup(A, B)) ⇒ x ∈ cap(compl(A), compl(B))
+  Fix x
+    assume h : x ∈ compl(cup(A, B))
+      ha : ¬(x ∈ A)
+        assume p : x ∈ A
+          h(or.left(p))
+      hb : ¬(x ∈ B)
+        assume q : x ∈ B
+          h(or.right(q))
+      ha, hb
+h2 : ∀x:ℝ. x ∈ cap(compl(A), compl(B)) ⇒ x ∈ compl(cup(A, B))
+  Fix x
+    assume h : x ∈ cap(compl(A), compl(B))
+      assume k : x ∈ cup(A, B)
+        cases k
+          Case left p
+            h.left(p)
+          Case right q
+            h.right(q)
+setext(h1, h2)
+
+```
+### 像と共通部分
+**定理**　$f[A \cap B] \subseteq f[A] \cap f[B]$（等号は一般には成り立たない）。
+
+**証明**　$y \in f[A \cap B]$ なら、$x \in A \cap B$ で $f(x) = y$ となる $x$ がある。その $x$ は $A$ にも $B$ にも属するので、$y \in f[A]$ かつ $y \in f[B]$。$\blacksquare$
+```
+
+thm image.cap :
+  f : ℝ → ℝ, A : ℝ → Prop, B : ℝ → Prop
+  ⊢ image(f, cap(A, B)) ⊆ cap(image(f, A), image(f, B))
+
+Fix y
+  assume h : y ∈ image(f, cap(A, B))
+    Obtain x, hx : h
+    ka : y ∈ image(f, A)
+      choose x
+      hx.left.left, hx.right
+    kb : y ∈ image(f, B)
+      choose x
+      hx.left.right, hx.right
+    ka, kb

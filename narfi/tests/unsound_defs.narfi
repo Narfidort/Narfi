@@ -5,8 +5,8 @@ import analysis.limits
 -- 別の数列の収束は出てこない
 thm wrong.other :
   a : ℕ → ℝ, b : ℕ → ℝ,
-  h : a ⟶ α
-  ⊢ b ⟶ α
+  h : a_n → α (n → ∞)
+  ⊢ b_n → α (n → ∞)
 
 h
 
@@ -14,8 +14,8 @@ h
 -- 極限値を取り違えている
 thm wrong.limit :
   a : ℕ → ℝ,
-  h : a ⟶ α
-  ⊢ a ⟶ β
+  h : a_n → α (n → ∞)
+  ⊢ a_n → β (n → ∞)
 
 unfold is_lim at h
 h
@@ -24,10 +24,10 @@ h
 -- ε/2 ではなく ε で評価すると和は 2ε になり、通らない
 thm wrong.eps :
   a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
-  conv_a : a ⟶ α,
-  conv_b : b ⟶ β,
+  conv_a : a_n → α (n → ∞),
+  conv_b : b_n → β (n → ∞),
   hc : ∀n:ℕ. c(n) = a(n) + b(n)
-  ⊢ c ⟶ α + β
+  ⊢ c_n → α + β (n → ∞)
 
 Fix ε | hε : ε > 0
   Obtain N₁(ε), hN₁ : conv_a(ε, hε)
@@ -58,8 +58,8 @@ h
 thm wrong.split :
   a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ,
   hc : ∀n:ℕ. c(n) = a(n) + b(n),
-  h : c ⟶ α + β
-  ⊢ a ⟶ α
+  h : c_n → α + β (n → ∞)
+  ⊢ a_n → α (n → ∞)
 
 h
 
@@ -67,8 +67,8 @@ h
 -- 定義されていない名前は unfold できない
 thm wrong.unfold :
   a : ℕ → ℝ,
-  h : a ⟶ α
-  ⊢ a ⟶ α
+  h : a_n → α (n → ∞)
+  ⊢ a_n → α (n → ∞)
 
 unfold foo at h
 h

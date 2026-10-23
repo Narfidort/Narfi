@@ -1,10 +1,8 @@
 -- 数列の極限：a_n → α (n → ∞) は「数列 a は α に収束する」
--- 略記は 3 つ。表示には 1 つ目を使う：a_n → α (n → ∞)（添字の文字は自由。a_{n+1}・a_n + b_n も書ける）、a ⟶ α、\lim_{n → ∞} a_n = α
--- ASCII では a_n -> alpha (n -> \infty)、a \longrightarrow alpha（または a \lto alpha）
+-- 記法は 1 つ（docs/language/notation.md）：添字の文字は自由で、a_{n+1}・a_n + b_n も書ける
+-- ASCII では a_n -> alpha (n -> \infty)。\lim は、極限が 1 つであることを示したあと、値を返す関数の記法にとっておく
 
 import analysis.real
 
 def is_lim(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
 notation a → α (n → ∞) := is_lim((n : ℕ ↦ a), α)
-notation a ⟶ α := is_lim(a, α)
-notation \lim_{n → ∞} a = α := is_lim((n : ℕ ↦ a), α)

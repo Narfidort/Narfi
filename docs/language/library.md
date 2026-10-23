@@ -5,7 +5,7 @@
 | ファイル | 中身 | 頼る公理（核の公理以外） |
 |---|---|---|
 | `analysis/real.narfi` | 三角不等式・`pos_half`・`max` の性質（公理として置く） | それ自体が公理 |
-| `analysis/limits.narfi` | 数列の極限 `is_lim`（`a ⟶ α`）と和の極限 | `analysis/real` の公理 |
+| `analysis/limits.narfi` | 数列の極限 `is_lim`（`a_n → α (n → ∞)`）と和の極限 | `analysis/real` の公理 |
 | `reals/rat.narfi` | ℚ の絶対値・`max` の性質 | `abs.sub_comm`・`abs.triangle` など（公理） |
 | `reals/cauchy.narfi` | コーシー列 `cauchy`、その型 `CauSeq`、同値関係 `~` | `reals/rat` の公理 |
 | `reals/real.narfi` | ℝ = コーシー列/~（typedef による商）、`cls` の sound・exact・surjective | 同上 |

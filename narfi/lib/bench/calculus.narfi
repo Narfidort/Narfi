@@ -1,0 +1,93 @@
+# 微分積分
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+import analysis.limits
+
+-- ライブラリにまだない補題（公理として置く。本来は実数の順序から証明する）
+axiom min.pos      : a : ℝ, b : ℝ, ha : a > 0, hb : b > 0 ⊢ min{a, b} > 0
+axiom lt.min.left  : x : ℝ, h : x < min{a, b} ⊢ x < a
+axiom lt.min.right : x : ℝ, h : x < min{a, b} ⊢ x < b
+axiom abs.lt.elim  : x : ℝ, a : ℝ, e : ℝ, h : |x - a| < e ⊢ a - e < x ∧ x < a + e
+axiom abs.lt.intro : x : ℝ, a : ℝ, e : ℝ, h1 : a - e < x, h2 : x < a + e ⊢ |x - a| < e
+
+```
+### 連続関数の和は連続
+**定理**　$f, g$ が $a$ で連続ならば、$f + g$ も $a$ で連続。
+
+**証明**　$\varepsilon > 0$ をとる。$|x - a| < \delta_1$ なら $|f(x) - f(a)| < \varepsilon/2$、$|x - a| < \delta_2$ なら $|g(x) - g(a)| < \varepsilon/2$ となる $\delta_1, \delta_2 > 0$ をとり、$\delta = \min\{\delta_1, \delta_2\}$ とおく。$|x - a| < \delta$ なら
+$$|(f + g)(x) - (f + g)(a)| \le |f(x) - f(a)| + |g(x) - g(a)| < \varepsilon.\ \blacksquare$$
+
+**Narfi での課題**
+- 記法：関数の和 $f + g$ が書けず、$(x \mapsto f(x) + g(x))$ と書く（F1：関数の点ごとの演算）。
+- 記法：連続 `cont_at(f, a)` の教科書の書き方（「$f$ は $a$ で連続」）は記号ではないので、このままでよい。
+- ライブラリ：$\min$ の性質・絶対値の不等式がない（上で公理として置いた）。
+```
+
+def cont_at(f : ℝ → ℝ, a : ℝ) :⇔ ∀ε>0. ∃δ>0. ∀x:ℝ. |x - a| < δ ⇒ |f(x) - f(a)| < ε
+
+thm cont.add :
+  f : ℝ → ℝ, g : ℝ → ℝ, a : ℝ, hf : cont_at(f, a), hg : cont_at(g, a)
+  ⊢ cont_at((x : ℝ ↦ f(x) + g(x)), a)
+
+Fix ε | hε : ε > 0
+  Obtain δ₁, hδ₁ : hf(ε/2, pos_half(hε))
+  Obtain δ₂, hδ₂ : hg(ε/2, pos_half(hε))
+  choose min{δ₁, δ₂}, min.pos(hδ₁.left, hδ₂.left)
+  Fix x
+    assume hx : |x - a| < min{δ₁, δ₂}
+      |(f(x) + g(x)) - (f(a) + g(a))|
+        ≤ |f(x) - f(a)| + |g(x) - g(a)|   by triangle(f(x) - f(a), g(x) - g(a))
+        < ε/2 + ε/2                        by hδ₁.right(x, lt.min.left(hx)), hδ₂.right(x, lt.min.right(hx))
+        = ε                                by ring
+
+```
+### はさみうちの原理
+**定理**　すべての $n$ で $a_n \le b_n \le c_n$、かつ $a_n \to \alpha$、$c_n \to \alpha$ $(n \to \infty)$ ならば、$b_n \to \alpha$。
+
+**証明**　$\varepsilon > 0$ をとる。$n \ge N_1$ で $|a_n - \alpha| < \varepsilon$、$n \ge N_2$ で $|c_n - \alpha| < \varepsilon$ となる $N_1, N_2$ をとり、$N = \max\{N_1, N_2\}$ とおく。$n \ge N$ なら
+$$\alpha - \varepsilon < a_n \le b_n \le c_n < \alpha + \varepsilon$$
+なので $|b_n - \alpha| < \varepsilon$。$\blacksquare$
+
+**Narfi での課題**
+- 記法：仮定の $a_n \le b_n \le c_n$（不等式の連なり）が書けず、2 つの仮定に分ける。
+- ライブラリ：絶対値と区間の言い換え（$|x - a| < \varepsilon \iff a - \varepsilon < x < a + \varepsilon$）がない。
+- 根拠：紙では「$\alpha - \varepsilon < a_n \le b_n$」と仮定を暗黙に $n$ で使うが、Narfi では `hab(n)` のように具体化して渡す。
+```
+
+thm squeeze :
+  a : ℕ → ℝ, b : ℕ → ℝ, c : ℕ → ℝ, α : ℝ,
+  hab : ∀n:ℕ. a_n ≤ b_n, hbc : ∀n:ℕ. b_n ≤ c_n,
+  ha : a_n → α (n → ∞), hc : c_n → α (n → ∞)
+  ⊢ b_n → α (n → ∞)
+
+Fix ε | hε : ε > 0
+  Obtain N₁, hN₁ : ha(ε, hε)
+  Obtain N₂, hN₂ : hc(ε, hε)
+  choose max{N₁, N₂}
+  Fix n | hn : n ≥ max{N₁, N₂}
+    k1 : α - ε < a_n ∧ a_n < α + ε by abs.lt.elim(hN₁(n, ge.max.left(hn)))
+    k2 : α - ε < c_n ∧ c_n < α + ε by abs.lt.elim(hN₂(n, ge.max.right(hn)))
+    k3 : α - ε < a_n by k1.left
+    k4 : c_n < α + ε by k2.right
+    k5 : a_n ≤ b_n by hab(n)
+    k6 : b_n ≤ c_n by hbc(n)
+    k7 : α - ε < b_n by linarith
+    k8 : b_n < α + ε by linarith
+    abs.lt.intro(k7, k8)
+
+```
+### 積の微分（目標）
+**定理**　$f, g$ が $x$ で微分可能ならば $\dfrac{d}{dx}\bigl(f(x)g(x)\bigr) = \dfrac{df}{dx}(x)\, g(x) + f(x)\dfrac{dg}{dx}(x)$。
+
+**Narfi での課題**
+- ライブラリ：微分（関数の極限・微分可能・導関数）がまだない。
+- 記法：$\frac{d}{dx}$ の $x$ は「微分のために束縛する $x$」と「評価する $x$」の 2 役で、今の型紙では書けない（notation.md の課題）。
+- 今は下の主張だけを置く（証明は未着手。`deriv` は仮定に置いた記号で、まだ定義がない）。
+```
+
+thm deriv.mul :
+  deriv : (ℝ → ℝ) → (ℝ → ℝ), f : ℝ → ℝ, g : ℝ → ℝ, x : ℝ
+  ⊢ deriv((t : ℝ ↦ f(t) * g(t)))(x) = deriv(f)(x) * g(x) + f(x) * deriv(g)(x)
+
+sorry

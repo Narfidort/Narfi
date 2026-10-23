@@ -1,0 +1,33 @@
+# 関数解析
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+```
+### 中線定理（平行四辺形の法則）
+**定理**　内積空間で $\|x + y\|^2 + \|x - y\|^2 = 2\|x\|^2 + 2\|y\|^2$。
+
+**証明**　$\|x \pm y\|^2 = \langle x \pm y, x \pm y \rangle = \|x\|^2 \pm 2\langle x, y \rangle + \|y\|^2$ を足す。$\blacksquare$
+
+**Narfi での課題**
+- 構造：内積空間（ベクトルの型・和・差・内積をまとめた構造）がない。今はベクトルを `ℕ → ℝ`、和・差・内積を仮定に置いた関数 `add`・`sub`・`ip` とし、内積の性質を仮定に書く。
+- 記法：$\langle x, y \rangle$、$\|x\|$、ベクトルの $x + y$ が書けない。$\|x\|^2$ を `ip(x, x)` と書いている。
+```
+
+thm parallelogram :
+  add : (ℕ → ℝ) × (ℕ → ℝ) → (ℕ → ℝ), sub : (ℕ → ℝ) × (ℕ → ℝ) → (ℕ → ℝ),
+  ip : (ℕ → ℝ) × (ℕ → ℝ) → ℝ, x : ℕ → ℝ, y : ℕ → ℝ,
+  hl : ∀u:ℕ → ℝ. ∀v:ℕ → ℝ. ∀w:ℕ → ℝ. ip(add(u, v), w) = ip(u, w) + ip(v, w),
+  hr : ∀u:ℕ → ℝ. ∀v:ℕ → ℝ. ∀w:ℕ → ℝ. ip(w, add(u, v)) = ip(w, u) + ip(w, v),
+  sl : ∀u:ℕ → ℝ. ∀v:ℕ → ℝ. ∀w:ℕ → ℝ. ip(sub(u, v), w) = ip(u, w) - ip(v, w),
+  sr : ∀u:ℕ → ℝ. ∀v:ℕ → ℝ. ∀w:ℕ → ℝ. ip(w, sub(u, v)) = ip(w, u) - ip(w, v),
+  sym : ∀u:ℕ → ℝ. ∀v:ℕ → ℝ. ip(u, v) = ip(v, u)
+  ⊢ ip(add(x, y), add(x, y)) + ip(sub(x, y), sub(x, y)) = 2 * ip(x, x) + 2 * ip(y, y)
+
+e1 : ip(add(x, y), add(x, y)) = ip(x, add(x, y)) + ip(y, add(x, y)) by hl(x, y, add(x, y))
+e2 : ip(x, add(x, y)) = ip(x, x) + ip(x, y) by hr(x, y, x)
+e3 : ip(y, add(x, y)) = ip(y, x) + ip(y, y) by hr(x, y, y)
+e4 : ip(sub(x, y), sub(x, y)) = ip(x, sub(x, y)) - ip(y, sub(x, y)) by sl(x, y, sub(x, y))
+e5 : ip(x, sub(x, y)) = ip(x, x) - ip(x, y) by sr(x, y, x)
+e6 : ip(y, sub(x, y)) = ip(y, x) - ip(y, y) by sr(x, y, y)
+e7 : ip(y, x) = ip(x, y) by sym(y, x)
+linarith

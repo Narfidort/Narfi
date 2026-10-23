@@ -1,0 +1,61 @@
+# 測度論
+-- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
+-- 一覧と状態は docs/bench.md。
+
+import algebra.matrix
+
+def cup(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∨ x ∈ B}
+def diff(B : ℝ → Prop, A : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ B ∧ ¬(x ∈ A)}
+def disjoint(A : ℝ → Prop, B : ℝ → Prop) :⇔ ∀x:ℝ. x ∈ A ⇒ ¬(x ∈ B)
+
+```
+### 測度の単調性
+**定理**　$A \subseteq B$ ならば $\mu(A) \le \mu(B)$。
+
+**証明**　$B = A \cup (B \setminus A)$ で、$A$ と $B \setminus A$ は交わらないので、加法性から $\mu(B) = \mu(A) + \mu(B \setminus A) \ge \mu(A)$。$\blacksquare$
+
+**Narfi での課題**
+- 構造：可測空間・$\sigma$ 加法族・測度がない。今は測度 $\mu$ を仮定に置いた関数とし、有限加法性と非負性を仮定に書く。
+- 記法：$A \cup B$、$B \setminus A$ に意味がない（集合と写像のファイルと同じ）。
+- 核：集合を返す定義の中身が開けない（集合と写像のファイルと同じ）。このファイルの証明は、ここが直れば通るはずのもの。
+- 根拠：排中律 `em` に命題を引数として渡せない（`em(x ∈ A)` は構文エラー）。変数を単一化で決めさせて `em` とだけ書く。
+```
+
+thm measure.mono :
+  μ : (ℝ → Prop) → ℝ, A : ℝ → Prop, B : ℝ → Prop,
+  hadd : ∀S:ℝ → Prop. ∀T:ℝ → Prop. disjoint(S, T) ⇒ μ(cup(S, T)) = μ(S) + μ(T),
+  hpos : ∀S:ℝ → Prop. μ(S) ≥ 0,
+  hAB : A ⊆ B
+  ⊢ μ(A) ≤ μ(B)
+
+d : disjoint(A, diff(B, A))
+  Fix x
+    assume hx : x ∈ A
+      assume hy : x ∈ diff(B, A)
+        hy.right(hx)
+s1 : ∀x:ℝ. x ∈ B ⇒ x ∈ cup(A, diff(B, A))
+  Fix x
+    assume hx : x ∈ B
+      c : x ∈ A ∨ ¬(x ∈ A) by em
+      cases c
+        Case left p
+          choose left
+          p
+        Case right q
+          choose right
+          hx, q
+s2 : ∀x:ℝ. x ∈ cup(A, diff(B, A)) ⇒ x ∈ B
+  Fix x
+    assume hx : x ∈ cup(A, diff(B, A))
+      cases hx
+        Case left p
+          hAB(x, p)
+        Case right q
+          q.left
+e : B = cup(A, diff(B, A)) by setext(s1, s2)
+k : μ(cup(A, diff(B, A))) = μ(A) + μ(diff(B, A)) by hadd(A, diff(B, A), d)
+m : μ(diff(B, A)) ≥ 0 by hpos(diff(B, A))
+μ(A)
+  ≤ μ(A) + μ(diff(B, A))     by linarith
+  = μ(cup(A, diff(B, A)))    by k
+  = μ(B)                     by EQ2(e, refl)
