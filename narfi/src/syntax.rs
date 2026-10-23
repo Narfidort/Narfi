@@ -226,7 +226,7 @@ impl Notation {
                 }
                 TItem::Lit(s) => lit(s),
                 // 値になる略記の端の入る所は 1 つのまとまり（足し算・掛け算は括弧に入れる）
-                TItem::Slot(k) => show(&slots[*k], if self.kind == NKind::Func && self.slot_at_edge(*k) { 4 } else { 0 }),
+                TItem::Slot(k) => show(&slots[*k], if self.kind == NKind::Func && self.slot_at_edge(*k) { 5 } else { 0 }),
                 TItem::Binder(b) => ident(&binders[*b]),
             };
             let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || out.ends_with('{') || piece.starts_with(')') || piece.starts_with(']') || piece == "}" || piece == "_" || out.is_empty();
@@ -300,6 +300,10 @@ pub fn lit_latex(s: &str) -> String {
         "⟶" => "\\longrightarrow".into(),
         "∞" => "\\infty".into(),
         "~" => "\\sim".into(),
+        "∪" => "\\cup".into(),
+        "∩" => "\\cap".into(),
+        "∖" => "\\setminus".into(),
+        "∁" => "\\complement".into(),
         "⇝" => "\\rightsquigarrow".into(),
         "≺" => "\\prec".into(),
         "≻" => "\\succ".into(),
@@ -332,7 +336,7 @@ pub fn instantiate(params: &[(String, String)], body: &Formula, args: &[Term]) -
 }
 
 /// 組み込みの関数記号（自由変数として数えない）
-pub const BUILTIN_FNS: [&str; 14] = ["+", "-", "·", "/", "neg", "abs", "^", "S", "max", "min", "some", "∪", "∩", "\\"];
+pub const BUILTIN_FNS: [&str; 11] = ["+", "-", "·", "/", "neg", "abs", "^", "S", "max", "min", "some"];
 
 fn is_builtin_head(f: &str) -> bool {
     BUILTIN_FNS.contains(&f)
@@ -800,7 +804,7 @@ pub fn show_term(t: &Term, prec: u8) -> String {
         }
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
-                ("+" | "-" | "∪" | "∩" | "\\", [a, b]) => {
+                ("+" | "-", [a, b]) => {
                     (format!("{} {} {}", show_term(a, 1), f, show_term(b, 2)), 1)
                 }
                 ("·", [a, b]) => (format!("{}·{}", show_term(a, 2), show_term(b, 3)), 2),
@@ -896,6 +900,10 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
             5,
         ),
         Formula::Atom(p, ts) if ts.is_empty() => (p.clone(), 5),
+        // 式で表した集合への所属は x ∈ S（定義の所属 S(x) と同じ。紙の書き方）
+        Formula::Atom(p, ts) if p == "@" && ts.len() == 2 && !matches!(ts[0], Term::Var(_)) => {
+            (format!("{} ∈ {}", show_term(&ts[1], 0), show_term(&ts[0], 0)), 5)
+        }
         Formula::Atom(p, ts) if p == "@" => {
             let a: Vec<String> = ts[1..].iter().map(|t| show_term(t, 0)).collect();
             (format!("{}({})", show_term(&ts[0], 5), a.join(", ")), 5)
@@ -1224,22 +1232,6 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     format!("{} {} {}", show_term_latex(a, 1), f, show_term_latex(b, 2)),
                     1,
                 ),
-                ("∪", [a, b]) => (
-                    format!("{} \\cup {}", show_term_latex(a, 1), show_term_latex(b, 2)),
-                    1,
-                ),
-                ("∩", [a, b]) => (
-                    format!("{} \\cap {}", show_term_latex(a, 2), show_term_latex(b, 3)),
-                    2,
-                ),
-                ("\\", [a, b]) => (
-                    format!(
-                        "{} \\setminus {}",
-                        show_term_latex(a, 2),
-                        show_term_latex(b, 3)
-                    ),
-                    2,
-                ),
                 // 積は記号なしで並べる（2x・ab・b_n β）。右が数で始まるとき（2·3・a·2）だけ · を書く
                 ("·", [a, b]) => {
                     let (l, r) = (show_term_latex(a, 2), show_term_latex(b, 3));
@@ -1397,6 +1389,9 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             5,
         ),
         Formula::Atom(p, ts) if ts.is_empty() => (ident_to_latex(p), 5),
+        Formula::Atom(p, ts) if p == "@" && ts.len() == 2 && !matches!(ts[0], Term::Var(_)) => {
+            (format!("{} \\in {}", show_term_latex(&ts[1], 0), show_term_latex(&ts[0], 0)), 5)
+        }
         Formula::Atom(p, ts) if p == "@" => {
             let a: Vec<String> = ts[1..].iter().map(|t| show_term_latex(t, 0)).collect();
             (format!("{}({})", show_term_latex(&ts[0], 5), a.join(", ")), 5)

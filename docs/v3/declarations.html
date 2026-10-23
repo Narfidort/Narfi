@@ -1,0 +1,100 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>declarations</title>
+<link rel="stylesheet" href="../../narfi/site/assets/katex/katex.min.css"><script src="../../narfi/site/assets/katex/katex.min.js"></script>
+<style>body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#0d1117;color:#e6edf3;max-width:1050px;margin:28px auto;padding:0 24px;line-height:1.75;font-size:15px}
+h1{font-size:22px}h2{font-size:18px;margin-top:34px;border-bottom:1px solid #30363d;padding-bottom:4px}h3{font-size:16px;margin-top:24px}
+code{font-family:"JetBrains Mono",Menlo,monospace;font-size:13px;background:#161b22;padding:1px 5px;border-radius:4px;color:#a5d6ff}
+pre{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;font-family:"JetBrains Mono",Menlo,monospace;font-size:13.5px;line-height:1.6;overflow-x:auto;color:#e6edf3}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}th,td{border:1px solid #30363d;padding:6px 9px;vertical-align:top;text-align:left}th{background:#161b22;color:#8b949e;font-weight:500}
+a{color:#58a6ff}li{margin:3px 0}</style></head><body><h1>v3 設計の下書き 1：宣言（def・notation・axiom・thm …）の見直し</h1>
+<p>v3 では言語の表側（構文・宣言・推論の道具・標準ライブラリ）を作り直す。kernel・証明の文・自然言語の読み・Web とクラウドは引き継ぐ。 この文書は、その最初として <b>宣言</b> を「導入する側」と「使う側」の両面から見直す。ベンチマーク（<a href="../bench.md">../bench.md</a>）で実際に困った所を根拠にする。</p>
+<h2>1. 今の宣言と、困ったこと</h2>
+<table><tr><th>宣言</th><th>導入する側で困ること</th><th>使う側で困ること</th></tr><tr><td><code>def</code>（述語）</td><td>型が固定で、型の変数を持てない。見た目（記法）と推論の規則を一緒に書けない</td><td>自動で開く（よい）。開いた形で <code>choose</code>・<code>cases</code> が使える</td></tr><tr><td><code>def</code>（値）</td><td>同上。集合・関数を返す定義が書けても使えない</td><td><code>∈</code> や適用の中で開かない（<code>x ∈ cup(A, B)</code> を <code>x ∈ A ∨ x ∈ B</code> にできない：K1）</td></tr><tr><td><code>rec</code></td><td><code>def</code> と別の宣言。生成される定理（<code>sum.zero</code>・<code>sum.succ</code>）は「推論の規則」の先例</td><td>規則を毎回名前で引く</td></tr><tr><td><code>notation</code></td><td><code>def</code> と別の宣言で、名前を 2 回書く。組み込みの記号（<code>∪</code>・<code>∣</code>・<code>∘</code>）に意味を付けられない。意味も推論も持たない</td><td>「読めるのに使えない」記号ができる（<code>∪</code>）。打ち方の補完が型紙から作られない</td></tr><tr><td><code>axiom</code></td><td>定義のない定数（測度 <span class="m">\mu</span>・微分 <code>deriv</code>）を宣言できない。<code>axiom c : ℝ</code> が黙って変な公理になる（バグ）。根本の公理と、ライブラリの仮置きの補題が同じ <code>axiom</code></td><td>書き方が 2 通りで使い方も違う：<code>∀</code> で書いた <code>triangle(a, b)</code> と、仮定で書いた <code>pos_half(h)</code></td></tr><tr><td><code>thm</code></td><td>共通の前提（ベクトル空間の公理など）を毎回並べる（中線定理の仮定が 7 行）</td><td>推論の規則（導入・除去・書き換え）として登録できない。変数を明示して渡す書き方がない</td></tr><tr><td><code>typedef</code></td><td>部分型・商を作る（ℝ = コーシー列 / ~）。構造（ベクトル空間）とは別物</td><td><code>T.abs</code>・<code>T.rep</code> を手で使う</td></tr><tr><td>ない</td><td>型と演算と公理と記法をまとめる <b>構造</b>、共通の前提をまとめる <b>文脈</b>、<b>場合分け</b> の定義</td><td></td></tr></table>
+<p>根っこは 1 つ：<b>数学で概念を導入するときに一緒に決めること（名前・意味・見た目・使い方）を、ばらばらの宣言でしか書けず、「使い方」はどこにも書けない。</b></p>
+<h2>2. 方針</h2>
+<ol><li style="margin-left:0px"><b>1 つの概念は 1 か所で導入する。</b> 意味（核の定義）と見た目（記法）を同じ宣言に書き、使い方（性質）はその直後に定理として書く。</li><li style="margin-left:0px"><b>組み込みの記法も同じ仕組みで作る。</b> <code>|x|</code>・<code>∪</code>・<code>max{a, b}</code>・Σ などは prelude・標準ライブラリで宣言する。構文解析に個別に作り込まない。残す組み込みは、論理（∀ ∃ ⇒ ∧ ∨ ¬）・関数の適用と添字 <code>a_n</code>・λ・集合の内包表記・等号と順序くらい。</li><li style="margin-left:0px"><b>使い方は定理として書く。</b> 定義は、<code>choose</code>・<code>cases</code> などが必要とするときに検査器が開く（値の定義も、<code>∈</code> や適用の中でも）。それ以外の性質は普通の <code>thm</code> で、根拠に名前を書いて使う（原則 2）。使い方のための特別な宣言（「規則」）は作らない。</li><li style="margin-left:0px"><b>kernel は変えない。</b> 構造は「定数と公理を引数に持つ定理」に落とす（原則 1）。</li></ol>
+<h2>3. 提案</h2>
+<h3>3.1 def：意味と見た目をまとめる</h3>
+<pre>def union(A : Set α, B : Set α) : Set α := {x | x ∈ A ∨ x ∈ B}
+  notation A ∪ B
+
+thm union.comm :
+  A : Set α, B : Set α
+  ⊢ A ∪ B = B ∪ A
+…</pre>
+<ul><li style="margin-left:0px">1 行目：<b>意味</b>。<code>α</code> は型の変数（どんな型でもよい）。<code>Set α</code> は <code>α → Prop</code>。</li><li style="margin-left:0px"><code>notation</code>：<b>見た目</b>（1 つの概念に 1 つ）。型紙の名前は引数の名前。</li><li style="margin-left:0px"><b>使い方</b>は普通の定理。名前を <code>.</code> の階層（<code>union.comm</code>）にして、定義の直後に置く。</li><li style="margin-left:0px"><code>x ∈ A ∪ B</code> は、検査器が定義を開いて β 簡約すれば <code>x ∈ A ∨ x ∈ B</code> になる（K1 の修正）。だから <code>choose left</code>・<code>cases</code> はそのまま使え、「要素の規則」を別に書く必要はない。定義を開いただけの一歩は、根拠に <code>union.def</code> と書く（今の <code>名前.def</code> と同じ）。</li><li style="margin-left:0px">検討の経緯：はじめは使い方を <code>rule</code> という別の宣言にする案だったが、「定義を開けること」と「普通の定理」で足りるので、やめた。</li></ul>
+<p>束縛を含む記法も、引数の名前で書ける：</p>
+<pre>def converges(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε&gt;0. ∃N. ∀n≥N. |a_n − α| &lt; ε
+  notation a_n → α (n → ∞)</pre>
+<p>型紙の中の、引数でない名前（<code>n</code>）は束縛変数。引数 <code>a</code> が束縛変数に添字で付いた <code>a_n</code> は「n を含む式が入る所」で、<code>a</code> はその式の関数（v2.9 では右辺に λ を書いていた所を、引数の名前で書ける）。</p>
+<p>値の定義も同じ：</p>
+<pre>def abs(x : ℝ) : ℝ := max{x, −x}
+  notation |x|
+
+thm abs.nonneg :
+  x : ℝ
+  ⊢ |x| ≥ 0
+…</pre>
+<p>開くと使いにくい定義（選択 <code>some</code> で定義した <code>sup A</code> など）は、開かずに性質の定理（<code>sup.spec</code>）を名前で引く。</p>
+<h3>3.2 const：定義のない記号</h3>
+<pre>const μ : Set ℝ → ℝ</pre>
+<ul><li style="margin-left:0px">意味は公理か、構造（3.4）で与える。<code>axiom c : ℝ</code> のような書き方はエラーにする。</li><li style="margin-left:0px">普段は構造の中で使い、単独の <code>const</code> はめったに書かない。</li></ul>
+<h3>3.3 axiom と thm：書き方と使い方を 1 つに</h3>
+<ul><li style="margin-left:0px">書き方は <code>thm 名前 : 前提の並び ⊢ 結論</code> の 1 通り（<code>axiom</code> も同じ）。結論に <code>∀</code> を書いてもよいが、使い方は変わらない。</li><li style="margin-left:0px">使い方は <code>名前(証明, …)</code>。前提の並びの変数は単一化で決まる。決まらないときだけ、名前を付けて渡す：<code>名前[x := t](…)</code>。</li></ul>
+<p>  （今の <code>triangle(a, b)</code> と <code>pos_half(h)</code> の違いがなくなる）</p>
+<ul><li style="margin-left:0px"><code>axiom</code> は、根本の公理（prelude）と構造の公理だけに使う。ライブラリでまだ証明していない補題は <code>thm … sorry</code> にし、使った定理は「未完成に頼る」と表示する（信頼の区別をはっきりさせる）。</li></ul>
+<h3>3.4 structure：型と演算と公理と記法をまとめる</h3>
+<pre>structure VectorSpace(V)
+  zero : V                     notation 0
+  add : V × V → V              notation u + v
+  smul : ℝ × V → V             notation c v
+  add.comm : ∀u v. u + v = v + u
+  …</pre>
+<ul><li style="margin-left:0px">使う側：<code>V : VectorSpace</code> と書けば、<code>u + v</code>・<code>0</code>・公理がその場で使える。</li><li style="margin-left:0px">同じ記号 <code>+</code> が、ℝ の和にも V の和にもなる。<b>どちらの意味かは型で 1 つに決まる</b>（notation.md の決まり。両方当てはまればエラー）。</li><li style="margin-left:0px">kernel には「V の演算と公理を引数・前提に持つ定理」として渡る。kernel は変えない。</li><li style="margin-left:0px">継承（内積空間はベクトル空間）、具体例（ℝⁿ はベクトル空間）の宣言も要る。</li></ul>
+<h3>3.5 context：共通の前提をまとめる</h3>
+<p>紙の「以下、V はベクトル空間、T は線形写像とする」に当たる。</p>
+<pre>context
+  V : VectorSpace, T : V → V, hT : linear(T)
+
+thm ker.add :
+  u : V, v : V, hu : T(u) = 0, hv : T(v) = 0
+  ⊢ T(u + v) = 0
+…
+end</pre>
+<p>文脈の中の定理には、文脈の前提が付く（外から使うときは、前提の分も渡す）。</p>
+<h3>3.6 rec と場合分け</h3>
+<ul><li style="margin-left:0px"><code>rec</code> は <code>def … by recursion on n</code> の形にして、2 つの等式を定理（<code>sum.zero</code>・<code>sum.succ</code>）として作る（今と同じ）。</li><li style="margin-left:0px">場合分けの定義：<code>def f(x : ℝ) : ℝ := if x ≥ 0 then x else −x</code>。条件ごとの値の定理（<code>f.pos</code>・<code>f.neg</code>）を自動で作る。</li></ul>
+<h2>4. 使う側：定義と定理をどう使うか</h2>
+<table><tr><th>使い方</th><th>何を使うか</th><th>書くもの</th></tr><tr><td><code>choose</code>・<code>cases</code>・<code>Obtain</code></td><td>定義を必要なだけ開いた形（∨・∃・∧）</td><td>今までどおり（Goal の表示は開く前の形のまま）</td></tr><tr><td>定義を開いただけの一歩</td><td>定義</td><td>根拠に <code>名前.def</code>（Prose には「定義より」）</td></tr><tr><td>性質・書き換え</td><td>定理</td><td>根拠に定理の名前（<code>by union.comm</code>）</td></tr><tr><td>同値の連鎖</td><td>定義・定理</td><td><code>⇔ … by 根拠</code> を連ねる（新しい書き方。下の例）</td></tr></table>
+<p>代入（R1）・∀ の具体化（R2）・関数の等式（R3）・帰納法の後者（R4）は、宣言ではなく推論の道具の話なので、次の文書（推論の道具）で扱う。</p>
+<h2>5. 例：ベンチマークの書き直し</h2>
+<p>集合（今は ✗）：</p>
+<pre>import set
+
+thm preimage.union :
+  f : α → β, A : Set β, B : Set β
+  ⊢ f^{-1}[A ∪ B] = f^{-1}[A] ∪ f^{-1}[B]
+
+ext x
+  x ∈ f^{-1}[A ∪ B]
+    ⇔ f(x) ∈ A ∪ B                     by preimage.def
+    ⇔ f(x) ∈ A ∨ f(x) ∈ B              by union.def
+    ⇔ x ∈ f^{-1}[A] ∨ x ∈ f^{-1}[B]    by preimage.def
+    ⇔ x ∈ f^{-1}[A] ∪ f^{-1}[B]        by union.def</pre>
+<p>紙の証明（「<span class="m">x \in f^{-1}[A \cup B] \iff f(x) \in A \cup B \iff \dots</span>」）と 1 行ずつ対応する。<code>ext x</code> は「集合の等号を要素で示す」文（外延性）。</p>
+<p>中線定理（今は仮定 7 行）：</p>
+<pre>import linear.inner_product
+
+thm parallelogram :
+  V : InnerProductSpace, x : V, y : V
+  ⊢ ‖x + y‖² + ‖x − y‖² = 2‖x‖² + 2‖y‖²
+
+‖x + y‖² + ‖x − y‖²
+  = ⟨x + y, x + y⟩ + ⟨x − y, x − y⟩                           by norm.sq
+  = (‖x‖² + 2⟨x, y⟩ + ‖y‖²) + (‖x‖² − 2⟨x, y⟩ + ‖y‖²)        by inner.add, inner.sub
+  = 2‖x‖² + 2‖y‖²                                              by ring</pre>
+<p>測度の単調性（今は ✗）：<code>μ : Measure</code> と書けば、加法性・非負性は構造の公理として使える。</p>
+<h2>6. 決めること</h2>
+<ol><li style="margin-left:0px">型の変数の書き方：<code>α</code>・<code>β</code>（ギリシャ文字の小文字は型の変数）か、<code>&#x27;a</code>（今の kernel の内部の書き方）か。</li><li style="margin-left:0px">定義を自動で開く範囲：<code>choose</code>・<code>cases</code> などが必要とするときだけ（今の述語と同じ）でよいか。（使い方の別の宣言 <code>rule</code> は作らないことにした）</li><li style="margin-left:0px">独立した <code>notation</code>（他人の定義に後から記法を付ける。研究の記法 R・個人の記法 P 用）を残すか。</li><li style="margin-left:0px">ライブラリの仮置きを <code>thm … sorry</code> にするか、<code>axiom</code> に別の印を付けるか。</li><li style="margin-left:0px">構造の継承と具体例の宣言の形。</li><li style="margin-left:0px">変数を名前で渡す書き方（<code>名前[x := t]</code> の案）。</li></ol>
+<h2>7. この先の文書</h2>
+<ul><li style="margin-left:0px">設計の下書き 2：推論の道具（代入・∀ の具体化・関数の等式・帰納法・同値の連鎖・<code>ext</code>）</li><li style="margin-left:0px">設計の下書き 3：構造と型（構造・継承・具体例・型による記法の選び分け）</li><li style="margin-left:0px">設計の下書き 4：組み込みの最小化と prelude（何を構文に残し、何を宣言にするか）</li><li style="margin-left:0px">実装の計画：作り直す範囲・順番・ベンチマークを受け入れ試験にする</li></ul>
+<script>document.querySelectorAll('.m').forEach(e=>{try{katex.render(e.textContent,e,{throwOnError:false})}catch(_){}})</script></body></html>

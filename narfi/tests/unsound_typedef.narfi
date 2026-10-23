@@ -19,8 +19,8 @@ typedef Empty := {n : ℕ | n < 0}
 thm from.empty :
   ⊢ ⊥
 
-have h : Empty.rep(some({t : Empty | t = t})) < 0 := Empty.rep_prop(some({t : Empty | t = t}))
-have h0 : Empty.rep(some({t : Empty | t = t})) ≥ 0 := nat.nonneg(Empty.rep(some({t : Empty | t = t})))
-have bad : 0 < 0 := linarith
-have ok : ¬(0 < 0) := decide
-contradiction bad ok
+h : Empty.rep(some({t : Empty | t = t})) < 0 by Empty.rep_prop(some({t : Empty | t = t}))
+h0 : Empty.rep(some({t : Empty | t = t})) ≥ 0 by nat.nonneg(Empty.rep(some({t : Empty | t = t})))
+bad : 0 < 0 by linarith
+ok : ¬(0 < 0) by decide
+ok(bad)

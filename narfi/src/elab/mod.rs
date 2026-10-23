@@ -660,6 +660,22 @@ pub fn check_module(env: &mut Env, m: &Module, trace: bool, core: bool) -> Resul
                 tree: None,
                 warnings: vec![],
             }),
+            Item::Const { name, ty, line } => {
+                if let Err(e) = env.kernel.add_const(name, ty) {
+                    reports.push(Report {
+                        name: name.clone(),
+                        line: *line,
+                        is_axiom: false,
+                        err: Some(simple_err(*line, format!("定数 `{name}`：{}", e.msg))),
+                        axioms: BTreeSet::new(),
+                        oracles: BTreeSet::new(),
+                        sorries: vec![],
+                        steps: vec![],
+                        tree: None,
+                        warnings: vec![],
+                    });
+                }
+            }
             Item::Notation { .. } | Item::Import { .. } => {}
         }
     }

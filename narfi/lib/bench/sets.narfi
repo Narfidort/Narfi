@@ -2,18 +2,14 @@
 -- ベンチマーク：教科書の証明（Prose タブに出る）と Narfi の証明を並べ、記法・表示・ライブラリの足りない所を記録する。
 -- 一覧と状態は docs/bench.md。
 
-```
-**この分野の共通の課題**
-- 記法：`∪`・`∩`・`∖` は組み込みの記号として読めるが意味（定義）がない。今は `cup(A, B)`・`cap(A, B)` と名前で定義して書く（B：`A ∪ B`）。
-- 記法：補集合 $A^\complement$・逆像 $f^{-1}[B]$・像 $f[A]$ の記法がない（notation.md で決定済み・未実装）。
-- 核：集合を返す定義に要素を当てた形（`cup(A, B)(x)`、つまり $x \in A \cup B$）を、検査器が中身（$x \in A \lor x \in B$）まで開けない。このファイルの証明は、ここが直れば通るはずのもの。
-```
+import set.real
 
-def cup(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∨ x ∈ B}
-def cap(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∧ x ∈ B}
-def compl(A : ℝ → Prop) : ℝ → Prop := {x : ℝ | ¬(x ∈ A)}
-def preimage(f : ℝ → ℝ, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | f(x) ∈ B}
-def image(f : ℝ → ℝ, A : ℝ → Prop) : ℝ → Prop := {y : ℝ | ∃x:ℝ. x ∈ A ∧ f(x) = y}
+```
+**この分野の課題（v2.13 の状態）**
+- 集合の演算は `lib/set/real.narfi` で、定義と記法（`A ∪ B`・`A ∩ B`・`A ∖ B`・`A^∁`・`f^{-1}[B]`・`f[A]`）を与えている。v2.12 までの「組み込みの記号なのに意味がない」状態は解消。
+- 今は実数の集合（`ℝ → Prop`）だけ。型の変数を持つ定義ができたら、どの型の集合にも使える形にする（v3）。
+- 集合の等号は外延性 `setext(h1, h2)` で示す。紙の「$x \in \dots \iff \dots$」の連鎖（⇔ の連鎖）はまだ書けない。
+```
 
 ```
 ### 逆像は和集合を保つ
@@ -24,11 +20,11 @@ def image(f : ℝ → ℝ, A : ℝ → Prop) : ℝ → Prop := {y : ℝ | ∃x:�
 
 thm preimage.cup :
   f : ℝ → ℝ, A : ℝ → Prop, B : ℝ → Prop
-  ⊢ preimage(f, cup(A, B)) = cup(preimage(f, A), preimage(f, B))
+  ⊢ f^{-1}[A ∪ B] = f^{-1}[A] ∪ f^{-1}[B]
 
-h1 : ∀x:ℝ. x ∈ preimage(f, cup(A, B)) ⇒ x ∈ cup(preimage(f, A), preimage(f, B))
+h1 : ∀x:ℝ. x ∈ f^{-1}[A ∪ B] ⇒ x ∈ f^{-1}[A] ∪ f^{-1}[B]
   Fix x
-    assume h : x ∈ preimage(f, cup(A, B))
+    assume h : x ∈ f^{-1}[A ∪ B]
       k : f(x) ∈ A ∨ f(x) ∈ B by h
       cases k
         Case left k1
@@ -37,9 +33,9 @@ h1 : ∀x:ℝ. x ∈ preimage(f, cup(A, B)) ⇒ x ∈ cup(preimage(f, A), preima
         Case right k2
           choose right
           k2
-h2 : ∀x:ℝ. x ∈ cup(preimage(f, A), preimage(f, B)) ⇒ x ∈ preimage(f, cup(A, B))
+h2 : ∀x:ℝ. x ∈ f^{-1}[A] ∪ f^{-1}[B] ⇒ x ∈ f^{-1}[A ∪ B]
   Fix x
-    assume h : x ∈ cup(preimage(f, A), preimage(f, B))
+    assume h : x ∈ f^{-1}[A] ∪ f^{-1}[B]
       cases h
         Case left k1
           choose left
@@ -58,11 +54,11 @@ setext(h1, h2)
 
 thm de_morgan :
   A : ℝ → Prop, B : ℝ → Prop
-  ⊢ compl(cup(A, B)) = cap(compl(A), compl(B))
+  ⊢ (A ∪ B)^∁ = A^∁ ∩ B^∁
 
-h1 : ∀x:ℝ. x ∈ compl(cup(A, B)) ⇒ x ∈ cap(compl(A), compl(B))
+h1 : ∀x:ℝ. x ∈ (A ∪ B)^∁ ⇒ x ∈ A^∁ ∩ B^∁
   Fix x
-    assume h : x ∈ compl(cup(A, B))
+    assume h : x ∈ (A ∪ B)^∁
       ha : ¬(x ∈ A)
         assume p : x ∈ A
           h(or.left(p))
@@ -70,10 +66,10 @@ h1 : ∀x:ℝ. x ∈ compl(cup(A, B)) ⇒ x ∈ cap(compl(A), compl(B))
         assume q : x ∈ B
           h(or.right(q))
       ha, hb
-h2 : ∀x:ℝ. x ∈ cap(compl(A), compl(B)) ⇒ x ∈ compl(cup(A, B))
+h2 : ∀x:ℝ. x ∈ A^∁ ∩ B^∁ ⇒ x ∈ (A ∪ B)^∁
   Fix x
-    assume h : x ∈ cap(compl(A), compl(B))
-      assume k : x ∈ cup(A, B)
+    assume h : x ∈ A^∁ ∩ B^∁
+      assume k : x ∈ A ∪ B
         cases k
           Case left p
             h.left(p)
@@ -90,15 +86,15 @@ setext(h1, h2)
 
 thm image.cap :
   f : ℝ → ℝ, A : ℝ → Prop, B : ℝ → Prop
-  ⊢ image(f, cap(A, B)) ⊆ cap(image(f, A), image(f, B))
+  ⊢ f[A ∩ B] ⊆ f[A] ∩ f[B]
 
 Fix y
-  assume h : y ∈ image(f, cap(A, B))
+  assume h : y ∈ f[A ∩ B]
     Obtain x, hx : h
-    ka : y ∈ image(f, A)
+    ka : y ∈ f[A]
       choose x
       hx.left.left, hx.right
-    kb : y ∈ image(f, B)
+    kb : y ∈ f[B]
       choose x
       hx.left.right, hx.right
     ka, kb

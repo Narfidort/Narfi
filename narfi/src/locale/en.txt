@@ -53,12 +53,10 @@ obtain_hyp_unknown	hypothesis ${h}$
 and	 and 
 obtain	By ${j}$, there is ${x}${dep} with {hs}.
 let	Set ${x} := {t}$.
-suffices	By ${j}$, it suffices to show ${f}$.
 choose_cond	Take ${t}$ (the condition follows from ${j}$).
 choose	Take ${t}$.
 choose_left	We show the left disjunct.
 choose_right	We show the right disjunct.
-contradiction	This contradicts ${a}$ and ${b}$. $\blacksquare$
 cases	We distinguish cases on ${h}$.
 case	**(Case {n})** ${f}$ (hypothesis ${h}$):
 case_unknown	**(Case {n})** hypothesis ${h}$:
@@ -67,8 +65,6 @@ induction_zero	**(Base case)** ${n} = 0$:
 induction_ih	 (induction hypothesis ${h} : {f}$)
 induction_ih_unknown	 (induction hypothesis ${h}$)
 induction_succ	**(Inductive step)** Assume the claim for ${n} = {k}${ih}; we show it for $S({k})$:
-unfold	Unfold the definition of {n}.
-unfold_at	Unfold the definition of {n} in {h}.
 therefore	Therefore ${f}$. $\blacksquare$ || Hence ${f}$. $\blacksquare$ || Thus ${f}$. $\blacksquare$
 label	 (${h}$)
 show_block	First we show ${f}${label}.

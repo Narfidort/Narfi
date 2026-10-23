@@ -24,7 +24,7 @@ typedef CauSeq := {a : ℕ → ℚ | cauchy(a)}
 
 -- 同値関係：差が 0 に収束する
 def seq_eq(a : CauSeq, b : CauSeq) :⇔ ∀ε:ℚ>0. ∃N:ℕ. ∀n≥N. |CauSeq.rep(a)(n) - CauSeq.rep(b)(n)| < ε
-notation a ~ b := seq_eq(a, b)
+  notation a ~ b
 
 thm seq_eq.refl :
   ⊢ ∀a:CauSeq. a ~ a

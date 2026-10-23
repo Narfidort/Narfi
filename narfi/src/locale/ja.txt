@@ -56,12 +56,10 @@ obtain_hyp_unknown	仮定 ${h}$
 and	 かつ 
 obtain	${j}$ より、{hs} を満たす{dep} ${x}$ をとる。
 let	ここで、${x} := {t}$ とおく。
-suffices	${j}$ より、${f}$ を示せば十分である。
 choose_cond	${t}$ をとればよい（条件は ${j}$ より従う）。
 choose	${t}$ をとればよい。
 choose_left	選言の左側を示す。
 choose_right	選言の右側を示す。
-contradiction	これは ${a}$ と ${b}$ に矛盾する。$\blacksquare$
 cases	${h}$ について場合分けを行う。
 case	**(場合 {n})** ${f}$ （仮定 ${h}$）のとき：
 case_unknown	**(場合 {n})** 仮定 ${h}$ のとき：
@@ -70,8 +68,6 @@ induction_zero	**(基底段階)** ${n} = 0$ のとき：
 induction_ih	（帰納法の仮定 ${h} : {f}$）
 induction_ih_unknown	（帰納法の仮定 ${h}$）
 induction_succ	**(帰納段階)** ${n} = {k}$ で成り立つと仮定し{ih}、$S({k})$ のときを示す：
-unfold	{n} の定義を展開する。
-unfold_at	{h} において {n} の定義を展開する。
 therefore	したがって、${f}$ が成り立つ。$\blacksquare$ || よって ${f}$ である。$\blacksquare$ || ゆえに ${f}$ が成り立つ。$\blacksquare$
 label	（${h}$）
 show_block	まず ${f}${label} を示す。

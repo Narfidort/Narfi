@@ -1,0 +1,23 @@
+-- 実数の集合（ℝ → Prop）の演算と、その記法
+-- 型の変数を持つ定義（どの型の集合にも使える形）ができたら、型を問わない形に書き換える（docs/v3）
+
+def union(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∨ x ∈ B}
+  notation A ∪ B
+
+def inter(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∧ x ∈ B}
+  notation A ∩ B
+
+def setminus(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∧ ¬(x ∈ B)}
+  notation A ∖ B
+
+def compl(A : ℝ → Prop) : ℝ → Prop := {x : ℝ | ¬(x ∈ A)}
+  notation A^∁
+
+-- 逆像・像（notation.md：値 f(A) と取り違えないよう、[ ] で書く）
+def preimage(f : ℝ → ℝ, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | f(x) ∈ B}
+  notation f^{-1}[B]
+
+def image(f : ℝ → ℝ, A : ℝ → Prop) : ℝ → Prop := {y : ℝ | ∃x:ℝ. x ∈ A ∧ f(x) = y}
+  notation f[A]
+
+def disjoint(A : ℝ → Prop, B : ℝ → Prop) :⇔ ∀x:ℝ. x ∈ A ⇒ ¬(x ∈ B)

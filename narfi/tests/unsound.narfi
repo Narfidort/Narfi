@@ -64,7 +64,7 @@ assume h : P
 thm u.contra :
   h : P, k : ¬Q
   ⊢ R
-contradiction h k
+k(h)
 
 thm u.chain :
   a : ℝ, b : ℝ, h : a < b
@@ -83,7 +83,7 @@ thm u.let :
   ⊢ ∀n:ℕ. n = 0
 Fix n
   let m := 0
-  have h : m = 0 := refl
+  h : m = 0 by refl
   h
 
 thm u.induction :
@@ -118,7 +118,7 @@ Fix y
 thm u.unfinished :
   h : P, k : P ⇒ Q
   ⊢ Q ∧ P
-have q : Q := k(h)
+q : Q by k(h)
 
 thm u.extra :
   h : P
@@ -129,3 +129,19 @@ h
 thm u.uses.failed :
   ⊢ P
 u.byContra.unused
+
+
+-- 等式を根拠にした代入：置き換えた結果が合わなければ通らない
+thm u.subst.wrong :
+  a : ℝ, b : ℝ, c : ℝ, h : a = b
+  ⊢ a + c = c + c
+
+a + c
+  = c + c   by h
+
+
+-- 関数どうしの等式を ring で：各点で成り立たなければ通らない
+thm u.ring.fun :
+  ⊢ (n : ℕ ↦ n + 1) = (n : ℕ ↦ n + 2)
+
+ring

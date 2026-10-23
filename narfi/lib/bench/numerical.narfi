@@ -16,7 +16,7 @@ $$|x_{k+1} - p| \le L\,|x_k - p| \le L \cdot L^k |x_0 - p| = L^{k+1} |x_0 - p|.\
 
 **Narfi での課題**
 - ライブラリ：冪 $x^n$（指数が変数）の性質、不等式に非負の数を掛ける補題がない（上で公理として置いた）。
-- 帰納法：`Case succ k` の goal は $x_{S(k)}$ のように後者 $S(k)$ で書かれ、紙の $k+1$ と合わせるのに書き換えが要る。
+- 帰納法：`Case succ k` の goal は $x_{S(k)}$ のように後者 $S(k)$ で書かれ、紙の $k+1$ と合わせるのに書き換え（`by s`）が要る。
 ```
 
 thm contraction :
@@ -34,9 +34,9 @@ Fix n
       s : S(k) = k + 1 by ring
       e : L^(k + 1) = L * L^k by pow.succ(L, k)
       |x_{S(k)} - p|
-        = |x_{k+1} - p|            by EQ2(s, refl)
+        = |x_{k+1} - p|            by s
         ≤ L * |x_k - p|            by h(k)
         ≤ L * (L^k * |x_0 - p|)    by mul.le.left(hL, IH)
         = (L * L^k) * |x_0 - p|    by ring
-        = L^(k + 1) * |x_0 - p|    by EQ2(e, refl)
-        = L^S(k) * |x_0 - p|       by EQ2(s, refl)
+        = L^(k + 1) * |x_0 - p|    by e
+        = L^S(k) * |x_0 - p|       by s

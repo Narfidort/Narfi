@@ -221,7 +221,12 @@ impl<'a, 'c> Checker<'a, 'c> {
                 };
                 // 数字だけの等式（0 + 0 = 0）は、どの数の型でも同じ真偽（埋め込みで保たれる。§3.2）。
                 // 書き換え先の式に合う型を、両辺がその型で読めるものから選ぶ
-                let sort = match self.ctx.sort_of(&s)?.or(self.ctx.sort_of(&t)?) {
+                // 片方の型が分かればそれを使う（(n ↦ 0) のように片方だけでは決まらない項がある）
+                let known = match self.ctx.sort_of(&s) {
+                    Ok(Some(k)) => Some(k),
+                    _ => self.ctx.sort_of(&t).ok().flatten(),
+                };
+                let sort = match known {
                     Some(k) => k.show(),
                     None => {
                         let mut found = None;

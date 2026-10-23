@@ -9,6 +9,7 @@
 | `reals/rat.narfi` | ℚ の絶対値・`max` の性質 | `abs.sub_comm`・`abs.triangle` など（公理） |
 | `reals/cauchy.narfi` | コーシー列 `cauchy`、その型 `CauSeq`、同値関係 `~` | `reals/rat` の公理 |
 | `reals/real.narfi` | ℝ = コーシー列/~（typedef による商）、`cls` の sound・exact・surjective | 同上 |
+| `set/real.narfi` | 実数の集合の演算：`A ∪ B`・`A ∩ B`・`A ∖ B`・`A^∁`・逆像 `f^{-1}[B]`・像 `f[A]`・`disjoint`（型を問わない形は v3） | なし |
 | `algebra/sum.narfi` | 有限和 `sum(a, n)` = Σ_{k<n} a_k（rec）、線形性 | なし |
 | `algebra/matrix.narfi` | 排中律、クロネッカーのデルタ、行列の和・積・トレース・2×2 の行列式、`[[…]]` の行列、2×2 のケイリー・ハミルトン、分配法則 | なし |
 

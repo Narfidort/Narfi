@@ -57,6 +57,8 @@ pub enum Item {
     /// notation 宣言（読み込み時に記法の表へ登録済み）。src は元の行、warn は古い書き方の警告（文言・書き換え先）
     Notation { src: String, line: usize, warn: Option<(String, String)> },
     Import { path: String },
+    /// 定義のない記号 `const c : σ`（意味は公理や構造で与える）
+    Const { name: String, ty: String, line: usize },
     /// 構文エラーで読めなかった宣言（ほかの宣言は読み続ける）
     Broken { name: String, line: usize, msg: String, src: String },
 }
@@ -164,15 +166,10 @@ pub enum StmtKind {
         hyps: Vec<String>,
         just: Just,
     },
-    Suffices {
-        ty: Formula,
-        just: Just,
-    },
     Choose {
         choice: Choice,
         just: Option<Just>,
     },
-    Contradiction(String, String),
     Cases {
         hyp: String,
         left: (String, Vec<Stmt>),
@@ -189,11 +186,6 @@ pub enum StmtKind {
         term: Term,
     },
     Therefore(Formula),
-    /// `unfold is_lim` / `unfold is_lim at h₁, h₂`
-    Unfold {
-        names: Vec<String>,
-        at: Vec<String>,
-    },
     Close(Just),
     /// 事実の行 `h : φ by j`（名前は省略可）。φ が goal なら閉じ、後ろに続けば h（名前がなければ this）として使える。
     /// `h : φ` の下に字下げして φ の証明を書くこともできる（body）。根拠がなければ（just が None）エラーにして候補を示す
@@ -335,9 +327,10 @@ fn tex_macro_replacement(cmd: &str) -> Option<&'static str> {
         "sim" => "∼",
         "cong" => "≅",
         "mid" | "divides" => "∣",
-        "cup" | "union" => "∪",
-        "cap" | "inter" => "∩",
-        "setminus" => "\\",
+        "cup" => "∪",
+        "cap" => "∩",
+        "setminus" => "∖",
+        "complement" => "∁",
         "cdot" | "times" => "·",
         "sq" => "²",
         "cube" => "³",
@@ -618,10 +611,6 @@ impl SubScope {
                 self.stmts(body);
             }
 
-            StmtKind::Suffices { ty, just } => {
-                *ty = self.formula(ty);
-                *just = self.just(just);
-            }
             StmtKind::Choose { choice, just } => {
                 if let Choice::Term(t) = choice {
                     *t = self.term(t);
@@ -630,7 +619,6 @@ impl SubScope {
                     *j = self.just(j);
                 }
             }
-            StmtKind::Contradiction(..) | StmtKind::Unfold { .. } => {}
             StmtKind::Cases { left, right, .. } => {
                 self.stmts(&mut left.1);
                 self.stmts(&mut right.1);
@@ -768,9 +756,6 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
                     "sim" => Tok::Sym("∼".into()),
                     "cong" => Tok::Sym("≅".into()),
                     "divides" => Tok::Sym("∣".into()),
-                    "union" => Tok::Sym("∪".into()),
-                    "inter" => Tok::Sym("∩".into()),
-                    "setminus" => Tok::Sym("\\".into()),
                     "therefore" => Tok::Sym("∴".into()),
                     "Nat" => Tok::Ident("ℕ".into()),
                     "Int" => Tok::Ident("ℤ".into()),
@@ -1334,7 +1319,7 @@ impl P {
     }
 
     fn is_term_op(&self) -> bool {
-        ["+", "-", "·", "/", "^", "²", "³", "∪", "∩", "\\"]
+        ["+", "-", "·", "/", "^", "²", "³"]
             .iter()
             .any(|s| self.is_sym(s))
     }
@@ -1347,8 +1332,6 @@ impl P {
                 "+"
             } else if self.is_sym("-") {
                 "-"
-            } else if self.is_sym("∪") {
-                "∪"
             } else {
                 break;
             };
@@ -1371,10 +1354,6 @@ impl P {
                 "·"
             } else if self.is_sym("/") {
                 "/"
-            } else if self.is_sym("∩") {
-                "∩"
-            } else if self.is_sym("\\") {
-                "\\"
             } else {
                 break;
             };
@@ -1609,7 +1588,7 @@ fn starts_decl(text: &str) -> bool {
     }
     matches!(
         decl_keyword(text).as_str(),
-        "thm" | "axiom" | "def" | "rec" | "notation" | "import" | "typedef"
+        "thm" | "axiom" | "def" | "rec" | "notation" | "import" | "typedef" | "const"
     )
 }
 
@@ -1729,6 +1708,19 @@ fn parse_item_at(
         });
     }
     match decl_keyword(&l.text).as_str() {
+        "const" => {
+            // const c : σ
+            let mut p = P::new(lex(&l.text, l.no)?, l.no, vec![]);
+            p.ident()?;
+            let name = p.ident()?;
+            p.expect_sym(":")?;
+            let ty = p.ty()?;
+            p.expect_end()?;
+            with_syntax(|t| t.consts.insert(name.clone()));
+            items.push(Item::Const { name, ty, line: l.no });
+            *i += 1;
+            return Ok(());
+        }
         "import" => {
             let path = parse_import(&l.text, l.no)?;
             on_import(&path, l.no)?;
@@ -1780,18 +1772,31 @@ fn parse_item_at(
             return Ok(());
         }
         "def" => {
-            // 字下げされた続きの行も定義の本体
+            // 字下げされた続きの行も定義の本体。`notation …` で始まる行は、この定義の記法
             let mut text = l.text.clone();
             let no = l.no;
+            let mut clauses: Vec<(usize, String)> = vec![];
             while *i + 1 < lines.len() && lines[*i + 1].indent > 0 {
                 *i += 1;
-                text.push(' ');
-                text.push_str(&lines[*i].text);
+                if decl_keyword(&lines[*i].text) == "notation" {
+                    clauses.push((lines[*i].no, lines[*i].text.clone()));
+                } else {
+                    text.push(' ');
+                    text.push_str(&lines[*i].text);
+                }
             }
             *i += 1;
             let d = parse_def(&text, no)?;
             register_def(&d)?;
+            let name = d.name.clone();
+            let params = d.params.clone();
             items.push(Item::Def(d));
+            for (cno, clause) in clauses {
+                let full = def_notation_text(&name, &params, &clause, cno)?;
+                let (n, warn) = parse_notation(&full, cno)?;
+                with_syntax(|t| t.notations.push(n));
+                items.push(Item::Notation { src: clause, line: cno, warn });
+            }
             return Ok(());
         }
         _ => {}
@@ -2024,6 +2029,68 @@ fn parse_import(text: &str, line: usize) -> PResult<String> {
     Ok(path)
 }
 
+/// `def` の下の記法 `notation 型紙` を、独立した notation の形 `notation 型紙' := 名前(引数…)` にする。
+/// 型紙の名前は def の引数の名前。引数 a に、引数でない文字 n が添字で付いた `a_n`（`a_{n}`）は
+/// 「n を含む式が入る所」で、a は (n : 定義域 ↦ その式) として渡す（n は束縛変数）。
+fn def_notation_text(name: &str, params: &[(String, String)], clause: &str, line: usize) -> PResult<String> {
+    let template = clause.trim_start().strip_prefix("notation").unwrap_or(clause).trim();
+    if template.contains(":=") {
+        return Err(ParseError { line, msg: "def の下の notation には `:= …` を書かない（意味は上の def）".into() });
+    }
+    let is_param = |x: &str| params.iter().any(|(p, _)| p == x);
+    let cs: Vec<char> = template.chars().collect();
+    let mut out = String::new();
+    let mut binders: Vec<(String, String)> = vec![]; // (引数, 束縛変数)
+    let mut k = 0;
+    let ident_char = |c: char| c.is_alphanumeric() || c == '_' || c == '\'' || ('₀'..='₉').contains(&c);
+    while k < cs.len() {
+        if ident_char(cs[k]) && (k == 0 || !ident_char(cs[k - 1])) {
+            let st = k;
+            while k < cs.len() && ident_char(cs[k]) {
+                k += 1;
+            }
+            let tok: String = cs[st..k].iter().collect();
+            // a_n・a_{n}
+            let split = tok.split_once('_').map(|(a, b)| (a.to_string(), b.to_string()));
+            match split {
+                Some((a, b)) if is_param(&a) && !b.is_empty() && !is_param(&b) => {
+                    binders.push((a.clone(), b));
+                    out.push_str(&a);
+                }
+                Some((a, b)) if is_param(&a) && b.is_empty() && k < cs.len() && cs[k] == '{' => {
+                    let close = cs[k..].iter().position(|&c| c == '}').map(|e| k + e);
+                    let Some(e) = close else { return Err(ParseError { line, msg: "添字の { が閉じていない".into() }) };
+                    let inner: String = cs[k + 1..e].iter().collect::<String>().trim().to_string();
+                    if inner.is_empty() || is_param(&inner) || !inner.chars().all(ident_char) {
+                        return Err(ParseError { line, msg: format!("添字 `{inner}` は 1 文字の束縛変数にする") });
+                    }
+                    binders.push((a.clone(), inner));
+                    out.push_str(&a);
+                    k = e + 1;
+                }
+                _ => out.push_str(&tok),
+            }
+        } else {
+            out.push(cs[k]);
+            k += 1;
+        }
+    }
+    let mut args = vec![];
+    for (p, ty) in params {
+        match binders.iter().find(|(a, _)| a == p) {
+            Some((_, b)) => {
+                let dom = ty.split_once('→').map(|(d, _)| d.trim().to_string());
+                let Some(dom) = dom else {
+                    return Err(ParseError { line, msg: format!("`{p}_{b}` と書けるのは関数の引数だけ（`{p} : {ty}`）") });
+                };
+                args.push(format!("({b} : {dom} ↦ {p})"));
+            }
+            None => args.push(p.clone()),
+        }
+    }
+    Ok(format!("notation {out} := {name}({})", args.join(", ")))
+}
+
 /// `notation 型紙 := 述語(引数, …)`（docs/language/syntax.md の「略記」）
 /// - 右辺の引数は名前（入る所）か (n : ℕ ↦ 名前)（n が束縛変数、名前は n を含んでよい式が入る所）
 /// - 型紙のそれ以外の名前・記号は、書いたとおりの文字
@@ -2084,7 +2151,15 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
     }
     // 型紙：空白で区切った塊ごとに字句解析する。読めない記号の塊は、新しい記号として 1 つの記号にする
     let mut toks: Vec<Tok> = vec![];
-    for chunk in expand_tex_macros(&lhs).split_whitespace() {
+    // 文字と新しい記号が続けて書かれた塊（A^∁）は、新しい記号の前後で区切る
+    let spaced: String = expand_tex_macros(&lhs)
+        .chars()
+        .map(|c| {
+            let known = c.is_alphanumeric() || c.is_whitespace() || "_'(){}[],.^".contains(c) || lexes_as_itself(&c.to_string());
+            if known { c.to_string() } else { format!(" {c} ") }
+        })
+        .collect();
+    for chunk in spaced.split_whitespace() {
         match lex_raw(chunk, line, true) {
             Ok(ts) => toks.extend(ts),
             Err(_) if !chunk.chars().any(|c| c.is_alphanumeric() || c == '_' || c == '(' || c == ')') => toks.push(Tok::Sym(chunk.to_string())),
@@ -2527,6 +2602,15 @@ fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
     }
     let concl = p.formula()?;
     p.expect_end()?;
+    // `axiom c : ℝ` は「命題 ℝ」の公理になってしまう。記号の宣言は const
+    if let Formula::Atom(t, args) = &concl {
+        if args.is_empty() && (TYPE_NAMES.contains(&t.as_str()) || with_syntax(|s| s.types.contains(t))) {
+            return Err(ParseError {
+                line,
+                msg: format!("「{t}」は型で、命題ではない。記号を宣言するなら `const {name} : {t}` と書く"),
+            });
+        }
+    }
     Ok(Decl {
         is_axiom,
         name,
@@ -2611,7 +2695,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
         _ => String::new(),
     };
     let block = |p: &P| parse_block(&n.children, &p.tyenv);
-    let mut warn: Option<Warn> = None;
+    let warn: Option<Warn> = None;
     let kind = match first.as_str() {
         "Fix" => {
             p.pos += 1;
@@ -2706,41 +2790,15 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                 just,
             }
         }
-        "have" => {
-            // 古い書き方：have h : φ := j は h : φ by j と同じ
-            p.pos += 1;
-            let name = p.ident()?;
-            p.expect_sym(":")?;
-            let ty = p.formula()?;
-            let rest = n.text.trim().strip_prefix("have").unwrap_or(&n.text).trim().to_string();
-            if p.at_end() && !n.children.is_empty() {
-                warn = Some(Warn { msg: "have は古い書き方。`h : φ` の下に証明を書く".into(), replace: Some(rest) });
-                StmtKind::Show { name: Some(name), ty, just: None, body: block(&p)? }
-            } else {
-                p.expect_sym(":=")?;
-                let just = p.just()?;
-                p.expect_end()?;
-                no_children(n)?;
-                let new = match rest.rsplit_once(":=") {
-                    Some((a, b)) => format!("{} by {}", a.trim_end(), b.trim()),
-                    None => rest.clone(),
-                };
-                warn = Some(Warn { msg: format!("have は古い書き方。`{new}` と書く"), replace: Some(new) });
-                StmtKind::Show { name: Some(name), ty, just: Some(just), body: vec![] }
-            }
-        }
-        "suffices" | "⇐" => {
-            p.pos += 1;
-            let ty = p.formula()?;
-            p.expect_sym(":=")?;
-            let just = p.just()?;
-            p.expect_end()?;
-            no_children(n)?;
-            warn = Some(Warn {
-                msg: "suffices は古い書き方。示したい命題を `ψ by …` で先に示し、最後に根拠（j(this) など）で閉じる".into(),
-                replace: None,
-            });
-            StmtKind::Suffices { ty, just }
+        // v2.13 で消した書き方：今の書き方を案内する
+        kw @ ("have" | "suffices" | "contradiction" | "unfold") => {
+            let hint = match kw {
+                "have" => "事実の行 `h : φ by 根拠` と書く（have は要らない）",
+                "suffices" => "示したい命題を `ψ by …` で先に示し、最後に根拠で閉じる",
+                "contradiction" => "`k(h)` と書く（¬φ は φ ⇒ ⊥ なので、φ の根拠 h を k に渡す）",
+                _ => "書かなくてよい（定義は必要な所で自動的に開かれる）。この行は消せる",
+            };
+            return Err(ParseError { line: n.no, msg: format!("`{kw}` は使わない：{hint}") });
         }
         "choose" => {
             p.pos += 1;
@@ -2762,15 +2820,6 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             no_children(n)?;
             StmtKind::Choose { choice, just }
         }
-        "contradiction" => {
-            p.pos += 1;
-            let a = p.ident()?;
-            let b = p.ident()?;
-            p.expect_end()?;
-            no_children(n)?;
-            warn = Some(Warn { msg: format!("contradiction は古い書き方。`{b}({a})` と書く（¬φ は φ → ⊥ なので、{a} を {b} に渡す）"), replace: Some(format!("{b}({a})")) });
-            StmtKind::Contradiction(a, b)
-        }
         "let" => {
             p.pos += 1;
             let name = p.ident()?;
@@ -2779,25 +2828,6 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             p.expect_end()?;
             no_children(n)?;
             StmtKind::Let { name, term }
-        }
-        "unfold" => {
-            p.pos += 1;
-            let mut names = vec![p.ident()?];
-            while p.eat_sym(",") {
-                names.push(p.ident()?);
-            }
-            let mut at = Vec::new();
-            if p.is_ident("at") {
-                p.pos += 1;
-                at.push(p.ident()?);
-                while p.eat_sym(",") {
-                    at.push(p.ident()?);
-                }
-            }
-            p.expect_end()?;
-            no_children(n)?;
-            warn = Some(Warn { msg: "unfold は書かなくてよい（定義は必要な所で自動的に開かれる）。この行は消せる".into(), replace: Some(String::new()) });
-            StmtKind::Unfold { names, at }
         }
         "∴" => {
             p.pos += 1;

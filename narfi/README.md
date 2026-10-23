@@ -39,7 +39,7 @@ cargo test                                           # 正しい証明は通り�
 | `notation a → α (n → ∞) := is_lim((n : ℕ ↦ a), α)` | 略記。右辺の引数の名前が入る所、λ の束縛変数（n）は使うときに好きな文字、それ以外は書いたとおりの文字。`a_k → α (k → ∞)`・`a_{n+1} → α (n → ∞)` と書ける。標準ライブラリは 1 つの概念に略記 1 つ（docs/language/notation.md）。あいまいな型紙は構文エラー（docs/language/syntax.md §4.1） |
 | `notation x ⊕ y := plus(x, y)`、`notation \lim_{n → ∞} a = α := …` | 値になる略記（右辺が関数のとき。端には 1 つのまとまりが入る）。`\lim`・`\max`・`\sup` などの下に添字の付く演算子も型紙に使える（意味は notation で付ける） |
 | `import analysis.limits` | `analysis/limits.narfi` を、同じディレクトリ → `NARFI_PATH` → `narfi/lib/` の順に探して読み込む。循環 import はエラー |
-| `h : φ by j` | 事実の行（v2.6 から。`have` は古い書き方）。`φ` だけ書くと、根拠の候補がエラーの直し方として出る |
+| `h : φ by j` | 事実の行。`φ` だけ書くと、根拠の候補がエラーの直し方として出る |
 
 ## Web 版（インストール不要）
 

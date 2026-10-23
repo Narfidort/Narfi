@@ -263,20 +263,6 @@ impl<'a> Checker<'a> {
                 self.after_closed(&ctx, rest, &g)?;
                 Ok(at(Proof::Raa { h: name.clone(), phi: g, body: p.b() }))
             }
-            StmtKind::Contradiction(a, b) => {
-                let (fa, pa) = self.resolve(&ctx, a)?;
-                let (fb, pb) = self.resolve(&ctx, b)?;
-                let bot = if self.unify(&ctx, &fb, &not(fa.clone())) {
-                    Proof::ImpE(pb.b(), pa.b())
-                } else if self.unify(&ctx, &fa, &not(fb.clone())) {
-                    Proof::ImpE(pa.b(), pb.b())
-                } else {
-                    let (fa, fb) = (self.norm(&ctx, &fa), self.norm(&ctx, &fb));
-                    return self.err(format!("`{a}` : {fa} と `{b}` : {fb} は互いの否定になっていない"));
-                };
-                self.after_closed(&ctx, rest, &g)?;
-                Ok(at(Proof::BotE(g, bot.b())))
-            }
             StmtKind::Cases { hyp, left, right } => {
                 let (f, pf) = self.resolve(&ctx, hyp)?;
                 match self.whnf(&self.norm(&ctx, &f)) {
@@ -476,13 +462,6 @@ impl<'a> Checker<'a> {
                 }
                 Ok(at(Proof::ExE { p: pf.b(), x: var.clone(), h: inner, body: body_p.b() }))
             }
-            StmtKind::Suffices { ty, just } => {
-                let ty = self.infer_written(&ctx, ty)?;
-                let need = Formula::Imp(Box::new(ty.clone()), Box::new(g.clone()));
-                let p = self.check_just(&ctx, just, &need)?;
-                let r = self.seq(ctx, rest, ty, last, line)?;
-                Ok(at(Proof::ImpE(p.b(), r.b())))
-            }
             StmtKind::Choose { choice, just } => {
                 let mut witness: Option<Term> = None;
                 let (next, other) = match (choice, self.whnf(&g)) {
@@ -542,33 +521,6 @@ impl<'a> Checker<'a> {
                 let r = self.seq(ctx, rest, goal, last, line)?;
                 let body = Proof::Cut { h: format!("{name}.def"), phi: def, p: Proof::Refl(term.clone()).b(), body: r.b() };
                 Ok(at(Proof::Let { x: name.clone(), sort, t: term.clone(), body: body.b() }))
-            }
-            StmtKind::Unfold { names, at: hs } => {
-                for n in names {
-                    if !self.env.kernel.defs.contains_key(n) {
-                        return self.err(format!("`{n}` は def で定義された名前ではない"));
-                    }
-                }
-                // 定義の展開は kernel の δ で同一視されるので、証明項は変わらない
-                if hs.is_empty() {
-                    let g2 = self.unfold_named(&g, names);
-                    if g2 == g {
-                        return self.err(format!("goal「{g}」に {} は現れない", names.join(", ")));
-                    }
-                    return self.seq(ctx, rest, g2, last, line);
-                }
-                for h in hs {
-                    let Some(k) = ctx.entries.iter().rposition(|e| matches!(e, Entry::Hyp(x, _) if x == h)) else {
-                        return self.err(format!("仮定 `{h}` が文脈にない"));
-                    };
-                    let Entry::Hyp(_, f) = &ctx.entries[k] else { unreachable!() };
-                    let f2 = self.unfold_named(f, names);
-                    if f2 == *f {
-                        return self.err(format!("`{h}` : {f} に {} は現れない", names.join(", ")));
-                    }
-                    ctx.entries[k] = Entry::Hyp(h.clone(), f2);
-                }
-                self.seq(ctx, rest, goal, last, line)
             }
         }
     }

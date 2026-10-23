@@ -148,7 +148,7 @@ fn matrices() {
     }
 }
 
-/// 事実の行（v2.6）：根拠がなければエラーにし、見つかった根拠を help に出す。古い書き方は警告
+/// 事実の行（v2.6）：根拠がなければエラーにし、見つかった根拠を help に出す。消した書き方（have など）は、今の書き方を案内するエラー
 #[test]
 fn fact_lines_and_old_forms() {
     let out = run(&["tests/missing_just.narfi"]);
@@ -161,7 +161,7 @@ fn fact_lines_and_old_forms() {
     let f = dir.join("old.narfi");
     std::fs::write(&f, "thm t :\n  P : Prop, h : P\n  ⊢ P\n\nhave k : P := h\nk\n").unwrap();
     let out = run(&[f.to_str().unwrap()]);
-    assert!(out.contains("✓ t") && out.contains("警告") && out.contains("k : P by h"), "{out}");
+    assert!(out.contains("✗ t") && out.contains("`have` は使わない") && out.contains("h : φ by 根拠"), "{out}");
 }
 
 /// 記号を "…" で囲む notation（v2.8 までの書き方）は構文エラー
@@ -192,6 +192,11 @@ fn benchmarks() {
         ("number_theory", "odd.sq"),
         ("numerical", "contraction"),
         ("probability", "ex.add"),
+        ("sets", "preimage.cup"),
+        ("sets", "de_morgan"),
+        ("sets", "image.cap"),
+        ("linear_algebra", "ker.add"),
+        ("measure", "measure.mono"),
     ];
     for f in ["calculus", "complex", "functional_analysis", "graph", "linear_algebra", "logic", "measure", "number_theory", "numerical", "probability", "sets"] {
         let out = run(&[&format!("lib/bench/{f}.narfi")]);

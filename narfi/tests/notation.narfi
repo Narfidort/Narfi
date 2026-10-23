@@ -71,3 +71,13 @@ thm script.power :
   ⊢ a(n)^2 > 0
 
 h
+
+-- 値になる記法の中の値になる記法は、括弧付きで書き出す（読み直して意味が変わらない）
+def mn(x : ℝ, y : ℝ) : ℝ := x - y
+  notation x ⊖ y
+
+thm notation.nested :
+  a : ℝ, b : ℝ, c : ℝ
+  ⊢ a ⊕ (b ⊖ c) = plus(a, mn(b, c))
+
+refl

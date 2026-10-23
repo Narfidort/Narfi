@@ -26,8 +26,8 @@ Fix b
 thm boom :
   ⊢ ⊥
 
-have h1 : k(some({y : ℕ | y > y})) > some({y : ℕ | y > y}) := k.gt(some({y : ℕ | y > y}))
-have h2 : k(some({y : ℕ | y > y})) = some({y : ℕ | y > y}) := k.bug(some({y : ℕ | y > y}))
-have bad : 0 > 0 := linarith
-have ok : ¬(0 > 0) := decide
-contradiction bad ok
+h1 : k(some({y : ℕ | y > y})) > some({y : ℕ | y > y}) by k.gt(some({y : ℕ | y > y}))
+h2 : k(some({y : ℕ | y > y})) = some({y : ℕ | y > y}) by k.bug(some({y : ℕ | y > y}))
+bad : 0 > 0 by linarith
+ok : ¬(0 > 0) by decide
+ok(bad)

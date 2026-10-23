@@ -17,7 +17,6 @@ thm wrong.limit :
   h : a_n → α (n → ∞)
   ⊢ a_n → β (n → ∞)
 
-unfold is_lim at h
 h
 
 
@@ -50,7 +49,6 @@ thm wrong.capture :
   h : bounded_by(a, n)
   ⊢ ∀n:ℕ. a(n) ≤ n
 
-unfold bounded_by at h
 h
 
 
@@ -64,11 +62,31 @@ thm wrong.split :
 h
 
 
--- 定義されていない名前は unfold できない
+-- 定義されていない名前は根拠に使えない
 thm wrong.unfold :
   a : ℕ → ℝ,
   h : a_n → α (n → ∞)
   ⊢ a_n → α (n → ∞)
 
-unfold foo at h
+k : foo(a) by h
 h
+
+
+-- 集合を返す定義を開いても、和集合の要素が片方の要素になるわけではない
+def cupx(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∨ x ∈ B}
+
+thm wrong.union :
+  A : ℝ → Prop, B : ℝ → Prop, x : ℝ, h : x ∈ cupx(A, B)
+  ⊢ x ∈ A
+
+h
+
+
+-- 開いた中身の変数を取り違えない（{x | x ∈ A} の x と、外の y）
+def onlyx(A : ℝ → Prop, y : ℝ) : ℝ → Prop := {x : ℝ | x ∈ A ∧ x = y}
+
+thm wrong.capture.set :
+  A : ℝ → Prop, x : ℝ, y : ℝ, h : x ∈ onlyx(A, y)
+  ⊢ x = x + 1
+
+h.right

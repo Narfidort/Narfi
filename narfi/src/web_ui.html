@@ -1271,11 +1271,10 @@ const COMMAND_DICT = [
   { cmd: "subsetneq", preview: "⊊", desc: "proper subset", kind: "sym", ascii: "subsetneq", display: "⊊", cls: "" },
   { cmd: "supset", preview: "⊃", desc: "supset", kind: "sym", ascii: "supset", display: "⊃", cls: "" },
   { cmd: "supseteq", preview: "⊇", desc: "supseteq", kind: "sym", ascii: "supseteq", display: "⊇", cls: "" },
-  { cmd: "cup", preview: "∪", desc: "union", kind: "sym", ascii: "union", display: "∪", cls: "" },
-  { cmd: "union", preview: "∪", desc: "union", kind: "sym", ascii: "union", display: "∪", cls: "" },
-  { cmd: "cap", preview: "∩", desc: "inter", kind: "sym", ascii: "inter", display: "∩", cls: "" },
-  { cmd: "inter", preview: "∩", desc: "inter", kind: "sym", ascii: "inter", display: "∩", cls: "" },
-  { cmd: "setminus", preview: "∖", desc: "setminus", kind: "sym", ascii: "setminus", display: "∖", cls: "" },
+  { cmd: "cup", preview: "∪", desc: "union（lib/set）", kind: "sym", ascii: "\\cup", display: "∪", cls: "" },
+  { cmd: "cap", preview: "∩", desc: "intersection（lib/set）", kind: "sym", ascii: "\\cap", display: "∩", cls: "" },
+  { cmd: "setminus", preview: "∖", desc: "set difference（lib/set）", kind: "sym", ascii: "\\setminus", display: "∖", cls: "" },
+  { cmd: "complement", preview: "∁", desc: "complement A^∁（lib/set）", kind: "sym", ascii: "\\complement", display: "∁", cls: "" },
   { cmd: "emptyset", preview: "∅", desc: "emptyset", kind: "sym", ascii: "emptyset", display: "∅", cls: "" },
   { cmd: "varnothing", preview: "∅", desc: "emptyset", kind: "sym", ascii: "emptyset", display: "∅", cls: "" },
   { cmd: "equiv", preview: "≡", desc: "equiv", kind: "sym", ascii: "equiv", display: "≡", cls: "" },
@@ -1373,7 +1372,7 @@ const KEYWORD_COMPLETIONS = [
 ];
 
 const DECL_KWS = new Set(["thm", "axiom", "def", "rec", "notation", "import", "typedef", "edition"]);
-const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "have", "suffices", "choose", "contradiction", "cases", "Case", "induction", "let", "unfold", "at", "by"]);
+const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "choose", "cases", "Case", "induction", "let", "by"]);
 const JUST_KWS = new Set(["ring", "linarith", "refl", "decide", "sorry", "left", "right", "zero", "succ", "EQ1", "EQ2"]);
 const UPRIGHT_FNS = new Set(["max", "min", "sup", "inf", "sin", "cos", "tan", "exp", "log", "ln", "gcd", "lcm", "det", "dim", "ker", "im", "deg", "sgn", "mod", "Prop"]);
 

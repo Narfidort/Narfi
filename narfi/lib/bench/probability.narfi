@@ -13,7 +13,6 @@ import algebra.sum
 **Narfi での課題**
 - 構造：確率空間・確率変数・期待値 $E[X]$ を表す仕組みがない。今は有限の場合を、確率と値の数列で書く。
 - 記法：$E[X]$ が書けず `ex(p, X, n)` と書く（F1：確率の記法）。
-- 根拠：関数どうしの等式（$k \mapsto p_k(X_k + Y_k)$ と $k \mapsto p_kX_k + p_kY_k$）を `ring` で示せず、各点で `ring` を使ってから `funext` で包む。
 ```
 
 def ex(p : ℕ → ℝ, X : ℕ → ℝ, n : ℕ) : ℝ := sum((k : ℕ ↦ p_k * X_k), n)
@@ -22,13 +21,10 @@ thm ex.add :
   p : ℕ → ℝ, X : ℕ → ℝ, Y : ℕ → ℝ, n : ℕ
   ⊢ ex(p, (k : ℕ ↦ X_k + Y_k), n) = ex(p, X, n) + ex(p, Y, n)
 
-pe : ∀k:ℕ. p_k * (X_k + Y_k) = p_k * X_k + p_k * Y_k
-  Fix k
-    ring
-e : (k : ℕ ↦ p_k * (X_k + Y_k)) = (k : ℕ ↦ p_k * X_k + p_k * Y_k) by funext((k : ℕ ↦ p_k * (X_k + Y_k)), (k : ℕ ↦ p_k * X_k + p_k * Y_k), pe)
+e : (k : ℕ ↦ p_k * (X_k + Y_k)) = (k : ℕ ↦ p_k * X_k + p_k * Y_k) by ring
 ex(p, (k : ℕ ↦ X_k + Y_k), n)
   = sum((k : ℕ ↦ p_k * (X_k + Y_k)), n)                  by refl
-  = sum((k : ℕ ↦ p_k * X_k + p_k * Y_k), n)              by EQ2(e, refl)
+  = sum((k : ℕ ↦ p_k * X_k + p_k * Y_k), n)              by e
   = sum((k : ℕ ↦ p_k * X_k), n) + sum((k : ℕ ↦ p_k * Y_k), n)   by sum.add((k : ℕ ↦ p_k * X_k), (k : ℕ ↦ p_k * Y_k), n)
   = ex(p, X, n) + ex(p, Y, n)                             by refl
 

@@ -41,8 +41,8 @@ thm ker.add :
 
 T((n : ℕ ↦ u(n) + v(n)))
   = (n : ℕ ↦ T(u)(n) + T(v)(n))   by hT(u, v)
-  = (n : ℕ ↦ 0 + T(v)(n))         by EQ2(hu, refl)
-  = (n : ℕ ↦ 0 + 0)               by EQ2(hv, refl)
+  = (n : ℕ ↦ 0 + T(v)(n))         by hu
+  = (n : ℕ ↦ 0 + 0)               by hv
   = (n : ℕ ↦ 0)                   by ring
 
 ```

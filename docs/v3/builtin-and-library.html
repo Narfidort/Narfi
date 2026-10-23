@@ -1,0 +1,67 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>builtin-and-library</title>
+<link rel="stylesheet" href="../../narfi/site/assets/katex/katex.min.css"><script src="../../narfi/site/assets/katex/katex.min.js"></script>
+<style>body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#0d1117;color:#e6edf3;max-width:1050px;margin:28px auto;padding:0 24px;line-height:1.75;font-size:15px}
+h1{font-size:22px}h2{font-size:18px;margin-top:34px;border-bottom:1px solid #30363d;padding-bottom:4px}h3{font-size:16px;margin-top:24px}
+code{font-family:"JetBrains Mono",Menlo,monospace;font-size:13px;background:#161b22;padding:1px 5px;border-radius:4px;color:#a5d6ff}
+pre{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;font-family:"JetBrains Mono",Menlo,monospace;font-size:13.5px;line-height:1.6;overflow-x:auto;color:#e6edf3}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}th,td{border:1px solid #30363d;padding:6px 9px;vertical-align:top;text-align:left}th{background:#161b22;color:#8b949e;font-weight:500}
+a{color:#58a6ff}li{margin:3px 0}</style></head><body><h1>v3 設計の下書き 0：組み込み・標準ライブラリ・宣言の種類</h1>
+<p>宣言の見直し（<a href="declarations.md">declarations.md</a>）の土台。どこまでを言語に組み込み、どこからを標準ライブラリにするかを、層の考え方で決め直す。</p>
+<h2>1. 層（理論の整理）</h2>
+<table><tr><th>層</th><th>中身</th></tr><tr><td>-1</td><td>意味（イデア界）。Narfi は持たない。記法・Prose は読む人がここへ届くための道具</td></tr><tr><td>0</td><td>記号と文法：記号・型・項・文脈・λ・適用・<b>代入という操作</b></td></tr><tr><td>1</td><td>構造：同一律（A ⊢ A）・カット（導出をつなぐ）・代入で導出が保たれる</td></tr><tr><td>2</td><td>論理の作用素：<code>=</code>・<code>∀</code>・<code>∃</code>・<code>∧</code>・<code>⇒</code>・<code>∨</code>・<code>⊥</code>。それぞれ導入と除去の規則（代入に対する普遍性）で決まる。反射律・代入原理は <code>=</code> の導入・除去</td></tr><tr><td>2′</td><td>体系の選択：古典論理にするか（排中律）、選択公理を入れるか。<b>組み込みにしない</b>。core の公理として選ぶ（選択と外延性から排中律が出る：ディアコネスクの定理）</td></tr><tr><td>3</td><td>数学の公理：高階論理（HOL）。外延性・選択・無限（ℕ）</td></tr><tr><td>4</td><td>定義：記号を足し、その意味を定義で与える（何も新しく主張しない＝保存拡大）</td></tr><tr><td>5</td><td>定理：証明して足す</td></tr></table>
+<h2>2. 線引きの基準</h2>
+<p><b>組み込み（言語そのもの）にするのは、宣言では作れないものだけ。</b> つまり 0〜2 層（直観主義の論理まで）と、宣言の仕組みそのもの。体系の選択（2′）は core の公理で選ぶ。 それ以外は宣言で書き、ファイルとして読める形で置く。</p>
+<table><tr><th>区分</th><th>中身</th><th>置き場所</th><th>公理を書けるか</th></tr><tr><td><b>言語</b></td><td>0〜2 層：文法・型・λ・代入、論理の作用素とその規則（直観主義）、証明の文、宣言の種類</td><td>kernel と構文解析（Rust）</td><td>—</td></tr><tr><td><b>core</b></td><td>2′・3 層の公理（古典論理・選択・外延性・ℕ）と、すべての土台になる定義：論理・集合・関数の基本</td><td><code>lib/core/</code></td><td><b>ここだけ</b>（と構造の中）</td></tr><tr><td><b>標準ライブラリ</b></td><td>4・5 層：数の体系（ℤ・ℚ・ℝ）、集合・写像、代数・解析・線形代数…</td><td><code>lib/</code></td><td>書かない（未証明は <code>thm … sorry</code>）</td></tr><tr><td>ベンチマーク・例</td><td>受け入れ試験</td><td><code>lib/bench/</code>・<code>examples/</code></td><td>書かない</td></tr></table>
+<h2>3. 言語に組み込むもの（これだけ）</h2>
+<p><b>文法（0 層）</b></p>
+<ul><li style="margin-left:0px">記号・名前（<code>.</code> の階層）・数字の並び・括弧・カンマ</li><li style="margin-left:0px">型：基本の型の名前、関数の型 <code>σ → τ</code>、積 <code>σ × τ</code>、<code>Prop</code>、型の変数 <code>α</code></li><li style="margin-left:0px">項：変数・適用 <code>f(x)</code>・λ <code>(x ↦ t)</code>・内包表記 <code>{x | φ}</code></li><li style="margin-left:0px">添字・上付き・分数などの <b>見た目の構造</b>（意味は持たない。<code>a_n</code> を <code>a(n)</code> と読むのは core の記法）</li><li style="margin-left:0px">型紙の記法を読む仕組み（宣言された記法で読む。型で 1 つに決まるときだけ型で選ぶ）</li></ul>
+<p><b>論理（1〜2 層）</b></p>
+<ul><li style="margin-left:0px"><code>=</code>（反射律・代入原理）、<code>∀</code>・<code>∃</code>、<code>∧</code>・<code>⇒</code>・<code>∨</code>・<code>⊥</code> と、その導入・除去の規則（<b>直観主義の自然演繹</b>）</li><li style="margin-left:0px">kernel はこれだけを知る。背理法の規則は持たない</li></ul>
+<p><b>体系の選択（2′ 層）は core で</b></p>
+<ul><li style="margin-left:0px"><code>core/classical</code>：排中律（公理、または選択からの定理）。<code>by_contra</code> はこれを使う。読まなければ直観主義（LJ）</li><li style="margin-left:0px"><code>core/choice</code>：選択公理（入れると古典論理も付いてくる）</li><li style="margin-left:0px">定理ごとの「依存する公理」に「古典論理」「選択」が出るので、構成的に証明できているかが見える</li></ul>
+<p><b>証明の文</b></p>
+<ul><li style="margin-left:0px"><code>Fix</code>・<code>assume</code>・<code>Obtain</code>・<code>cases</code>・<code>choose</code>・事実の行・連鎖・<code>∴</code></li><li style="margin-left:0px"><code>by_contra</code>：core/classical の排中律を使う文（読んでいなければ使えない）</li><li style="margin-left:0px"><code>induction</code>：ℕ の帰納法の公理（core）を使う文。将来は帰納的な型に一般化</li></ul>
+<p><b>宣言の種類</b>（次の節）</p>
+<h2>4. 組み込みから外すもの（core・標準ライブラリへ）</h2>
+<p>今は構文解析・kernel に作り込んでいるが、宣言で書けるもの。</p>
+<table><tr><th>今の組み込み</th><th>v3 での置き場所</th><th>宣言の形</th></tr><tr><td><code>¬φ</code>（<code>φ ⇒ ⊥</code>）、<code>φ ⇔ ψ</code>、<code>≠</code></td><td>core/logic</td><td><code>def</code>＋記法</td></tr><tr><td>範囲付き量化子 <code>∀ε&gt;0. φ</code></td><td>core/logic</td><td>束縛つきの記法</td></tr><tr><td><code>∃!</code></td><td>core/logic</td><td><code>def</code>＋束縛つきの記法</td></tr><tr><td><code>x ∈ A</code>（<code>A(x)</code>）、<code>⊆</code>・<code>⊂</code>・<code>⊊</code>、<code>∪</code>・<code>∩</code>・<code>∖</code></td><td>core/set</td><td><code>def Set α := α → Prop</code> と <code>def</code>＋記法</td></tr><tr><td>数列の添字 <code>a_n</code>（<code>a(n)</code>）</td><td>core/function</td><td>型で選ぶ記法（<code>a : ℕ → σ</code> のとき）</td></tr><tr><td><code>|x|</code>・<code>max{a, b}</code>・<code>min{a, b}</code></td><td>順序体のライブラリ</td><td><code>def</code>＋記法</td></tr><tr><td>Σ（<code>sum</code>）</td><td>algebra/sum</td><td><code>def … by recursion</code>＋束縛つきの記法</td></tr><tr><td>ℤ・ℚ・ℝ と四則・順序</td><td>数の体系のライブラリ</td><td>構造（順序体）と、その具体例。目標は ℤ を ℕ から、ℚ を ℤ から、ℝ をコーシー列から作る</td></tr><tr><td><code>ring</code>・<code>linarith</code>・<code>decide</code></td><td>標準ライブラリの「証明を作る道具」</td><td>体・順序体の公理を使った証明を作り、kernel はそれを普通に検算する（kernel から ℝ の知識を抜く）</td></tr><tr><td>数字 <code>0</code>・<code>1</code>・<code>2</code> …</td><td>文法は組み込み、意味は core</td><td>ℕ は core。ほかの型では構造（「1 を持つ」）が意味を与える</td></tr><tr><td><code>rec</code></td><td><code>def … by recursion</code></td><td>再帰定理（core の定理）から作る</td></tr></table>
+<p>移行の注意：ℝ の構成ができるまでは、ℝ と <code>ring</code>・<code>linarith</code> は今の組み込みを使う（「仮の組み込み」として一覧に明記する）。</p>
+<h2>5. 宣言の種類（宣言語）</h2>
+<table><tr><th>宣言</th><th>層</th><th>何をするか</th><th>書ける場所</th></tr><tr><td><code>type T</code></td><td>0</td><td>新しい基本の型を足す（中身は決めない）</td><td>主に構造の中</td></tr><tr><td><code>const c : σ</code></td><td>0</td><td>記号を足す（意味は決めない）</td><td>主に構造の中</td></tr><tr><td><code>axiom 名前 : 前提 ⊢ 結論</code></td><td>3</td><td>主張を足す（証明なし）</td><td>core と構造の中だけ。ほかで書くとエラー</td></tr><tr><td><code>def 名前(引数) : σ := 項</code>、<code>def 名前(引数) :⇔ 命題</code></td><td>4</td><td>記号＋定義。型の変数を持てる。下に <code>notation</code></td><td>どこでも</td></tr><tr><td><code>def … by recursion on n</code></td><td>4</td><td>原始再帰（等式 2 つの定理を作る）</td><td>どこでも</td></tr><tr><td><code>type T := {x : σ | φ}</code>、<code>type T := σ / ~</code></td><td>4</td><td>部分型・商（今の <code>typedef</code>）</td><td>どこでも</td></tr><tr><td><code>notation 型紙</code></td><td>0 の見た目</td><td>記号の見た目（<code>def</code>・<code>const</code>・構造の欄の下に書く）</td><td>宣言の下</td></tr><tr><td><code>thm 名前 : 前提 ⊢ 結論</code></td><td>5</td><td>証明して足す</td><td>どこでも</td></tr><tr><td><code>structure S(T)</code></td><td>0〜3 をまとめる</td><td>型の変数・演算（<code>const</code>）・公理（<code>axiom</code>）・記法・<code>extends</code></td><td>どこでも（公理はこの中なら書ける）</td></tr><tr><td><code>instance … : S</code></td><td>4・5</td><td>具体的な型が構造を満たすこと（演算の定義と公理の証明）</td><td>どこでも</td></tr><tr><td><code>context … end</code></td><td>—</td><td>共通の前提をまとめる（「以下 V はベクトル空間とする」）</td><td>どこでも</td></tr><tr><td><code>import</code>・<code>@name</code>・<code>edition</code></td><td>—</td><td>ファイルの読み込み・訳名・版</td><td>ファイルの最初</td></tr></table>
+<h3>使う側の決まり</h3>
+<ul><li style="margin-left:0px">定理・公理の使い方は 1 通り：<code>名前(証明, …)</code>。前提の並びの変数は単一化で決まる。決まらないときだけ <code>名前[x := t](…)</code>。</li><li style="margin-left:0px">定義は、<code>choose</code>・<code>cases</code> などが必要とするときに検査器が開く（値の定義も、<code>∈</code> や適用の中でも）。開いただけの一歩の根拠は <code>名前.def</code>。</li><li style="margin-left:0px">構造の演算・記法は、型で 1 つに決まる（<code>+</code> が ℝ の和か、V の和か）。決まらなければエラー。</li><li style="margin-left:0px">定理ごとに「どの層のどの公理に頼っているか」を表示する。core の公理・構造の公理・<code>sorry</code> を区別する。</li></ul>
+<h3>今の宣言からの変化</h3>
+<table><tr><th>今</th><th>v3</th></tr><tr><td><code>axiom</code> をどこでも書ける。ライブラリの仮置きにも使う</td><td>core と構造の中だけ。仮置きは <code>thm … sorry</code></td></tr><tr><td>定数を宣言できない（<code>axiom c : ℝ</code> が変な公理になる）</td><td><code>const</code></td></tr><tr><td><code>def</code> は型が固定</td><td>型の変数 <code>α</code></td></tr><tr><td><code>notation</code> は独立した宣言</td><td>宣言の下に書く（独立した <code>notation</code> を残すかは決めること）</td></tr><tr><td><code>rec</code>・<code>typedef</code></td><td><code>def … by recursion</code>・<code>type T := …</code></td></tr><tr><td>なし</td><td><code>structure</code>・<code>instance</code>・<code>context</code></td></tr></table>
+<h2>6. 例：core の一部</h2>
+<pre>-- core/logic
+def not(P : Prop) :⇔ P ⇒ ⊥
+  notation ¬P
+
+def iff(P : Prop, Q : Prop) :⇔ (P ⇒ Q) ∧ (Q ⇒ P)
+  notation P ⇔ Q
+
+-- core/set
+def Set(α) := α → Prop
+def mem(x : α, A : Set α) :⇔ A(x)
+  notation x ∈ A
+def union(A : Set α, B : Set α) : Set α := {x | x ∈ A ∨ x ∈ B}
+  notation A ∪ B
+
+-- algebra/ordered_field
+structure OrderedField(F)
+  zero : F            notation 0
+  one : F             notation 1
+  add : F × F → F     notation a + b
+  mul : F × F → F     notation a b
+  le : F × F → Prop   notation a ≤ b
+  add.comm : ∀a b. a + b = b + a
+  …
+def abs(x : F) : F := max{x, −x}      -- F : OrderedField の文脈で
+  notation |x|</pre>
+<h2>7. 決めること</h2>
+<ol><li style="margin-left:0px">型の変数の書き方：<code>α</code>・<code>β</code>（ギリシャ文字の小文字）か <code>&#x27;a</code> か。</li><li style="margin-left:0px">独立した <code>notation</code>（他人の定義に後から記法を付ける）を残すか。</li><li style="margin-left:0px"><code>axiom</code> を core と構造の外で書いたら、エラーにするか、強い警告にするか。</li><li style="margin-left:0px">数字の扱い：ℕ 以外の型の <code>2</code> を、構造（「1 と足し算を持つ」）から作るか。</li><li style="margin-left:0px">ℝ を構成するまでの「仮の組み込み」の範囲（ℝ の型・四則・順序・<code>ring</code>・<code>linarith</code>）。</li><li style="margin-left:0px"><code>induction</code> を ℕ 専用のまま始めるか、帰納的な型（リスト・木）・帰納的に定義する述語を最初から入れるか。（線形論理などを「対象として」扱う＝深い埋め込みには、帰納的な定義が要る）</li><li style="margin-left:0px">論理の枠組みにするか（将来）：論理そのもの（規則・構造規則の有無）を宣言で載せられるようにし、線形論理などで証明を書けるようにする。Isabelle・LF の考え方。教科書の数学を紙のとおりに書く目的からは遠くなるので、必要が見えてから決める。</li></ol>
+<h2>8. v2.13 で先に入れたもの</h2>
+<p>v3 を待たずに、今の Narfi に入れたもの（v3 でも引き継ぐ）：</p>
+<ul><li style="margin-left:0px"><code>const c : σ</code>。<code>axiom c : ℝ</code> のような書き方は、<code>const</code> を案内するエラーにした。</li><li style="margin-left:0px">記法を定義の下に書く形（<code>def … </code> の下に字下げして <code>notation 型紙</code>）。独立した <code>notation</code> も残す。</li><li style="margin-left:0px">意味のない組み込みの <code>∪</code>・<code>∩</code>・<code>∖</code> を外し、<code>lib/set/real.narfi</code> で定義と記法を与えた（実数の集合だけ）。</li><li style="margin-left:0px">集合を返す定義に要素を当てた形を、kernel が開ける（δ と β）。</li><li style="margin-left:0px">根拠に等式を書けば代入として使う。関数どうしの等式を <code>ring</code> で示せる。書き換えのあとに β 簡約する。</li><li style="margin-left:0px">消した書き方：<code>have</code>・<code>suffices</code>・<code>contradiction</code>・<code>unfold</code>（今の書き方を案内するエラー）。</li></ul>
+<p>まだのもの（v3）：型の変数を持つ定義、構造・<code>instance</code>・<code>context</code>、import と記法の有効化を分けること、kernel を直観主義にして古典論理を core に移すこと、ℕ の <code>k + 1</code> を後者として読むこと。</p>
+<script>document.querySelectorAll('.m').forEach(e=>{try{katex.render(e.textContent,e,{throwOnError:false})}catch(_){}})</script></body></html>

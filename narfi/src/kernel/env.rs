@@ -342,16 +342,23 @@ impl<'a> KCtx<'a> {
 
     /// 関係の両辺の共通の型（数字だけなら None）
     pub fn rel_sort(&mut self, r: &str, a: &Term, b: &Term) -> KResult<Option<Ty>> {
-        let s = match (self.infer_t(a)?, self.infer_t(b)?) {
-            (TSort::Known(x), _) => {
+        // 片方の型が分かれば、もう片方はその型で確かめる（λ (n ↦ 0) の値の型は、相手から決まる）
+        let ia = self.infer_t(a);
+        let s = match ia {
+            Ok(TSort::Known(x)) => {
                 self.check_t(b, &x)?;
                 Some(x)
             }
-            (_, TSort::Known(y)) => {
-                self.check_t(a, &y)?;
-                Some(y)
-            }
-            _ => None,
+            _ => match self.infer_t(b)? {
+                TSort::Known(y) => {
+                    self.check_t(a, &y)?;
+                    Some(y)
+                }
+                TSort::Lit(_) => {
+                    ia?;
+                    None
+                }
+            },
         };
         if ORDER_RELS.contains(&r) {
             if let Some(x) = &s {
@@ -495,6 +502,11 @@ impl<'a> KCtx<'a> {
     /// δ：先頭の述語の定義を1段展開する
     pub fn unfold_head(&self, f: &Formula) -> Option<Formula> {
         match f {
+            // 集合への所属 S(x)：S が（項の定義を開くと）内包表記 {y | φ} なら φ[x/y]（δ と β）
+            Formula::Atom(p, ts) if p == "@" && !ts.is_empty() => match self.unfold_terms(&ts[0]) {
+                Term::Set(ps, phi) if ps.len() == ts.len() - 1 => Some(instantiate(&ps, &phi, &ts[1..])),
+                _ => None,
+            },
             Formula::Atom(p, ts) => match self.env.defs.get(p)? {
                 KDef { params, body: DefBody::Pred(b) } if params.len() == ts.len() => Some(instantiate(params, b, ts)),
                 _ => None,

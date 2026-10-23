@@ -40,6 +40,16 @@ impl KEnv {
         Ok(())
     }
 
+    /// 定義のない記号 `const c : σ` を足す（何も主張しない。意味は公理で与える）
+    pub fn add_const(&mut self, name: &str, ty: &str) -> KResult<()> {
+        self.name_free(name)?;
+        if !KCtx::new(self, &[]).valid_sort(ty) {
+            return kerr(format!("型 `{ty}` が正しくない"));
+        }
+        self.consts.insert(name.to_string(), ty.to_string());
+        Ok(())
+    }
+
     /// 定理（proof あり）・公理（proof なし）を検査して環境に入れる。返り値は依存。
     pub fn add_statement(&mut self, st: &Statement, proof: Option<&Proof>) -> KResult<Deps> {
         if self.thms.contains_key(&st.name) {

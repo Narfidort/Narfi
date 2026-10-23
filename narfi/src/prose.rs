@@ -206,9 +206,6 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
             StmtKind::Let { name, term } => {
                 out.push(ProseBlock { depth, text: lc.t("let", &[("x", &il(name)), ("t", &term.to_latex())]) });
             }
-            StmtKind::Suffices { ty, just } => {
-                out.push(ProseBlock { depth, text: lc.t("suffices", &[("j", &just_to_latex(just)), ("f", &ty.to_latex())]) });
-            }
             StmtKind::Choose { choice, just } => {
                 let text = match (choice, just) {
                     (Choice::Term(t), Some(j)) => lc.t("choose_cond", &[("t", &t.to_latex()), ("j", &just_to_latex(j))]),
@@ -217,9 +214,6 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                     (Choice::Right, _) => lc.t("choose_right", &[]),
                 };
                 out.push(ProseBlock { depth, text });
-            }
-            StmtKind::Contradiction(a, b) => {
-                out.push(ProseBlock { depth, text: lc.t("contradiction", &[("a", &il(a)), ("b", &il(b))]) });
             }
             StmtKind::Cases { hyp, left, right } => {
                 out.push(ProseBlock { depth, text: lc.t("cases", &[("h", &il(hyp))]) });
@@ -246,16 +240,6 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                 };
                 out.push(ProseBlock { depth: depth + 1, text: lc.t("induction_succ", &[("n", &vl), ("k", &kl), ("ih", &ih_str)]) });
                 stmts_to_prose(body, steps, depth + 2, out, lc);
-            }
-            StmtKind::Unfold { names, at } => {
-                let ns: Vec<String> = names.iter().map(|n| format!("${}$", il(n))).collect();
-                let text = if at.is_empty() {
-                    lc.t("unfold", &[("n", &ns.join(", "))])
-                } else {
-                    let hs: Vec<String> = at.iter().map(|h| format!("${}$", il(h))).collect();
-                    lc.t("unfold_at", &[("h", &hs.join(", ")), ("n", &ns.join(", "))])
-                };
-                out.push(ProseBlock { depth, text });
             }
             StmtKind::Therefore(f) => {
                 out.push(ProseBlock { depth, text: lc.t("therefore", &[("f", &f.to_latex())]) });
@@ -355,8 +339,15 @@ fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
             out.push_str(&crate::syntax::display_name_lines(&d.name));
             out.push_str(&d.src)
         }
-        Item::Notation { src, .. } => out.push_str(src),
+        Item::Notation { src, .. } => {
+            // def の下の記法（`:=` を持たない）は、def の下に字下げして書く
+            if !src.contains(":=") {
+                out.push_str("  ");
+            }
+            out.push_str(src.trim_start())
+        },
         Item::Import { path, .. } => out.push_str(&format!("import {path}")),
+        Item::Const { name, ty, .. } => out.push_str(&format!("const {name} : {ty}")),
         // 読めなかった宣言は、そのまま書き戻す
         Item::Broken { src, .. } => out.push_str(src),
     }
@@ -546,9 +537,6 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                 just_str(just)
             ));
         }
-        StmtKind::Suffices { ty, just } => {
-            out.push_str(&format!("{pad}suffices {ty} := {}\n", just_str(just)));
-        }
         StmtKind::Choose { choice, just } => {
             let c_str = match choice {
                 Choice::Term(t) => match just {
@@ -559,9 +547,6 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                 Choice::Right => "choose right".to_string(),
             };
             out.push_str(&format!("{pad}{c_str}\n"));
-        }
-        StmtKind::Contradiction(a, b) => {
-            out.push_str(&format!("{pad}contradiction {a} {b}\n"));
         }
         StmtKind::Cases { hyp, left, right } => {
             out.push_str(&format!("{pad}cases {hyp}\n"));
@@ -593,13 +578,6 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
         }
         StmtKind::Let { name, term } => {
             out.push_str(&format!("{pad}let {name} := {term}\n"));
-        }
-        StmtKind::Unfold { names, at } => {
-            if at.is_empty() {
-                out.push_str(&format!("{pad}unfold {}\n", names.join(", ")));
-            } else {
-                out.push_str(&format!("{pad}unfold {} at {}\n", names.join(", "), at.join(", ")));
-            }
         }
         StmtKind::Therefore(f) => {
             out.push_str(&format!("{pad}∴ {f}\n"));
@@ -706,7 +684,6 @@ pub fn to_ascii_code(s: &str) -> String {
             '⊥' => out.push_str("bot"),
             '⊢' => out.push_str("|-"),
             '∴' => out.push_str("therefore"),
-            '⇐' => out.push_str("suffices"),
             '≤' => out.push_str("<="),
             '≥' => out.push_str(">="),
             '≠' => out.push_str("!="),
@@ -721,8 +698,14 @@ pub fn to_ascii_code(s: &str) -> String {
             '∼' => out.push_str("sim"),
             '≅' => out.push_str("cong"),
             '∣' => out.push_str("divides"),
-            '∪' => out.push_str("union"),
-            '∩' => out.push_str("inter"),
+            // 集合の演算は lib/set の記法。ASCII では TeX のコマンドで書く（後ろに空白を置く）
+            '∪' => out.push_str("\\cup "),
+            '∩' => out.push_str("\\cap "),
+            '∖' => out.push_str("\\setminus "),
+            '∁' => out.push_str("\\complement "),
+            '⊊' => out.push_str("subsetneq"),
+            '⇒' => out.push_str("=>"),
+            '⇔' => out.push_str("<=>"),
             '·' => out.push('*'),
             '²' => out.push_str("^2"),
             '³' => out.push_str("^3"),

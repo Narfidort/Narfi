@@ -5,4 +5,4 @@
 import analysis.real
 
 def is_lim(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
-notation a → α (n → ∞) := is_lim((n : ℕ ↦ a), α)
+  notation a_n → α (n → ∞)

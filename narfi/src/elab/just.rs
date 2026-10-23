@@ -233,6 +233,42 @@ impl<'a> Checker<'a> {
                     Formula::Atom(r, ts) if r == "=" && ring_eq(&self.unfold_terms(&ts[0]), &self.unfold_terms(&ts[1])) => {
                         Ok(Proof::Ring { lhs: ts[0].clone(), rhs: ts[1].clone() })
                     }
+                    // 関数どうしの等式 (x ↦ s) = (x ↦ t)：各点で ring、funext で包む
+                    Formula::Atom(r, ts) if r == "=" && matches!((&ts[0], &ts[1]), (Term::Lam(..), Term::Lam(..))) => {
+                        let before = self.sort_metas.len();
+                        let (f, pf) = self.infer(ctx, &Term::App("funext".into(), vec![ts[0].clone(), ts[1].clone()]))?;
+                        // 値が数字だけの λ（(n ↦ 0 + 0)）は値の型が決まらない。数字だけの等式は
+                        // どの数の型でも同じ真偽（埋め込みで保たれる）なので、決まらなければ ℝ で検査する
+                        // 定義域は λ に書いた型で決める
+                        if let (Term::Lam(ps, _), Formula::Imp(prem, _)) = (&ts[0], &self.zonk_f(&f)) {
+                            if let (Formula::Forall(_, sx, _), [(_, dom)]) = (&**prem, ps.as_slice()) {
+                                if let Some(k) = sx.strip_prefix("?σ").and_then(|k| k.parse::<usize>().ok()) {
+                                    if k < self.sort_metas.len() && self.sort_metas[k].is_none() {
+                                        self.sort_metas[k] = Some(dom.clone());
+                                    }
+                                }
+                            }
+                        }
+                        for m in before..self.sort_metas.len() {
+                            if self.sort_metas[m].is_none() {
+                                self.sort_metas[m] = Some("ℝ".into());
+                            }
+                        }
+                        let f = self.norm(ctx, &f);
+                        match &f {
+                            Formula::Imp(prem, _) => match &**prem {
+                                Formula::Forall(x, sort, body) => match &**body {
+                                    Formula::Atom(q, us) if q == "=" && ring_eq(&self.unfold_terms(&us[0]), &self.unfold_terms(&us[1])) => {
+                                        let each = Proof::AllI { x: x.clone(), sort: sort.clone(), body: Proof::Ring { lhs: us[0].clone(), rhs: us[1].clone() }.b() };
+                                        Ok(Proof::ImpE(pf.b(), each.b()))
+                                    }
+                                    _ => self.err(format!("ring では「{e}」を示せない（各点の等式「{body}」が ring で示せない）")),
+                                },
+                                _ => self.err(format!("ring では「{e}」を示せない")),
+                            },
+                            _ => self.err(format!("ring では「{e}」を示せない")),
+                        }
+                    }
                     _ => self.err(format!("ring では「{e}」を示せない")),
                 }
             }
@@ -288,6 +324,17 @@ impl<'a> Checker<'a> {
                 let f = self.norm(ctx, &f);
                 if f == Formula::Bot {
                     return Ok(Proof::BotE(e, pf.b())); // ⊥除去
+                }
+                // 根拠が等式 x = y で、示すのも等式なら、代入として使う（EQ2(h, refl)。逆向きも）
+                let is_eq = |g: &Formula| matches!(g, Formula::Atom(r, ts) if r == "=" && ts.len() == 2);
+                if is_eq(&f) && is_eq(&e) && !e.has_meta() {
+                    let refl = Term::Var("refl".into());
+                    if let Ok(q) = self.eq2(ctx, &[p.clone(), refl.clone()], &e) {
+                        return Ok(q);
+                    }
+                    if let Ok(q) = self.eq2(ctx, &[Term::App("eq.symm".into(), vec![p.clone()]), refl], &e) {
+                        return Ok(q);
+                    }
                 }
                 let e = self.norm(ctx, &e);
                 self.err(format!("根拠 `{p}` が示すのは\n      {f}\n    だが、必要なのは\n      {e}"))
@@ -420,7 +467,14 @@ fn repl_t(p: &Term, g: &Term, x: &Term, y: &Term) -> bool {
     if p == g || (p == x && g == y) {
         return true;
     }
+    // x(t…) を y に置き換えると、y が λ なら β 簡約される（(n ↦ 0)(n) は 0）
+    if let Term::App(f, ps) = p {
+        if f == "@" && ps.first() == Some(x) && crate::syntax::apply_term(y, &ps[1..]) == *g {
+            return true;
+        }
+    }
     match (p, g) {
+        (Term::Lam(b1, t1), Term::Lam(b2, t2)) => b1 == b2 && repl_t(t1, t2, x, y),
         (Term::App(f, ps), Term::App(h, gs)) => {
             head_repl(f, h, x, y) && ps.len() == gs.len() && ps.iter().zip(gs).all(|(a, b)| repl_t(a, b, x, y))
         }
@@ -454,7 +508,15 @@ fn motive_t(p: &Term, g: &Term, x: &Term, y: &Term, z: &str) -> Term {
     if p == x && g == y {
         return Term::Var(z.to_string());
     }
+    if let Term::App(f, ps) = p {
+        if f == "@" && ps.first() == Some(x) && crate::syntax::apply_term(y, &ps[1..]) == *g {
+            let mut args = vec![Term::Var(z.to_string())];
+            args.extend(ps[1..].iter().cloned());
+            return Term::App("@".into(), args);
+        }
+    }
     match (p, g) {
+        (Term::Lam(b1, t1), Term::Lam(b2, t2)) if b1 == b2 => Term::Lam(b1.clone(), Box::new(motive_t(t1, t2, x, y, z))),
         (Term::App(f, ps), Term::App(h, gs)) => {
             let head = if f != h { z.to_string() } else { f.clone() };
             Term::App(head, ps.iter().zip(gs).map(|(a, b)| motive_t(a, b, x, y, z)).collect())

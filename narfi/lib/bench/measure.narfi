@@ -3,10 +3,8 @@
 -- 一覧と状態は docs/bench.md。
 
 import algebra.matrix
+import set.real
 
-def cup(A : ℝ → Prop, B : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ A ∨ x ∈ B}
-def diff(B : ℝ → Prop, A : ℝ → Prop) : ℝ → Prop := {x : ℝ | x ∈ B ∧ ¬(x ∈ A)}
-def disjoint(A : ℝ → Prop, B : ℝ → Prop) :⇔ ∀x:ℝ. x ∈ A ⇒ ¬(x ∈ B)
 
 ```
 ### 測度の単調性
@@ -16,24 +14,23 @@ def disjoint(A : ℝ → Prop, B : ℝ → Prop) :⇔ ∀x:ℝ. x ∈ A ⇒ ¬(x
 
 **Narfi での課題**
 - 構造：可測空間・$\sigma$ 加法族・測度がない。今は測度 $\mu$ を仮定に置いた関数とし、有限加法性と非負性を仮定に書く。
-- 記法：$A \cup B$、$B \setminus A$ に意味がない（集合と写像のファイルと同じ）。
-- 核：集合を返す定義の中身が開けない（集合と写像のファイルと同じ）。このファイルの証明は、ここが直れば通るはずのもの。
+- 集合の演算は `lib/set/real.narfi`（実数の集合だけ。型を問わない形は v3）。
 - 根拠：排中律 `em` に命題を引数として渡せない（`em(x ∈ A)` は構文エラー）。変数を単一化で決めさせて `em` とだけ書く。
 ```
 
 thm measure.mono :
   μ : (ℝ → Prop) → ℝ, A : ℝ → Prop, B : ℝ → Prop,
-  hadd : ∀S:ℝ → Prop. ∀T:ℝ → Prop. disjoint(S, T) ⇒ μ(cup(S, T)) = μ(S) + μ(T),
+  hadd : ∀S:ℝ → Prop. ∀T:ℝ → Prop. disjoint(S, T) ⇒ μ(S ∪ T) = μ(S) + μ(T),
   hpos : ∀S:ℝ → Prop. μ(S) ≥ 0,
   hAB : A ⊆ B
   ⊢ μ(A) ≤ μ(B)
 
-d : disjoint(A, diff(B, A))
+d : disjoint(A, B ∖ A)
   Fix x
     assume hx : x ∈ A
-      assume hy : x ∈ diff(B, A)
+      assume hy : x ∈ B ∖ A
         hy.right(hx)
-s1 : ∀x:ℝ. x ∈ B ⇒ x ∈ cup(A, diff(B, A))
+s1 : ∀x:ℝ. x ∈ B ⇒ x ∈ A ∪ (B ∖ A)
   Fix x
     assume hx : x ∈ B
       c : x ∈ A ∨ ¬(x ∈ A) by em
@@ -44,18 +41,18 @@ s1 : ∀x:ℝ. x ∈ B ⇒ x ∈ cup(A, diff(B, A))
         Case right q
           choose right
           hx, q
-s2 : ∀x:ℝ. x ∈ cup(A, diff(B, A)) ⇒ x ∈ B
+s2 : ∀x:ℝ. x ∈ A ∪ (B ∖ A) ⇒ x ∈ B
   Fix x
-    assume hx : x ∈ cup(A, diff(B, A))
+    assume hx : x ∈ A ∪ (B ∖ A)
       cases hx
         Case left p
           hAB(x, p)
         Case right q
           q.left
-e : B = cup(A, diff(B, A)) by setext(s1, s2)
-k : μ(cup(A, diff(B, A))) = μ(A) + μ(diff(B, A)) by hadd(A, diff(B, A), d)
-m : μ(diff(B, A)) ≥ 0 by hpos(diff(B, A))
+e : B = A ∪ (B ∖ A) by setext(s1, s2)
+k : μ(A ∪ (B ∖ A)) = μ(A) + μ(B ∖ A) by hadd(A, B ∖ A, d)
+m : μ(B ∖ A) ≥ 0 by hpos(B ∖ A)
 μ(A)
-  ≤ μ(A) + μ(diff(B, A))     by linarith
-  = μ(cup(A, diff(B, A)))    by k
+  ≤ μ(A) + μ(B ∖ A)     by linarith
+  = μ(A ∪ (B ∖ A))    by k
   = μ(B)                     by EQ2(e, refl)

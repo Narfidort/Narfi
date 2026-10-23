@@ -214,6 +214,11 @@ impl<'a> Checker<'a> {
 
     pub(super) fn unfold_head(&self, f: &Formula) -> Option<Formula> {
         match f {
+            // 集合への所属 S(x)：S が（項の定義を開くと）内包表記 {y | φ} なら φ[x/y]（kernel の unfold_head と同じ）
+            Formula::Atom(p, ts) if p == "@" && !ts.is_empty() => match self.unfold_terms(&ts[0]) {
+                Term::Set(ps, phi) if ps.len() == ts.len() - 1 => Some(crate::syntax::instantiate(&ps, &phi, &ts[1..])),
+                _ => None,
+            },
             Formula::Atom(p, ts) => {
                 let d = self.env.kernel.defs.get(p)?;
                 match &d.body {
@@ -262,22 +267,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// names に挙げた定義を、式の中のすべての位置で展開する
-    pub(super) fn unfold_named(&self, f: &Formula, names: &[String]) -> Formula {
-        let go = |g: &Formula| self.unfold_named(g, names);
-        match f {
-            Formula::Atom(p, _) if names.contains(p) => match self.unfold_head(f) {
-                Some(g) => go(&g),
-                None => f.clone(),
-            },
-            Formula::Atom(..) | Formula::Bot => f.clone(),
-            Formula::Imp(a, b) => Formula::Imp(Box::new(go(a)), Box::new(go(b))),
-            Formula::And(a, b) => Formula::And(Box::new(go(a)), Box::new(go(b))),
-            Formula::Or(a, b) => Formula::Or(Box::new(go(a)), Box::new(go(b))),
-            Formula::Forall(x, t, b) => Formula::Forall(x.clone(), t.clone(), Box::new(go(b))),
-            Formula::Exists(x, t, b) => Formula::Exists(x.clone(), t.clone(), Box::new(go(b))),
-        }
-    }
 
     /// A ∧ (B ∧ C) を [A, B, C] に。途中の定義も展開する。
     pub(super) fn split_and_w(&self, f: &Formula, n: usize) -> Option<Vec<Formula>> {
