@@ -6,7 +6,8 @@
 #   assets/katex/  数式表示（同梱の KaTeX）
 set -eu
 cd "$(dirname "$0")/.."
-cargo rustc --lib --profile web --target wasm32-unknown-unknown --crate-type cdylib
+# 検査は深く再帰するので、スタックを 32MB にする（既定は 1MB）
+cargo rustc --lib --profile web --target wasm32-unknown-unknown --crate-type cdylib -- -C link-arg=-zstack-size=33554432
 rm -rf site
 mkdir -p site/assets
 cp target/wasm32-unknown-unknown/web/narfi.wasm site/narfi.wasm

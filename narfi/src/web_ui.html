@@ -1717,7 +1717,9 @@ function parseAsciiToItems(str) {
       const word = str.substring(i, j);
       // conv_a・a_n のように「_ + 1文字」で終わる名前は添字にする（Prose の表示と同じ）
       const subm = word.match(/^([A-Za-z]+)_([A-Za-z0-9])$/);
-      if (WORD_TO_SYM[word]) {
+      // bot.elim・and.left のような . で区切った名前の一部は記号にしない
+      const dotted = (str[j] === "." && /[A-Za-z]/.test(str[j + 1] || "")) || str[i - 1] === ".";
+      if (WORD_TO_SYM[word] && !dotted) {
         const [asc, disp, cls] = WORD_TO_SYM[word];
         items.push(makeSym(asc, disp, cls));
       } else if (subm && !WORD_TO_SYM[subm[1]]) {

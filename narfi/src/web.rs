@@ -37,7 +37,8 @@ pub fn serve(port: u16, open_browser: bool, dir: Option<PathBuf>) -> std::io::Re
 
     for stream in listener.incoming() {
         if let Ok(stream) = stream {
-            std::thread::spawn(move || {
+            // 検査は深く再帰する（長い証明の証明項）。既定の 2MB では足りない
+            let _ = std::thread::Builder::new().stack_size(256 << 20).spawn(move || {
                 let _ = handle_client(stream);
             });
         }
