@@ -118,6 +118,16 @@ impl<'a> Checker<'a> {
 
     /// 根拠 p が示す命題と証明項
     pub(super) fn infer(&mut self, ctx: &Ctx, p: &Term) -> CResult<(Formula, Proof)> {
+        // h(a)(b) は h(a, b)（順に当てる）
+        if let Term::App(at, args) = p {
+            if at == "@" {
+                if let Some(Term::App(g, a0)) = args.first() {
+                    let mut all = a0.clone();
+                    all.extend(args[1..].iter().cloned());
+                    return self.infer(ctx, &Term::App(g.clone(), all));
+                }
+            }
+        }
         match p {
             Term::Var(n) | Term::App(n, _) if BUILTINS.contains(&n.as_str()) => self.err(format!(
                 "`{n}` は、示すべき命題が決まっている場所（goal・have・連鎖）でしか使えない"
@@ -360,7 +370,23 @@ impl<'a> Checker<'a> {
 
     /// 文脈の仮定と extra から、線形算術で e を示す証明項（kernel が検算する証明書つき）
     pub(super) fn linarith(&mut self, ctx: &Ctx, extra: Vec<(Formula, Proof)>, e: &Formula) -> CResult<Proof> {
+        self.linarith_in(ctx, extra, e, None)
+    }
+
+    /// `sort` は目標の型を外から決めるとき（⊥ を示すとき）
+    fn linarith_in(&mut self, ctx: &Ctx, extra: Vec<(Formula, Proof)>, e: &Formula, sort: Option<&str>) -> CResult<Proof> {
         let e = self.norm(ctx, e);
+        // 矛盾：どちらかの型の事実から 0 < 0 を導き、¬(0 < 0)（計算）に当てる
+        if e == Formula::Bot {
+            let zz = Formula::Atom("<".into(), vec![Term::Num(0), Term::Num(0)]);
+            for s in ["ℝ", "ℕ"] {
+                if let Ok(p) = self.linarith_in(ctx, extra.clone(), &zz, Some(s)) {
+                    let not = Formula::Imp(Box::new(zz.clone()), Box::new(Formula::Bot));
+                    return Ok(Proof::ImpE(Proof::Decide(not).b(), p.b()));
+                }
+            }
+            return self.err("linarith では矛盾を導けない（仮定の不等式から 0 < 0 が出ない）");
+        }
         let (rel, l, r) = match &e {
             Formula::Atom(rel, ts) if ts.len() == 2 && !e.has_meta() => (rel.clone(), ts[0].clone(), ts[1].clone()),
             _ => return self.err(format!("linarith では「{e}」を示せない（等式・不等式ではない）")),
@@ -372,7 +398,7 @@ impl<'a> Checker<'a> {
             let p2 = self.linarith(ctx, extra, &ge)?;
             return Ok(Proof::Antisymm(p1.b(), p2.b()));
         }
-        let goal_sort = self.term_sort(ctx, &l).or_else(|| self.term_sort(ctx, &r));
+        let goal_sort = sort.map(String::from).or_else(|| self.term_sort(ctx, &l)).or_else(|| self.term_sort(ctx, &r));
         let mut facts = Vec::new();
         for (f, p) in extra {
             let f = self.norm(ctx, &f);
@@ -584,7 +610,7 @@ impl Checker<'_> {
         self.pending = s.3;
         self.fresh = s.4;
         self.line = s.5;
-        self.snapshot = s.6;
+        self.set_snapshot(s.6 .0, s.6 .1);
         self.sorries.truncate(s.7);
     }
 

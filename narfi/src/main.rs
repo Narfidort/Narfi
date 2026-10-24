@@ -2,7 +2,7 @@
 
 use narfi::elab::{self, Report, check_module};
 use narfi::module::Loader;
-use narfi::{parser, prose, syntax, web};
+use narfi::{parser, prose, web};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -275,7 +275,7 @@ fn print_report(path: &str, r: &Report) {
             for l in e.msg.lines() {
                 println!("      {l}");
             }
-            if let Some(g) = &e.goal {
+            if let Some((g, _)) = e.goal_show() {
                 println!("      ── この行での状態 ──");
                 for c in &e.ctx {
                     println!("        {c}");
@@ -290,7 +290,7 @@ fn esc(s: &str) -> String {
     s.replace('\\', "\\\\").replace('\n', "\\n")
 }
 
-fn state(ctx: &[String], g: &syntax::Formula) -> String {
+fn state(ctx: &[String], g: &str) -> String {
     let mut s: Vec<String> = ctx.to_vec();
     s.push(format!("⊢ {g}"));
     s.join("\n")
@@ -299,8 +299,8 @@ fn state(ctx: &[String], g: &syntax::Formula) -> String {
 fn print_diag(r: &Report) {
     if let Some(e) = &r.err {
         let mut msg = format!("{}: {}", r.name, e.msg);
-        if let Some(g) = &e.goal {
-            msg.push_str(&format!("\n\nこの行での状態:\n{}", state(&e.ctx, g)));
+        if let Some((g, _)) = e.goal_show() {
+            msg.push_str(&format!("\n\nこの行での状態:\n{}", state(&e.ctx, &g)));
         }
         println!("ERROR\t{}\t{}", e.line, esc(&msg));
     }
@@ -308,7 +308,7 @@ fn print_diag(r: &Report) {
         println!(
             "SORRY\t{}\t{}",
             line,
-            esc(&format!("残っている goal:\n{}", state(ctx, g)))
+            esc(&format!("残っている goal:\n{}", state(ctx, &g.to_string())))
         );
     }
 }

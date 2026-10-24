@@ -83,7 +83,7 @@ impl<'a> Checker<'a> {
         self.line = d.line;
         self.record_step(d.line, 0, &format!("thm {}", d.name), &ctx, &Some(st.concl.clone()));
         if d.body.is_empty() {
-            self.snapshot = (ctx, Some(st.concl.clone()));
+            self.set_snapshot(ctx, Some(st.concl.clone()));
             return self.err("証明が書かれていない");
         }
         let p = self.block(ctx, &d.body, st.concl.clone(), d.line)?;
@@ -122,7 +122,7 @@ impl<'a> Checker<'a> {
     fn after_closed(&mut self, ctx: &Ctx, rest: &[Stmt], closed: &Formula) -> CResult<()> {
         for s in rest {
             self.line = s.line;
-            self.snapshot = (ctx.clone(), None);
+            self.set_snapshot(ctx.clone(), None);
             self.record_step(s.line, self.depth, &s.src, ctx, &None);
             match &s.kind {
                 StmtKind::Therefore(f) => self.therefore(ctx, f, &Some(closed.clone()))?,
@@ -175,13 +175,13 @@ impl<'a> Checker<'a> {
         let Some(s) = stmts.first() else {
             self.line = end_line;
             let g = self.zonk_f(&goal);
-            self.snapshot = (ctx, Some(g.clone()));
+            self.set_snapshot(ctx, Some(g.clone()));
             return self.err(format!("ブロックが終わったが、goal「{g}」がまだ示されていない"));
         };
         let rest = &stmts[1..];
         self.line = s.line;
         let g = self.zonk_f(&goal);
-        self.snapshot = (ctx.clone(), Some(g.clone()));
+        self.set_snapshot(ctx.clone(), Some(g.clone()));
         self.record_step(s.line, self.depth, &s.src, &ctx, &Some(g.clone()));
         if self.trace {
             let pad = "  ".repeat(self.depth - 1);

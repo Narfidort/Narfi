@@ -156,6 +156,16 @@ pub struct CheckError {
     pub fix: Option<String>,
     /// ほかの直し方の候補（同じく行末に足す）
     pub alts: Vec<String>,
+    /// 文脈の数列（goal を添字 a_n で表示するため）
+    pub seqs: BTreeSet<String>,
+}
+
+impl CheckError {
+    /// goal の表示（ふつうの形・LaTeX）
+    pub fn goal_show(&self) -> Option<(String, String)> {
+        let g = self.goal.as_ref()?;
+        Some(crate::syntax::with_sub_seqs(&self.seqs, || (g.to_string(), g.to_latex())))
+    }
 }
 
 type CResult<T> = Result<T, CheckError>;
@@ -215,6 +225,7 @@ impl<'a> Checker<'a> {
             ctx_latex: self.snapshot.0.show_latex(),
             fix: None,
             alts: vec![],
+            seqs: self.seq_vars(&self.snapshot.0),
         })
     }
 
@@ -231,6 +242,11 @@ impl<'a> Checker<'a> {
             terms: self.context_terms(ctx, goal),
             seqs: self.seq_vars(ctx).into_iter().collect(),
         });
+    }
+
+    fn set_snapshot(&mut self, ctx: Ctx, goal: Option<Formula>) {
+        crate::syntax::set_sub_seqs(self.seq_vars(&ctx));
+        self.snapshot = (ctx, goal);
     }
 
     fn seq_vars(&self, ctx: &Ctx) -> std::collections::BTreeSet<String> {
@@ -460,7 +476,7 @@ fn collect_warnings(stmts: &[crate::parser::Stmt], out: &mut Vec<(usize, String,
 }
 
 fn simple_err(line: usize, msg: String) -> CheckError {
-    CheckError { line, msg, goal: None, ctx: vec![], ctx_latex: vec![], fix: None, alts: vec![] }
+    CheckError { line, msg, goal: None, ctx: vec![], ctx_latex: vec![], fix: None, alts: vec![], seqs: BTreeSet::new() }
 }
 
 /// 定理・公理の文の型を推論して、kernel に渡せる形にする
@@ -546,6 +562,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
     }
     let mut ch = Checker::new(env, trace);
     let result = ch.check_decl(d, &st);
+    crate::syntax::set_sub_seqs(BTreeSet::new());
     report.sorries = std::mem::take(&mut ch.sorries);
     report.steps = std::mem::take(&mut ch.steps);
     let proof = match result {

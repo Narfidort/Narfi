@@ -24,3 +24,21 @@ thm r4 :
   |- 3 = 3
 
 all.elim(h, 3)
+
+thm r5 :
+  x : Real, h1 : x > 1, h2 : x < 0
+  |- false
+
+linarith
+
+thm r6 :
+  k : Nat, h : k < 0
+  |- false
+
+linarith
+
+thm r7 :
+  h : forall x:Nat. x = x => x = x
+  |- 3 = 3
+
+h(3)(refl)

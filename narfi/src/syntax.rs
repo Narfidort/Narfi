@@ -229,7 +229,11 @@ impl Notation {
                 TItem::Slot(k) => show(&slots[*k], if self.kind == NKind::Func && self.slot_at_edge(*k) { 5 } else { 0 }),
                 TItem::Binder(b) => ident(&binders[*b]),
             };
-            let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || out.ends_with('{') || piece.starts_with(')') || piece.starts_with(']') || piece == "}" || piece == "_" || out.is_empty();
+            // 括弧・添字と、くっつけて書く記号（‖x‖・|x|・x²）の内側には空白を入れない
+            let tight = |c: char| matches!(c, '‖' | '|' | '²' | '³' | '^');
+            let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || out.ends_with('{') || piece.starts_with(')') || piece.starts_with(']') || piece == "}" || piece == "_" || out.is_empty()
+                || out.chars().last().is_some_and(tight) || piece.chars().next().is_some_and(tight)
+                || piece.starts_with("\\Vert");
             if !glue {
                 out.push(' ');
             }
@@ -257,6 +261,8 @@ pub struct SyntaxTable {
     pub defs: HashMap<String, usize>,
     /// そのうち値を返す関数（項の定義・rec）
     pub fns: BTreeSet<String>,
+    /// ℕ を 1 つ受け取る const・def（添字で書ける列）
+    pub seq_globals: BTreeSet<String>,
     /// 定義の本体に現れた述語（あとから同じ名前を def して循環させないため）
     pub def_preds: BTreeSet<String>,
     /// typedef で作った型・定数
@@ -304,6 +310,9 @@ pub fn lit_latex(s: &str) -> String {
         "∩" => "\\cap".into(),
         "∖" => "\\setminus".into(),
         "∁" => "\\complement".into(),
+        "‖" => "\\Vert ".into(),
+        "²" => "^{2}".into(),
+        "³" => "^{3}".into(),
         "⇝" => "\\rightsquigarrow".into(),
         "≺" => "\\prec".into(),
         "≻" => "\\succ".into(),
@@ -381,6 +390,19 @@ fn applied_names(ts: &[Term]) -> BTreeSet<String> {
     }
     let mut out = BTreeSet::new();
     ts.iter().for_each(|t| go(t, &mut out));
+    out
+}
+
+/// 以後の表示で、seqs の適用を添字（a_n）で書く（検査中の文脈の数列）
+pub fn set_sub_seqs(seqs: BTreeSet<String>) {
+    SUB_SEQS.with(|s| *s.borrow_mut() = seqs);
+}
+
+/// seqs の適用を添字で書いて f を実行する
+pub fn with_sub_seqs<R>(seqs: &BTreeSet<String>, f: impl FnOnce() -> R) -> R {
+    let before = SUB_SEQS.with(|s| std::mem::replace(&mut *s.borrow_mut(), seqs.clone()));
+    let out = f();
+    SUB_SEQS.with(|s| *s.borrow_mut() = before);
     out
 }
 
@@ -828,7 +850,7 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                     let sep = if inner.starts_with('-') { " " } else { "" };
                     (format!("|{sep}{inner}|"), 5)
                 }
-                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) => match a {
+                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) || with_syntax(|t| t.seq_globals.contains(f)) => match a {
                     Term::Var(x) if x.chars().count() == 1 => (format!("{f}_{x}"), 5),
                     Term::Num(n) if *n < 10 => (format!("{f}_{n}"), 5),
                     _ => (format!("{f}_{{{}}}", show_term(a, 0)), 5),
@@ -923,6 +945,8 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
                 format!("{} ≠ {}", show_term(&ts[0], 0), show_term(&ts[1], 0)),
                 5,
             ),
+            // 関係は括弧に入れる（¬k < n は (¬k) < n と読める）
+            Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (format!("¬({})", show_formula(a, 0)), 4),
             _ => (format!("¬{}", show_formula(a, 4)), 4),
         },
         Formula::Imp(a, b) => (
@@ -1226,7 +1250,7 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 // 略記の表示の中の数列：a(n) を a_{n} と書く
-                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) => (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5),
+                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) || with_syntax(|t| t.seq_globals.contains(f)) => (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5),
                 ("max" | "min", [a, b]) => (format!("\\{f}\\{{{}, {}\\}}", show_term_latex(a, 0), show_term_latex(b, 0)), 5),
                 ("+" | "-", [a, b]) => (
                     format!("{} {} {}", show_term_latex(a, 1), f, show_term_latex(b, 2)),
@@ -1418,6 +1442,9 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
                 ),
                 5,
             ),
+            Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => {
+                (format!("\\lnot ({})", show_formula_latex(a, 0)), 4)
+            }
             _ => (format!("\\lnot {}", show_formula_latex(a, 4)), 4),
         },
         Formula::Imp(a, b) => (

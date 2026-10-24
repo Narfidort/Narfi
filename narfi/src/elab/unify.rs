@@ -238,6 +238,10 @@ impl<'a> Checker<'a> {
         match t {
             Term::App(f, args) => {
                 let args: Vec<Term> = args.iter().map(|a| self.unfold_terms(a)).collect();
+                // β：開いて λ になった頭を、残りの引数に当てる（kernel の unfold_terms と同じ）
+                if f == "@" && matches!(args.first(), Some(Term::Lam(..))) {
+                    return self.unfold_terms(&crate::syntax::apply_term(&args[0], &args[1..]));
+                }
                 match self.env.kernel.defs.get(f) {
                     Some(KDef { params, body: DefBody::Term(_, b) }) if params.len() == args.len() => {
                         let subs: Vec<(String, Term)> = params.iter().map(|(p, _)| p.clone()).zip(args).collect();

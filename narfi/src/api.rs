@@ -202,16 +202,9 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
 
     let err_json = match &r.err {
         Some(e) => {
-            let g_str = e
-                .goal
-                .as_ref()
-                .map(|g| json_str(&g.to_string()))
-                .unwrap_or_else(|| "null".into());
-            let gl_str = e
-                .goal
-                .as_ref()
-                .map(|g| json_str(&g.to_latex()))
-                .unwrap_or_else(|| "null".into());
+            let gs = e.goal_show();
+            let g_str = gs.as_ref().map(|g| json_str(&g.0)).unwrap_or_else(|| "null".into());
+            let gl_str = gs.as_ref().map(|g| json_str(&g.1)).unwrap_or_else(|| "null".into());
             format!(
                 "{{\"line\":{},\"msg\":{},\"msg_latex\":{},\"goal\":{},\"goal_latex\":{},\"ctx\":{},\"ctx_latex\":{},\"fix\":{},\"alts\":{}}}",
                 e.line,

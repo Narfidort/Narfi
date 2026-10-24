@@ -111,7 +111,7 @@ fn sequence_subscripts() {
 #[test]
 fn rule_names() {
     let out = run(&["tests/rules.narfi"]);
-    for n in ["r1", "r2", "r3", "r4"] {
+    for n in ["r1", "r2", "r3", "r4", "r5", "r6", "r7"] {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }

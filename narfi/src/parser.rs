@@ -506,6 +506,8 @@ const IMPLICIT_STOP: [&str; 14] =
 // ================================================================ 数列の添字：a_n は a(n)
 //
 // `a : ℕ → σ` と宣言された a について、`a_n`・`a_{n+1}`・`a_1`（a₁）を a(n)・a(n+1)・a(1) と読む。
+// σ は何でもよい（点の列 p : ℕ → (ℕ → ℝ) の p_i、関数の列 f_i）。添字のあとの引数 f_i(x) は f(i)(x)。
+// 列は、変数のほか、ℕ を 1 つ受け取る const・def（`const p : ℕ → …`、`def f(i : ℕ) : …`）。
 // その名前そのもの（a_n など）が宣言されているときは読み替えない。
 
 struct SubScope {
@@ -515,11 +517,16 @@ struct SubScope {
 
 impl SubScope {
     fn new(vars: &[(String, String)]) -> SubScope {
-        let is_seq = |t: &str| t.strip_prefix("ℕ →").is_some_and(|r| !r.contains('→') && !r.contains('×'));
-        SubScope {
-            seqs: vars.iter().filter(|(_, t)| is_seq(t)).map(|(x, _)| x.clone()).collect(),
-            declared: vars.iter().map(|(x, _)| x.clone()).collect(),
+        let is_seq = |t: &str| t.starts_with("ℕ →");
+        let declared: BTreeSet<String> = vars.iter().map(|(x, _)| x.clone()).collect();
+        let mut seqs: BTreeSet<String> = vars.iter().filter(|(_, t)| is_seq(t)).map(|(x, _)| x.clone()).collect();
+        // ファイルの const・def の列（同じ名前の変数があればそちらが優先）
+        for g in with_syntax(|t| t.seq_globals.clone()) {
+            if !declared.contains(&g) {
+                seqs.insert(g);
+            }
         }
+        SubScope { seqs, declared }
     }
 
     /// x が数列の添字の形なら (数列, 添字)
@@ -555,7 +562,11 @@ impl SubScope {
                 let args: Vec<Term> = args.iter().map(|a| self.term(a)).collect();
                 match f.strip_suffix('_') {
                     Some(b) if self.seqs.contains(b) && !self.declared.contains(f) => Term::App(b.to_string(), args),
-                    _ => Term::App(f.clone(), args),
+                    // f_i(x) は f(i)(x)
+                    _ => match self.split(f) {
+                        Some((b, i)) => crate::syntax::apply_term(&Term::App(b, vec![i]), &args),
+                        None => Term::App(f.clone(), args),
+                    },
                 }
             }
             Term::Lam(ps, b) => Term::Lam(ps.clone(), Box::new(self.term(b))),
@@ -567,7 +578,18 @@ impl SubScope {
     fn formula(&self, f: &Formula) -> Formula {
         let bx = |g: &Formula| Box::new(self.formula(g));
         match f {
-            Formula::Atom(r, ts) => Formula::Atom(r.clone(), ts.iter().map(|t| self.term(t)).collect()),
+            Formula::Atom(r, ts) => {
+                let ts: Vec<Term> = ts.iter().map(|t| self.term(t)).collect();
+                // 命題の列 P_n(x) は P(n)(x)
+                match self.split(r) {
+                    Some((b, i)) if !ts.is_empty() => {
+                        let mut args = vec![Term::App(b, vec![i])];
+                        args.extend(ts);
+                        Formula::Atom("@".into(), args)
+                    }
+                    _ => Formula::Atom(r.clone(), ts),
+                }
+            }
             Formula::Imp(a, b) => Formula::Imp(bx(a), bx(b)),
             Formula::And(a, b) => Formula::And(bx(a), bx(b)),
             Formula::Or(a, b) => Formula::Or(bx(a), bx(b)),
@@ -1716,7 +1738,12 @@ fn parse_item_at(
             p.expect_sym(":")?;
             let ty = p.ty()?;
             p.expect_end()?;
-            with_syntax(|t| t.consts.insert(name.clone()));
+            with_syntax(|t| {
+                t.consts.insert(name.clone());
+                if ty.starts_with("ℕ →") {
+                    t.seq_globals.insert(name.clone());
+                }
+            });
             items.push(Item::Const { name, ty, line: l.no });
             *i += 1;
             return Ok(());
@@ -2508,6 +2535,10 @@ fn register_def(d: &Def) -> PResult<()> {
         t.defs.insert(d.name.clone(), d.params.len());
         if d.term.is_some() {
             t.fns.insert(d.name.clone());
+            // ℕ を 1 つ受け取る値の定義は列：f_i は f(i)
+            if d.params.len() == 1 && d.params[0].1 == "ℕ" {
+                t.seq_globals.insert(d.name.clone());
+            }
         }
         t.def_preds.extend(preds);
         Ok(())
