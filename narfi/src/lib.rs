@@ -10,6 +10,7 @@ pub mod derivation;
 pub mod elab;
 pub mod kernel;
 pub mod locale;
+pub mod format;
 pub mod migrate;
 pub mod module;
 pub mod parser;

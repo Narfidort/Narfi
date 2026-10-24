@@ -85,6 +85,9 @@ fn handle(req: &str) -> String {
             if get("mode") == "migrate" {
                 return crate::migrate::migrate_json(&src, None);
             }
+            if get("mode") == "format" {
+                return format!("{{\"src\":{}}}", json_str(&crate::format::format_source(&src)));
+            }
             let out = match get("mode").as_str() {
                 "to_jp_sugar" | "to_ja" => crate::prose::convert_source_to_locale(&src, "ja"),
                 "to_en" => crate::prose::convert_source_to_locale(&src, "en"),

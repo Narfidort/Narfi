@@ -564,6 +564,18 @@ html:not(.web) [data-only="web"] { display: none !important; }
   padding: 0 4px;
   margin: 0 2px;
 }
+/* 検索・置換 */
+.find-bar { position: fixed; z-index: 50; background: var(--bg-panel, #161b22); border: 1px solid var(--border, #30363d); border-radius: 8px; padding: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 4px; }
+.find-row { display: flex; align-items: center; gap: 4px; }
+.find-bar input { width: 230px; background: var(--bg, #0d1117); color: var(--text); border: 1px solid var(--border, #30363d); border-radius: 5px; padding: 3px 7px; font: 13px "JetBrains Mono", Menlo, monospace; }
+.find-bar input.bad { border-color: var(--err); }
+.find-tog, .find-btn { background: transparent; color: var(--text-dim); border: 1px solid transparent; border-radius: 5px; padding: 2px 6px; cursor: pointer; font: 12px "JetBrains Mono", Menlo, monospace; }
+.find-tog.on { color: var(--accent); border-color: var(--accent); }
+.find-btn:hover, .find-tog:hover { background: var(--bg-active); }
+.find-btn.wide { min-width: 44px; }
+.find-count { color: var(--text-dim); font-size: 12px; min-width: 64px; text-align: center; }
+.mc-line.find-hit > .mc-gutter { background: rgba(210, 153, 34, 0.25); }
+.mc-line.find-cur { box-shadow: inset 2px 0 0 #d29922; }
 /* Matrix Node */
 .mc-matrix { display: inline-flex; align-items: stretch; vertical-align: middle; margin: 2px 3px; }
 .mc-mat-paren { width: 0.4em; border: 1.5px solid var(--text); user-select: none; }
@@ -1025,6 +1037,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <button class="menu-item" onclick="openFolder()" data-only="web"><span class="mi-label">Upload Folder…</span><span class="kbd"></span></button>
       <button class="menu-item" onclick="revealDir('workspace')" data-only="web"><span class="mi-label">Download All (.zip)</span><span class="kbd"></span></button>
       <div class="menu-sep"></div>
+      <button class="menu-item" onclick="formatCurrent()" title="空白を整える：連鎖の by をそろえる・, の後に空白・空行を詰める（証明の意味は変えない）"><span class="mi-label">Format Document</span><span class="kbd">⇧⌥F</span></button>
+      <button class="menu-item" onclick="findMenu()"><span class="mi-label">Find / Replace</span><span class="kbd">⌘F</span></button>
       <button class="menu-item" onclick="migrateCurrent()" title="v2.11〜v2.13 で消した書き方（→ のならば・have・max(a, b) など）を今の書き方に書き換える"><span class="mi-label">Update Old Syntax</span><span class="kbd"></span></button>
       <button class="menu-item" onclick="saveFile()"><span class="mi-label">Save</span><span class="kbd">⌘S</span></button>
       <button class="menu-item" onclick="saveAs()"><span class="mi-label">Save As…</span><span class="kbd">⇧⌘S</span></button>
@@ -1059,6 +1073,22 @@ html:not(.web) [data-only="web"] { display: none !important; }
   <!-- Left: Mathcha-style Inline Structured Editor -->
   <div id="editorSurface" class="editor-surface" tabindex="0"></div>
   <div id="acPopup" class="ac-popup"></div>
+  <div id="findBar" class="find-bar" style="display:none">
+    <div class="find-row">
+      <input id="findInput" placeholder="検索（ソースの文字列）" spellcheck="false">
+      <button id="findCase" class="find-tog" title="大文字と小文字を区別">Aa</button>
+      <button id="findRe" class="find-tog" title="正規表現">.*</button>
+      <span id="findCount" class="find-count"></span>
+      <button class="find-btn" onclick="findStep(-1)" title="前へ（⇧Enter）">↑</button>
+      <button class="find-btn" onclick="findStep(1)" title="次へ（Enter）">↓</button>
+      <button class="find-btn" onclick="closeFind()" title="閉じる（Esc）">×</button>
+    </div>
+    <div class="find-row">
+      <input id="replaceInput" placeholder="置換（正規表現なら $1 で参照）" spellcheck="false">
+      <button class="find-btn wide" onclick="replaceOne()" title="置換（Enter）">置換</button>
+      <button class="find-btn wide" onclick="replaceAll()" title="すべて置換（⌘Enter）">すべて</button>
+    </div>
+  </div>
 
   <!-- Draggable Splitter -->
   <div id="paneResizer" class="pane-resizer" title="Drag to resize / Double-click to collapse"></div>
@@ -2947,26 +2977,10 @@ function renderEditor() {
     }
   }
 
+  const marks = { errLines, sorryLines, warnLines };
   let html = "";
   for (let i = 0; i < docLines.length; i++) {
-    const lineNo = i + 1;
-    const ln = docLines[i];
-    const cls = ["mc-line"];
-    if (i === cursor.lineIdx) cls.push("active");
-    if (errLines.has(lineNo)) cls.push("has-err");
-    else if (sorryLines.has(lineNo)) cls.push("has-sorry");
-    else if (warnLines.has(lineNo)) cls.push("has-warn");
-
-    let guides = "";
-    for (let g = 0; g < ln.indent; g++) {
-      guides += `<span class="mc-indent-guide"></span>`;
-    }
-
-    html += `<div class="${cls.join(' ')}" data-line-idx="${i}">` +
-      `<div class="mc-gutter">${lineNo}</div>` +
-      `<div class="mc-indent-guides">${guides}</div>` +
-      `<div class="mc-content" data-line-idx="${i}">${fenceLines.has(i) && i !== cursor.lineIdx ? renderFenceLineHtml(ln, i) : renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
-      `</div>`;
+    html += editorLineHtml(i, marks);
     for (const g of (thereforeAfter.get(i) || []).reverse()) {
       html += `<div class="mc-line mc-therefore" title="このブロックで示したこと（表示だけ）"><div class="mc-gutter"></div>` +
         `<div class="mc-indent-guides">${'<span class="mc-indent-guide"></span>'.repeat(g.indent)}</div>` +
@@ -2976,6 +2990,56 @@ function renderEditor() {
   editorSurface.innerHTML = html;
   document.getElementById("curLineLabel").textContent = `Ln ${cursor.lineIdx + 1}`;
   document.getElementById("rawAsciiArea").value = serializeDocToAscii();
+  updateAutocomplete();
+  lastRender = { sigs: lineSigs(), check: lastCheckData, lens: lensLocale, sel: !!selAnchor, cursorLine: cursor.lineIdx, marks };
+}
+
+// 1 行分の HTML
+function editorLineHtml(i, marks) {
+  const lineNo = i + 1;
+  const ln = docLines[i];
+  const cls = ["mc-line"];
+  if (i === cursor.lineIdx) cls.push("active");
+  if (findState.open && findState.lines.has(i)) cls.push("find-hit");
+  if (findState.open && findState.cur >= 0 && findState.matches[findState.cur] && findState.matches[findState.cur].line === i) cls.push("find-cur");
+  if (marks.errLines.has(lineNo)) cls.push("has-err");
+  else if (marks.sorryLines.has(lineNo)) cls.push("has-sorry");
+  else if (marks.warnLines.has(lineNo)) cls.push("has-warn");
+  const guides = `<span class="mc-indent-guide"></span>`.repeat(ln.indent);
+  return `<div class="${cls.join(' ')}" data-line-idx="${i}">` +
+    `<div class="mc-gutter">${lineNo}</div>` +
+    `<div class="mc-indent-guides">${guides}</div>` +
+    `<div class="mc-content" data-line-idx="${i}">${fenceLines.has(i) && i !== cursor.lineIdx ? renderFenceLineHtml(ln, i) : renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
+    `</div>`;
+}
+
+function lineSigs() {
+  return docLines.map((l) => l.indent + "\u0000" + serializeSeqToAscii(l.rootSeq));
+}
+
+// カーソルが動いただけなら、前の行と今の行だけを描き直す（全体を描き直すと長いファイルで重い）
+let lastRender = null;
+function renderCursorMove() {
+  const lr = lastRender;
+  const sigs = lr ? lineSigs() : null;
+  if (!lr || selAnchor || lr.sel || lr.check !== lastCheckData || lr.lens !== lensLocale ||
+      sigs.length !== lr.sigs.length || sigs.some((x, k) => x !== lr.sigs[k])) {
+    renderEditor();
+    return;
+  }
+  pendingHypSuggestion = null;
+  selHL = selHighlights();
+  const lines = lr.cursorLine === cursor.lineIdx ? [cursor.lineIdx] : [lr.cursorLine, cursor.lineIdx];
+  for (const i of lines) {
+    if (i < 0 || i >= docLines.length) continue;
+    const el = editorSurface.querySelector(`.mc-line[data-line-idx="${i}"]`);
+    if (!el) { renderEditor(); return; }
+    const tmp = document.createElement("div");
+    tmp.innerHTML = editorLineHtml(i, lr.marks);
+    el.replaceWith(tmp.firstElementChild);
+  }
+  lr.cursorLine = cursor.lineIdx;
+  document.getElementById("curLineLabel").textContent = `Ln ${cursor.lineIdx + 1}`;
   updateAutocomplete();
 }
 
@@ -2993,7 +3057,7 @@ function setCursor(seqId, offset, lineIdx = null) {
   if (!seq) return;
   cursor.seqId = seqId;
   cursor.offset = Math.max(0, Math.min(offset, seq.items.length));
-  renderEditor();
+  renderCursorMove();
   renderGoalInspector();
 }
 
@@ -4108,6 +4172,7 @@ function onDocMutated(keepSel = false) {
 }
 
 function refreshAfterEdit() {
+  if (findState.open) findCompute();
   renderEditor();
   if (checkDebounce) clearTimeout(checkDebounce);
   checkDebounce = setTimeout(runCheckApi, 110);
@@ -4220,6 +4285,21 @@ function offerMigrate(data) {
     if (confirm("このファイルには、今は使わない古い書き方があります。今の書き方に直しますか？（File → Update Old Syntax でも直せます）")) migrateCurrent();
   }, 50);
 }
+
+// 整形（Rust の format_source）。空白だけが変わる
+async function formatCurrent() {
+  const src = serializeDocToAscii();
+  const resp = await fetch("/api/convert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ src, mode: "format" }) });
+  const r = await resp.json();
+  if (!r.src || r.src.trimEnd() === src.trimEnd()) { uiToast("整形済み"); return; }
+  const line = cursor.lineIdx;
+  await loadSrc(r.src, currentFilePath);
+  noteEdited();
+  const li = Math.min(line, docLines.length - 1);
+  setCursor(docLines[li].rootSeq.id, 0, li);
+  uiToast("整形しました");
+}
+function findMenu() { closeFileMenu && closeFileMenu(); openFind(false); }
 
 async function migrateCurrent() {
   const resp = await fetch("/api/convert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ src: serializeDocToAscii(), mode: "migrate", path: currentFilePath }) });
@@ -5981,6 +6061,16 @@ async function exportPdf() {
 // ---- ショートカット（エディタの外にフォーカスがあるときも効くように）
 
 document.addEventListener("keydown", (e) => {
+  if (!e.defaultPrevented && e.shiftKey && e.altKey && e.code === "KeyF" && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    formatCurrent();
+    return;
+  }
+  if (!e.defaultPrevented && (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === "f" || e.code === "KeyF" || e.key.toLowerCase() === "h")) {
+    e.preventDefault();
+    openFind(e.altKey || e.key.toLowerCase() === "h");
+    return;
+  }
   if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === "o") { e.preventDefault(); e.shiftKey ? openFolder() : openFileDialog(); }
@@ -5995,6 +6085,163 @@ window.addEventListener("beforeunload", (e) => {
     e.returnValue = "";
   }
 });
+
+// ---- 検索・置換（⌘F・⌘⌥F）：ソースの文字列（ファイルに保存される形）を行ごとに探す。正規表現も使える
+
+const findState = { open: false, matches: [], cur: -1, lines: new Set(), re: false, cs: false };
+// 打った Unicode の記号（ℝ・⇒ など）は、ソースの書き方（Real・=> など）に直して探す
+function findSourceForm(q) {
+  let out = q;
+  for (const c of COMMAND_DICT) {
+    if (c.kind === "sym" && c.display && c.ascii && c.display.length === 1 && c.display !== c.ascii && !/^[A-Za-z]$/.test(c.display)) {
+      out = out.split(c.display).join(c.ascii);
+    }
+  }
+  return out;
+}
+function findRegex(global) {
+  const q = document.getElementById("findInput").value;
+  if (!q) return null;
+  const flags = (findState.cs ? "" : "i") + (global ? "g" : "");
+  const src = findState.re ? q : findSourceForm(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(src, flags);
+}
+function lineText(i) { return serializeSeqToAscii(docLines[i].rootSeq); }
+function findCompute() {
+  const input = document.getElementById("findInput");
+  let re = null;
+  try { re = findRegex(true); input.classList.remove("bad"); } catch (_) { input.classList.add("bad"); }
+  findState.matches = [];
+  findState.lines = new Set();
+  if (re) {
+    for (let i = 0; i < docLines.length; i++) {
+      const t = lineText(i);
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(t)) !== null) {
+        findState.matches.push({ line: i, start: m.index, end: m.index + m[0].length });
+        findState.lines.add(i);
+        if (m[0].length === 0) re.lastIndex++;
+        if (findState.matches.length > 5000) break;
+      }
+    }
+  }
+  if (findState.cur >= findState.matches.length) findState.cur = findState.matches.length - 1;
+  updateFindCount();
+}
+function updateFindCount() {
+  const n = findState.matches.length;
+  document.getElementById("findCount").textContent = n === 0 ? (document.getElementById("findInput").value ? "なし" : "") : `${findState.cur + 1} / ${n}`;
+}
+// ソースの文字の位置 → 行の最上位の何番目の部品か
+function itemIndexAt(root, pos) {
+  let acc = 0;
+  for (let k = 0; k < root.items.length; k++) {
+    if (acc >= pos) return k;
+    acc += serializeSeqToAscii({ items: [root.items[k]] }).length;
+  }
+  return root.items.length;
+}
+function findGo(k) {
+  const m = findState.matches[k];
+  if (!m) return;
+  findState.cur = k;
+  const root = docLines[m.line].rootSeq;
+  const a = itemIndexAt(root, m.start), b = itemIndexAt(root, m.end);
+  cursor = { lineIdx: m.line, seqId: root.id, offset: b };
+  selAnchor = a !== b ? { seqId: root.id, offset: a, lineIdx: m.line } : null;
+  renderEditor();
+  renderGoalInspector();
+  const el = editorSurface.querySelector(`.mc-line[data-line-idx="${m.line}"]`);
+  if (el) el.scrollIntoView({ block: "center" });
+  updateFindCount();
+}
+function findStep(dir) {
+  const n = findState.matches.length;
+  if (n === 0) return;
+  // 今のカーソルより後（前）の最初の一致へ
+  if (findState.cur < 0) {
+    let k = findState.matches.findIndex((m) => m.line > cursor.lineIdx || (m.line === cursor.lineIdx && dir > 0));
+    if (dir < 0) { k = -1; for (let j = n - 1; j >= 0; j--) if (findState.matches[j].line < cursor.lineIdx) { k = j; break; } }
+    findGo(k < 0 ? (dir > 0 ? 0 : n - 1) : k);
+  } else {
+    findGo((findState.cur + dir + n) % n);
+  }
+}
+function openFind(withReplace) {
+  const bar = document.getElementById("findBar");
+  const r = editorSurface.getBoundingClientRect();
+  bar.style.top = (r.top + 8) + "px";
+  bar.style.left = Math.max(r.left + 8, r.right - 420) + "px";
+  bar.style.display = "flex";
+  findState.open = true;
+  const input = document.getElementById("findInput");
+  input.focus();
+  input.select();
+  if (withReplace) document.getElementById("replaceInput").focus();
+  findCompute();
+  renderEditor();
+}
+function closeFind() {
+  document.getElementById("findBar").style.display = "none";
+  findState.open = false;
+  findState.cur = -1;
+  renderEditor();
+  editorSurface.focus();
+}
+// 1 行のソースを置き換える（読み直して部品にする）
+function setLineText(i, text) {
+  const root = docLines[i].rootSeq;
+  const items = parseAsciiToItems(text);
+  for (const it of items) it.parentSeq = root;
+  root.items = items;
+}
+function replaceOne() {
+  const m = findState.matches[findState.cur];
+  if (!m) { findStep(1); return; }
+  const t = lineText(m.line);
+  const rep = document.getElementById("replaceInput").value;
+  let piece = t.slice(m.start, m.end);
+  try {
+    const re = findRegex(false);
+    piece = findState.re ? piece.replace(re, rep) : rep;
+  } catch (_) { return; }
+  setLineText(m.line, t.slice(0, m.start) + piece + t.slice(m.end));
+  const keep = findState.cur;
+  onDocMutated();
+  findCompute();
+  if (findState.matches.length) findGo(Math.min(keep, findState.matches.length - 1));
+}
+function replaceAll() {
+  let re;
+  try { re = findRegex(true); } catch (_) { return; }
+  if (!re) return;
+  const rep = document.getElementById("replaceInput").value;
+  let n = 0;
+  for (let i = 0; i < docLines.length; i++) {
+    const t = lineText(i);
+    re.lastIndex = 0;
+    const u = findState.re ? t.replace(re, rep) : t.replace(re, () => rep);
+    if (u !== t) { setLineText(i, u); n++; }
+  }
+  if (n) onDocMutated();
+  findState.cur = -1;
+  findCompute();
+  renderEditor();
+  uiToast(n ? `${n} 行を置換しました` : "一致なし");
+}
+document.getElementById("findInput").addEventListener("input", () => { findState.cur = -1; findCompute(); renderEditor(); });
+for (const id of ["findInput", "replaceInput"]) {
+  document.getElementById(id).addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") { e.preventDefault(); closeFind(); }
+    else if (e.key === "Enter" && id === "findInput") { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); }
+    else if (e.key === "Enter" && id === "replaceInput") { e.preventDefault(); (e.metaKey || e.ctrlKey) ? replaceAll() : replaceOne(); }
+    else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === "f")) { e.preventDefault(); openFind(e.altKey); }
+  });
+}
+document.getElementById("findCase").onclick = (e) => { findState.cs = !findState.cs; e.currentTarget.classList.toggle("on", findState.cs); findState.cur = -1; findCompute(); renderEditor(); };
+document.getElementById("findRe").onclick = (e) => { findState.re = !findState.re; e.currentTarget.classList.toggle("on", findState.re); findState.cur = -1; findCompute(); renderEditor(); };
 
 // ---- 起動：前回のファイル → 下書き → 例の順に開く
 
