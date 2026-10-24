@@ -1,4 +1,4 @@
-"""docs/v3/*.md を、数式（KaTeX）と表を描画した HTML にする（確認用）。使い方: python3 render.py 名前.md"""
+"""docs/ の *.md を、数式（KaTeX）と表を描画した HTML にする（確認用）。使い方: python3 render.py 名前.md"""
 import html, re, sys, pathlib
 
 def inline(s):
@@ -23,6 +23,11 @@ def convert(md):
             j = i + 1
             while j < len(lines) and not lines[j].startswith("```"): j += 1
             out.append("<pre>" + html.escape("\n".join(lines[i + 1:j])) + "</pre>"); i = j + 1; continue
+        if l.strip().startswith("$$"):
+            j, buf = i, l.strip()
+            while not (len(buf) > 2 and buf.endswith("$$")) and j + 1 < len(lines):
+                j += 1; buf += " " + lines[j].strip()
+            out.append(f'<div class="m d">{html.escape(buf[2:-2])}</div>'); i = j + 1; continue
         m = re.match(r"^(#{1,4})\s+(.*)", l)
         if m:
             n = len(m.group(1)); out.append(f"<h{n}>{inline(m.group(2))}</h{n}>"); i += 1; continue
@@ -50,7 +55,9 @@ def convert(md):
     return "\n".join(out)
 
 src = pathlib.Path(sys.argv[1]); body = convert(src.read_text())
-katex = "../../narfi/site/assets/katex"
+import os
+root = pathlib.Path(__file__).resolve().parents[2]
+katex = os.path.relpath(root / "narfi/site/assets/katex", src.resolve().parent)
 page = f"""<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>{src.stem}</title>
 <link rel="stylesheet" href="{katex}/katex.min.css"><script src="{katex}/katex.min.js"></script>
 <style>body{{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#0d1117;color:#e6edf3;max-width:1050px;margin:28px auto;padding:0 24px;line-height:1.75;font-size:15px}}
@@ -59,5 +66,5 @@ code{{font-family:"JetBrains Mono",Menlo,monospace;font-size:13px;background:#16
 pre{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;font-family:"JetBrains Mono",Menlo,monospace;font-size:13.5px;line-height:1.6;overflow-x:auto;color:#e6edf3}}
 table{{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}}th,td{{border:1px solid #30363d;padding:6px 9px;vertical-align:top;text-align:left}}th{{background:#161b22;color:#8b949e;font-weight:500}}
 a{{color:#58a6ff}}li{{margin:3px 0}}</style></head><body>{body}
-<script>document.querySelectorAll('.m').forEach(e=>{{try{{katex.render(e.textContent,e,{{throwOnError:false}})}}catch(_){{}}}})</script></body></html>"""
+<script>document.querySelectorAll('.m').forEach(e=>{{try{{katex.render(e.textContent,e,{{throwOnError:false,displayMode:e.classList.contains('d')}})}}catch(_){{}}}})</script></body></html>"""
 dst = src.with_suffix(".html"); dst.write_text(page); print(dst)
