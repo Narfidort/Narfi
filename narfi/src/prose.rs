@@ -73,6 +73,97 @@ fn sort_decl_latex(t: &str) -> String {
     }
 }
 
+/// 長い数式を、括弧の外の ` + `・` - `・` = `・関係の記号の手前で折る（印刷・Prose で右にはみ出さないように）。
+/// 1 行がおよそ width 文字（LaTeX のソースの文字数）を超えたら、次の候補で折る
+pub fn break_math(s: &str, width: usize) -> Vec<String> {
+    const OPS: [&str; 14] = [" + ", " - ", " = ", " \\leq ", " \\geq ", " \\neq ", " < ", " > ", " \\cup ", " \\cap ", " \\setminus ", " \\wedge ", " \\vee ", " \\Rightarrow "];
+    let b = s.as_bytes();
+    let mut depth = 0i32;
+    let mut pieces: Vec<String> = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+    while i < b.len() {
+        if s[i..].starts_with("\\left") || s[i..].starts_with("\\begin") {
+            depth += 1;
+            i += 5;
+            continue;
+        }
+        if s[i..].starts_with("\\right") || s[i..].starts_with("\\end") {
+            depth -= 1;
+            i += 4;
+            continue;
+        }
+        match b[i] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 && s[start..i].chars().count() >= width {
+            if let Some(op) = OPS.iter().find(|op| s[i..].starts_with(**op)) {
+                pieces.push(s[start..i].trim().to_string());
+                start = i + 1; // 先頭の空白は落とし、記号から次の行を始める
+                i += op.len();
+                continue;
+            }
+        }
+        i += s[i..].chars().next().map_or(1, |c| c.len_utf8());
+    }
+    pieces.push(s[start..].trim().to_string());
+    pieces
+}
+
+/// 文中の長い数式 $…$ は、\left( \right) をふつうの括弧にする（\left…\right の中では LaTeX が行を折れず、右にはみ出す）
+pub fn relax_long_inline(s: &str) -> String {
+    let mut out = String::new();
+    let mut rest = s;
+    while let Some(i) = rest.find('$') {
+        out.push_str(&rest[..i]);
+        let after = &rest[i..];
+        if after.starts_with("$$") {
+            // 別行の数式はそのまま
+            match after[2..].find("$$") {
+                Some(j) => {
+                    out.push_str(&after[..j + 4]);
+                    rest = &after[j + 4..];
+                }
+                None => {
+                    out.push_str(after);
+                    rest = "";
+                }
+            }
+            continue;
+        }
+        match after[1..].find('$') {
+            Some(j) => {
+                let inner = &after[1..j + 1];
+                if inner.chars().count() > 120 {
+                    out.push('$');
+                    out.push_str(&inner.replace("\\left(", "(").replace("\\right)", ")"));
+                    out.push('$');
+                } else {
+                    out.push_str(&after[..j + 2]);
+                }
+                rest = &after[j + 2..];
+            }
+            None => {
+                out.push_str(after);
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// aligned の行にする：最初の行はそのまま、続きの行は字下げして書く
+fn aligned_rows(first_prefix: &str, expr: &str, cont_prefix: &str, width: usize) -> Vec<String> {
+    let ps = break_math(expr, width);
+    ps.iter()
+        .enumerate()
+        .map(|(k, p)| if k == 0 { format!("{first_prefix}{p}") } else { format!("{cont_prefix}{p}") })
+        .collect()
+}
+
 pub fn decl_header_latex(d: &Decl) -> String {
     crate::syntax::with_sub_seqs(&crate::api::decl_seqs(d), || decl_header_latex_in(d))
 }
@@ -94,13 +185,14 @@ fn decl_header_latex_in(d: &Decl) -> String {
     } else {
         let mut lines = Vec::new();
         for (i, p) in parts.iter().enumerate() {
-            if i + 1 == parts.len() {
-                lines.push(format!("&{}", p));
-            } else {
-                lines.push(format!("&{},", p));
+            let tail = if i + 1 == parts.len() { "" } else { "," };
+            let mut rows = aligned_rows("&", p, "&\\qquad ", 90);
+            if let Some(last) = rows.last_mut() {
+                last.push_str(tail);
             }
+            lines.extend(rows);
         }
-        lines.push(format!("&\\quad\\vdash {}", d.concl.to_latex()));
+        lines.extend(aligned_rows("&\\quad\\vdash ", &d.concl.to_latex(), "&\\qquad\\quad ", 90));
         format!("\\begin{{aligned}}\n{}\n\\end{{aligned}}", lines.join(" \\\\\n"))
     }
 }
@@ -283,7 +375,25 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                     let rel = rel_to_latex(&st.rel);
                     let rhs = st.term.to_latex();
                     let j = just_to_latex(&st.just);
-                    lines.push(format!("{lhs} &{rel} {rhs} && \\left(\\because {j}\\right)"));
+                    // 長い式は折る。根拠の注は最後の行の右に付ける
+                    let lhs_rows = if lhs.is_empty() { vec![String::new()] } else { break_math(&lhs, 70) };
+                    let (head, last_l) = lhs_rows.split_at(lhs_rows.len() - 1);
+                    for h in head {
+                        lines.push(format!("{h} &"));
+                    }
+                    let mut rows = aligned_rows(&format!("{} &{rel} ", last_l[0]), &rhs, "&\\quad ", 70);
+                    let last_len = rows.last().map_or(0, |r| r.chars().count());
+                    if last_len + j.chars().count() <= 90 {
+                        // 短ければ、根拠の注は最後の行の右に付ける
+                        if let Some(last) = rows.last_mut() {
+                            last.push_str(&format!(" && \\left(\\because {j}\\right)"));
+                        }
+                        lines.extend(rows);
+                    } else {
+                        // 長ければ、次の行に字下げして書く（長い根拠はそこでも折る）
+                        lines.extend(rows);
+                        lines.extend(aligned_rows("&\\qquad \\left(\\because ", &format!("{j}\\right)"), "&\\qquad\\quad ", 80));
+                    }
                 }
                 let math = format!("$$\\begin{{aligned}}\n{}\n\\end{{aligned}}$$", lines.join(" \\\\\n"));
                 out.push(ProseBlock { depth, text: math });
@@ -332,7 +442,7 @@ fn decl_to_latex_env_in(d: &Decl, steps: &[StepTrace]) -> String {
     for b in prose {
         let indent = "  ".repeat(b.depth);
         // 証明の終わりの印は proof 環境の □ に任せる
-        let line = b.text.replace("**", "").replace("$\\blacksquare$", "");
+        let line = relax_long_inline(&b.text.replace("**", "").replace("$\\blacksquare$", ""));
         body.push_str(&format!("{indent}{line}\n\n"));
     }
     format!(
@@ -737,4 +847,22 @@ pub fn to_ascii_code(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod break_tests {
+    use super::break_math;
+
+    #[test]
+    fn breaks_long_math_outside_brackets_only() {
+        let long = "a + b + \\left(c + d + e\\right) + ffffffffffffffffffffffffffffff + gggggggggggggggggggggggggggggggggggggg + h";
+        let ps = break_math(long, 40);
+        assert!(ps.len() >= 2, "{ps:?}");
+        // 括弧の中は折らない
+        assert!(ps.iter().any(|p| p.contains("\\left(c + d + e\\right)")), "{ps:?}");
+        // 折っても中身は変わらない（記号から次の行が始まる）
+        assert_eq!(ps.join(" "), long);
+        // 短い式は折らない
+        assert_eq!(break_math("a + b", 40), vec!["a + b".to_string()]);
+    }
 }

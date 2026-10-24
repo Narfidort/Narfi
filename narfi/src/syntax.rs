@@ -342,6 +342,8 @@ pub fn lit_latex(s: &str) -> String {
         "∖" => "\\setminus".into(),
         "∁" => "\\complement".into(),
         "‖" => "\\Vert ".into(),
+        "⟨" => "\\langle ".into(),
+        "⟩" => "\\rangle ".into(),
         "²" => "^{2}".into(),
         "³" => "^{3}".into(),
         "⇝" => "\\rightsquigarrow".into(),

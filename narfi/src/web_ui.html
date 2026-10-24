@@ -4250,7 +4250,7 @@ function renderInlineMarkdownMath(md) {
   let out = "";
   for (let i = 0; i < dispParts.length; i++) {
     if (i % 2 === 1) {
-      out += `<div style="margin:6px 0;overflow-x:auto;">${renderKatex(dispParts[i], true)}</div>`;
+      out += `<div class="fit-math" style="margin:6px 0;overflow-x:auto;">${renderKatex(dispParts[i], true)}</div>`;
     } else {
       const inParts = dispParts[i].split(/\$([^\$]+?)\$/g);
       for (let j = 0; j < inParts.length; j++) {
@@ -4641,7 +4641,7 @@ function renderProseTab(data) {
     } else {
       const d = it.decl;
       if (d.is_axiom) {
-        html += `<div class="prose-thm" style="border-left-color:var(--text-dim);overflow-x:auto;"><strong>公理 ${escHtml(d.name)}</strong>: ${renderKatex(d.header_latex, false)}</div>`;
+        html += `<div class="prose-thm" style="border-left-color:var(--text-dim);"><strong>公理 ${escHtml(d.name)}</strong>: <span class="fit-math" style="display:block;overflow-x:auto;">${renderKatex(d.header_latex, false)}</span></div>`;
       } else if (d.error && /^構文エラー/.test(d.error.msg)) {
         // 読めなかった定理：名前とエラーだけ（ほかの定理はそのまま出す）
         html += `<div class="prose-thm prose-broken"><strong>定理 ${escHtml(d.name)}</strong></div>`;
@@ -4649,7 +4649,7 @@ function renderProseTab(data) {
       } else {
         const thmWord = prefLang === "en" ? "Theorem" : "定理";
         const title = d.display_name ? `${escHtml(d.display_name)} <span style="color:var(--text-faint);font-weight:400">${escHtml(d.name)}</span>` : escHtml(d.name);
-        html += `<div class="prose-thm"><div><strong>${thmWord} ${title}</strong></div><div style="margin-top:6px;overflow-x:auto;">${renderKatex(d.header_latex, false)}</div></div>`;
+        html += `<div class="prose-thm"><div><strong>${thmWord} ${title}</strong></div><div class="fit-math" style="margin-top:6px;overflow-x:auto;">${renderKatex(d.header_latex, false)}</div></div>`;
         html += `<div class="prose-proof">`;
         for (const p of (d.prose || [])) {
           html += `<div style="padding-left:${p.depth * 16}px;margin:8px 0;line-height:1.75;">${renderInlineMarkdownMath(p.text)}</div>`;
@@ -4660,8 +4660,28 @@ function renderProseTab(data) {
       }
     }
   }
-  document.getElementById("proseDocArea").innerHTML = html;
+  const area = document.getElementById("proseDocArea");
+  area.innerHTML = html;
+  fitMathIn(area);
 }
+
+// 幅からはみ出す数式は、縮めて収める（下限 0.55 倍。それでも入らなければ横スクロール）。印刷でも同じ
+function fitMathIn(root, minScale = 0.55) {
+  if (!root || !root.querySelectorAll) return;
+  for (const el of root.querySelectorAll(".fit-math")) {
+    el.style.zoom = "";
+    const avail = el.clientWidth, need = el.scrollWidth;
+    if (avail > 0 && need > avail + 1) el.style.zoom = Math.max(minScale, avail / need).toFixed(3);
+  }
+}
+(() => {
+  // Prose タブを開いたときや、ウィンドウ・ペインの幅が変わったときに合わせ直す
+  const area = document.getElementById("proseDocArea");
+  if (area && typeof ResizeObserver !== "undefined") {
+    let w = 0;
+    new ResizeObserver(() => { if (area.clientWidth !== w) { w = area.clientWidth; fitMathIn(area); } }).observe(area);
+  }
+})();
 
 function renderLatexTab(data) {
   const decls = data.decls || [];
@@ -6047,10 +6067,14 @@ function printDocument() {
   .prose-thm { border-left: 3px solid #333; padding: 4px 0 4px 12px; margin: 22px 0 8px 0; break-inside: avoid; }
   .prose-proof { margin: 0 0 18px 0; }
   .katex-display { overflow-x: visible; }
+  .fit-math { overflow: visible !important; }
   @page { size: A4; margin: 18mm; }
   @media print { body { margin: 0 auto; } }
 </style></head><body><h1>${escHtml(title)}</h1>${body}
-<script>window.onload = () => setTimeout(() => window.print(), 400);<\/script>
+<script>
+${fitMathIn.toString()}
+window.onload = () => setTimeout(() => { fitMathIn(document.body, 0.4); window.print(); }, 400);
+<\/script>
 </body></html>`);
   w.document.close();
 }
