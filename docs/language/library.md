@@ -13,7 +13,7 @@
 | `algebra/nat_order.narfi` | ℕ の順序の基本：`nat.lt_succ`（k < m + 1 ⇒ k < m ∨ k = m）・`nat.not_lt`（¬(a < b) ⇒ b ≤ a） | それ自体が公理（仮置き） |
 | `algebra/sum.narfi` | 有限和 `sum(a, n)` = Σ_{k<n} a_k（rec）、線形性、`sum.zeros`・`sum.cong`（項ごとに等しい）・`sum.swap`（二重和の交換）・`sum.single`（1 項だけ残る）・`sum.cat`（分割）・`sum.one` | `nat_order` |
 | `algebra/delta.narfi` | 排中律 `em`、`nat.cases`、クロネッカーのデルタ `delta(i, j)`、δ を掛けた和 `dsum.pick`・`dsum.out`・`dsum.shift`・`dsum.below` | `nat_order` |
-| `algebra/matrix.narfi` | 行列の和・積・トレース・2×2 の行列式、`[[…]]` の行列、2×2 のケイリー・ハミルトン、分配法則 | なし |
+| `algebra/matrix.narfi` | 行列の和・積・トレース・2×2 の行列式、`[[…]]` の行列（どの大きさでも。成分 `matent`）、2×2 のケイリー・ハミルトン、分配法則 | なし |
 | `linear/dependence.narfi` | `lin.dep`：未知数が方程式より多い同次連立 1 次方程式には自明でない解がある（掃き出しの帰納法） | `mul.cancel`（xy = 0, y ≠ 0 ⇒ x = 0。仮置き）・`nat_order` |
 | `linear/dimension.narfi` | `dim.bound`：1 次独立な f_0, …, f_N が m 個の関数の 1 次結合なら N + 1 ≤ m | 同上 |
 | `linear/span.narfi` | `cdim(f, N, m)`（m 個の関数の 1 次結合に入る）と `cdim.bound`・`cdim.add`・`cdim.cong`・`cdim.resize` | 同上 |

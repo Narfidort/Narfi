@@ -133,6 +133,43 @@ Fix A, B, C, n, i, j
 
 -- ---------------------------------------------------------------- 行列の書き方 [[a, b], [c, d]]
 
+-- 一般の大きさの行列 [[…], …] の成分：x·δ(i, r)·δ(j, c)（[[…]] はこの和の λ になる。2×2・3×3 は下の mat2・mat3）
+def matent(x : ℝ, i : ℕ, j : ℕ, r : ℕ, c : ℕ) : ℝ := x * delta(i, r) * delta(j, c)
+
+thm matent.on :
+  ⊢ ∀x:ℝ. ∀r:ℕ. ∀c:ℕ. matent(x, r, c, r, c) = x
+
+Fix x, r, c
+  dr : delta(r, r) = 1 by delta.same(r)
+  dc : delta(c, c) = 1 by delta.same(c)
+  matent(x, r, c, r, c)
+    = x * delta(r, r) * delta(c, c)   by refl
+    = x * 1 * delta(c, c)             by dr
+    = x * 1 * 1                       by dc
+    = x                               by ring
+
+thm matent.off_row :
+  ⊢ ∀x:ℝ. ∀i:ℕ. ∀j:ℕ. ∀r:ℕ. ∀c:ℕ. ¬(i = r) ⇒ matent(x, i, j, r, c) = 0
+
+Fix x, i, j, r, c
+  assume ne : ¬(i = r)
+    dz : delta(i, r) = 0 by delta.diff(i, r, ne)
+    matent(x, i, j, r, c)
+      = x * delta(i, r) * delta(j, c)   by refl
+      = x * 0 * delta(j, c)             by dz
+      = 0                               by ring
+
+thm matent.off_col :
+  ⊢ ∀x:ℝ. ∀i:ℕ. ∀j:ℕ. ∀r:ℕ. ∀c:ℕ. ¬(j = c) ⇒ matent(x, i, j, r, c) = 0
+
+Fix x, i, j, r, c
+  assume ne : ¬(j = c)
+    dz : delta(j, c) = 0 by delta.diff(j, c, ne)
+    matent(x, i, j, r, c)
+      = x * delta(i, r) * delta(j, c)   by refl
+      = x * delta(i, r) * 0             by dz
+      = 0                               by ring
+
 -- 2×2 の行列 [[…], …]（成分は δ で選ぶ）
 def mat2(a00 : ℝ, a01 : ℝ, a10 : ℝ, a11 : ℝ) : ℕ × ℕ → ℝ := ((i, j) : ℕ × ℕ ↦ a00 * delta(i, 0) * delta(j, 0) + a01 * delta(i, 0) * delta(j, 1) + a10 * delta(i, 1) * delta(j, 0) + a11 * delta(i, 1) * delta(j, 1))
 

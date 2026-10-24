@@ -148,6 +148,16 @@ fn matrices() {
     }
 }
 
+/// 一般の大きさの行列 [[…], …]（matent の和の λ）：2×3 の成分が求まり、表示は [[…]] に戻る
+#[test]
+fn general_matrices() {
+    let out = run(&["tests/matrix_general.narfi"]);
+    assert!(out.contains("✓ m23.entry"), "{out}");
+    let conv = Command::new(env!("CARGO_BIN_EXE_narfi")).args(["convert", "--std", "tests/matrix_general.narfi"]).output().unwrap();
+    let conv = String::from_utf8(conv.stdout).unwrap();
+    assert!(conv.contains("[[1, 2, 3], [4, 5, 6]]"), "{conv}");
+}
+
 /// 事実の行（v2.6）：根拠がなければエラーにし、見つかった根拠を help に出す。消した書き方（have など）は、今の書き方を案内するエラー
 #[test]
 fn fact_lines_and_old_forms() {

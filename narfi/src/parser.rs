@@ -1460,7 +1460,14 @@ impl P {
                     self.expect_sym(",")?;
                 }
             }
-            t = crate::syntax::apply_term(&t, &args);
+            // 行列 [[…]](i, j) は書いた形のまま残す（β 簡約は検査器がする）
+            t = if crate::syntax::is_matrix_lam(&t) {
+                let mut v = vec![t];
+                v.extend(args);
+                Term::App("@".into(), v)
+            } else {
+                crate::syntax::apply_term(&t, &args)
+            };
         }
         Ok(t)
     }
@@ -1539,7 +1546,7 @@ impl P {
                 self.expect_sym("|")?;
                 Ok(Term::App("abs".into(), vec![t]))
             }
-            // 行列 [[a, b], [c, d]]（2×2・3×3。lib/algebra/matrix の mat2・mat3）
+            // 行列 [[a, b], [c, d]]（2×2・3×3 は lib/algebra/matrix の mat2・mat3、それ以外は δ で成分を選ぶ λ）
             Some(Tok::Sym(s)) if s == "[" => {
                 self.pos += 1;
                 let mut rows: Vec<Vec<Term>> = Vec::new();
@@ -1556,11 +1563,10 @@ impl P {
                     }
                 }
                 self.expect_sym("]")?;
-                let n = rows.len();
-                if !(n == 2 || n == 3) || rows.iter().any(|r| r.len() != n) {
-                    return self.err("行列は 2×2 か 3×3 の [[…], …] で書く（いまはこの 2 つだけ）".to_string());
+                if rows.iter().any(|r| r.len() != rows[0].len()) {
+                    return self.err("行列の各行の成分の数をそろえる（[[a, b], [c, d]]）".to_string());
                 }
-                Ok(Term::App(format!("mat{n}"), rows.into_iter().flatten().collect()))
+                Ok(crate::syntax::matrix_term(rows))
             }
             _ => self.err(format!("項が必要（{} の位置）", self.here())),
         }

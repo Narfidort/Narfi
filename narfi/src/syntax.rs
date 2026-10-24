@@ -812,7 +812,16 @@ pub fn show_term(t: &Term, prec: u8) -> String {
         Term::Var(x) => x.clone(),
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
-        Term::Lam(ps, b) => format!("({} ↦ {})", binder_typed(ps), show_term(b, 0)),
+        Term::Lam(ps, b) => match matrix_of_lam(ps, b) {
+            Some((_, cols, xs)) => {
+                let rows: Vec<String> = xs
+                    .chunks(cols)
+                    .map(|r| format!("[{}]", r.iter().map(|x| show_term(x, 0)).collect::<Vec<_>>().join(", ")))
+                    .collect();
+                format!("[{}]", rows.join(", "))
+            }
+            None => format!("({} ↦ {})", binder_typed(ps), show_term(b, 0)),
+        },
         Term::App(f, args) if f == "@" && !args.is_empty() => {
             let a: Vec<String> = args[1..].iter().map(|a| show_term(a, 0)).collect();
             format!("{}({})", show_term(&args[0], 5), a.join(", "))
@@ -1224,7 +1233,16 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::Var(x) => ident_to_latex(x),
         Term::Num(n) => n.to_string(),
         Term::Meta(m) => format!("?{m}"),
-        Term::Lam(ps, b) => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
+        Term::Lam(ps, b) => match matrix_of_lam(ps, b) {
+            Some((_, cols, xs)) => {
+                let rows: Vec<String> = xs
+                    .chunks(cols)
+                    .map(|r| r.iter().map(|x| show_term_latex(x, 0)).collect::<Vec<_>>().join(" & "))
+                    .collect();
+                format!("\\begin{{pmatrix}} {} \\end{{pmatrix}}", rows.join(" \\\\ "))
+            }
+            None => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
+        },
         Term::App(f, args) if notation_for_fn(f).and_then(|n| n.split(args)).is_some() => {
             let n = notation_for_fn(f).unwrap();
             let seqs = applied_names(&n.split(args).unwrap().0);
@@ -1521,4 +1539,93 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
         }
     };
     if p < prec { format!("({s})") } else { s }
+}
+
+/// 行列 [[…], …] を項にする（2×2・3×3 は mat2・mat3、それ以外は δ で成分を選ぶ λ）
+pub fn matrix_term(rows: Vec<Vec<Term>>) -> Term {
+    let n = rows.len();
+    let cols = rows[0].len();
+    if (n == 2 || n == 3) && cols == n {
+        return Term::App(format!("mat{n}"), rows.into_iter().flatten().collect());
+    }
+    let mut fv = BTreeSet::new();
+    for r in &rows {
+        for x in r {
+            x.vars(&mut fv);
+        }
+    }
+    let fresh = |b: &str| {
+        let mut x = b.to_string();
+        while fv.contains(&x) {
+            x.push('\'');
+        }
+        x
+    };
+    let (i, j) = (fresh("i"), fresh("j"));
+    let mut body: Option<Term> = None;
+    for (r, row) in rows.into_iter().enumerate() {
+        for (c, x) in row.into_iter().enumerate() {
+            // matent(x, i, j, r, c) = x·δ(i, r)·δ(j, c)（lib/algebra/matrix）
+            let t = Term::App(
+                "matent".into(),
+                vec![x, Term::Var(i.clone()), Term::Var(j.clone()), Term::Num(r as i64), Term::Num(c as i64)],
+            );
+            body = Some(match body {
+                None => t,
+                Some(b) => Term::App("+".into(), vec![b, t]),
+            });
+        }
+    }
+    Term::Lam(vec![(i, "ℕ".into()), (j, "ℕ".into())], Box::new(body.unwrap()))
+}
+
+/// matrix_term が作った λ か
+pub fn is_matrix_lam(t: &Term) -> bool {
+    matches!(t, Term::Lam(ps, b) if matrix_of_lam(ps, b).is_some())
+}
+
+/// matrix_term が作った λ なら（行数・列数・成分）
+fn matrix_of_lam(ps: &[(String, String)], body: &Term) -> Option<(usize, usize, Vec<Term>)> {
+    if ps.len() != 2 || ps.iter().any(|(_, t)| t != "ℕ") {
+        return None;
+    }
+    let (i, j) = (&ps[0].0, &ps[1].0);
+    let mut terms = Vec::new();
+    let mut t = body;
+    loop {
+        match t {
+            Term::App(op, xs) if op == "+" && xs.len() == 2 => {
+                terms.push(&xs[1]);
+                t = &xs[0];
+            }
+            _ => {
+                terms.push(t);
+                break;
+            }
+        }
+    }
+    terms.reverse();
+    let mut out = Vec::new();
+    let mut idx = Vec::new();
+    for t in terms {
+        match t {
+            Term::App(f, a) if f == "matent" && a.len() == 5 && a[1] == Term::Var(i.clone()) && a[2] == Term::Var(j.clone()) => {
+                let (Term::Num(r), Term::Num(c)) = (&a[3], &a[4]) else { return None };
+                idx.push((*r, *c));
+                out.push(a[0].clone());
+            }
+            _ => return None,
+        }
+    }
+    let cols = idx.iter().map(|(_, c)| *c).max()? as usize + 1;
+    let rows = idx.iter().map(|(r, _)| *r).max()? as usize + 1;
+    if out.len() != rows * cols {
+        return None;
+    }
+    for (k, (r, c)) in idx.iter().enumerate() {
+        if *r as usize != k / cols || *c as usize != k % cols {
+            return None;
+        }
+    }
+    Some((rows, cols, out))
 }
