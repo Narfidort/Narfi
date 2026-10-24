@@ -4,7 +4,7 @@
   "patterns": [
     { "name": "comment.line.double-dash.narfi", "match": "--.*$" },
     {
-      "match": "^(thm|axiom)\\s+([^\\s:]+)",
+      "match": "^(thm|axiom|const|def|rec|typedef)\\s+([^\\s:]+)",
       "captures": {
         "1": { "name": "storage.type.narfi" },
         "2": { "name": "entity.name.function.narfi" }

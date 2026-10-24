@@ -1,0 +1,68 @@
+-- 次元の上界：1 次独立な f_0, …, f_N が m 個の g_0, …, g_{m−1} の 1 次結合なら、N + 1 ≤ m
+
+import linear.dependence
+
+thm dim.bound :
+  f : ℕ → (ℕ → ℝ) → ℝ, g : ℕ → (ℕ → ℝ) → ℝ, A : ℕ × ℕ → ℝ, N : ℕ, m : ℕ,
+  hgen : ∀i:ℕ. i ≤ N ⇒ ∀x:ℕ → ℝ. f_i(x) = sum((k : ℕ ↦ A(i, k) * g_k(x)), m),
+  hind : ∀c:ℕ → ℝ. (∀x:ℕ → ℝ. sum((i : ℕ ↦ c_i * f_i(x)), S(N)) = 0) ⇒ ∀i:ℕ. i ≤ N ⇒ c_i = 0
+  ⊢ N < m
+
+c0 : N < m ∨ ¬(N < m) by em
+cases c0
+  Case left lt
+    lt
+  Case right nl
+    hm : m ≤ N by nat.not_lt(nl)
+    ld : ∃c:ℕ → ℝ. (∃i:ℕ. i ≤ N ∧ c(i) ≠ 0) ∧ ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ c(i) * A(i, k)), S(N)) = 0 by lin.dep(m, N, A, hm)
+    Obtain c, hc : ld
+    s : S(N) = N + 1 by ring
+    hle : ∀i:ℕ. i < S(N) ⇒ i ≤ N
+      Fix i
+        assume hi : i < S(N)
+          hi1 : i < N + 1 by EQ2(s, hi)
+          cs : i < N ∨ i = N by nat.lt_succ(hi1)
+          cases cs
+            Case left a
+              linarith
+            Case right b
+              linarith
+    hz : ∀x:ℕ → ℝ. sum((i : ℕ ↦ c(i) * f_i(x)), S(N)) = 0
+      Fix x
+        p1 : ∀i:ℕ. i < S(N) ⇒ c(i) * f_i(x) = c(i) * sum((k : ℕ ↦ A(i, k) * g_k(x)), m)
+          Fix i
+            assume hi : i < S(N)
+              c(i) * f_i(x)
+                = c(i) * sum((k : ℕ ↦ A(i, k) * g_k(x)), m)   by hgen(i, hle(i, hi), x)
+        p2 : ∀i:ℕ. i < S(N) ⇒ c(i) * sum((k : ℕ ↦ A(i, k) * g_k(x)), m) = sum((k : ℕ ↦ c(i) * (A(i, k) * g_k(x))), m)
+          Fix i
+            assume hi : i < S(N)
+              eq.symm(sum.smul(c(i), (k : ℕ ↦ A(i, k) * g_k(x)), m))
+        p3 : ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ c(i) * (A(i, k) * g_k(x))), S(N)) = g_k(x) * sum((i : ℕ ↦ c(i) * A(i, k)), S(N))
+          Fix k
+            assume hk : k < m
+              q : ∀i:ℕ. i < S(N) ⇒ c(i) * (A(i, k) * g_k(x)) = g_k(x) * (c(i) * A(i, k))
+                Fix i
+                  assume hi : i < S(N)
+                    ring
+              sum((i : ℕ ↦ c(i) * (A(i, k) * g_k(x))), S(N))
+                = sum((i : ℕ ↦ g_k(x) * (c(i) * A(i, k))), S(N))   by sum.cong(S(N), q)
+                = g_k(x) * sum((i : ℕ ↦ c(i) * A(i, k)), S(N))     by sum.smul(g_k(x), (i : ℕ ↦ c(i) * A(i, k)), S(N))
+        p4 : ∀k:ℕ. k < m ⇒ g_k(x) * sum((i : ℕ ↦ c(i) * A(i, k)), S(N)) = 0
+          Fix k
+            assume hk : k < m
+              g_k(x) * sum((i : ℕ ↦ c(i) * A(i, k)), S(N))
+                = g_k(x) * 0   by hc.right(k, hk)
+                = 0            by ring
+        sum((i : ℕ ↦ c(i) * f_i(x)), S(N))
+          = sum((i : ℕ ↦ c(i) * sum((k : ℕ ↦ A(i, k) * g_k(x)), m)), S(N))                       by sum.cong(S(N), p1)
+          = sum((i : ℕ ↦ sum((k : ℕ ↦ c(i) * (A(i, k) * g_k(x))), m)), S(N))                       by sum.cong(S(N), p2)
+          = sum((k : ℕ ↦ sum((i : ℕ ↦ c(i) * (A(i, k) * g_k(x))), S(N))), m)                       by sum.swap(S(N), m)
+          = sum((k : ℕ ↦ g_k(x) * sum((i : ℕ ↦ c(i) * A(i, k)), S(N))), m)                         by sum.cong(m, p3)
+          = sum((k : ℕ ↦ 0), m)                                                                    by sum.cong(m, p4)
+          = 0                                                                                      by sum.zeros(m)
+    Obtain i0, hi0 : hc.left
+    i0N : i0 ≤ N by hi0.left
+    ne0 : c(i0) ≠ 0 by hi0.right
+    z0 : c(i0) = 0 by hind(c, hz, i0, i0N)
+    bot.elim(ne0(z0))

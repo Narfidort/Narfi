@@ -1,0 +1,233 @@
+-- 線形従属：未知数が方程式より多ければ、自明でない解がある
+--   行列 A（行 0..N、列 0..m−1）に対し、N + 1 > m なら Σ_i c_i A(i, k) = 0（k < m）の解 c ≠ 0 がある。
+--   ここから「m 個の列に入る独立なものは m 個以下」（次元の上界）が出る。
+
+import algebra.sum
+import algebra.delta
+
+-- 体の基本（仮置き。ℝ を構成するまで）
+axiom mul.cancel : x : ℝ, y : ℝ, h : x * y = 0, hy : y ≠ 0 ⊢ x = 0
+
+-- 消去で得た d（最後の行を除く）から、最後の行を足して全体の解 c を作る
+thm lin.lift :
+  A : ℕ × ℕ → ℝ, N : ℕ, m : ℕ, k0 : ℕ, d : ℕ → ℝ,
+  hd : ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), N) = 0
+  ⊢ ∃c:ℕ → ℝ. (∀i:ℕ. i < N ⇒ c_i = A(N, k0) * d_i) ∧ ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ c_i * A(i, k)), S(N)) = 0
+
+let G := sum((l : ℕ ↦ d_l * A(l, k0)), N)
+let c := (i : ℕ ↦ A(N, k0) * d_i * (1 - delta(i, N)) + delta(i, N) * (-G))
+choose c
+pa : ∀i:ℕ. i < N ⇒ c(i) = A(N, k0) * d_i
+  Fix i
+    assume hi : i < N
+      ne : i ≠ N
+        assume e : i = N
+          linarith
+      dz : delta(i, N) = 0 by delta.diff(i, N, ne)
+      c(i)
+        = A(N, k0) * d_i * (1 - 0) + 0 * (-G)    by dz
+        = A(N, k0) * d_i                         by ring
+pb : ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ c(i) * A(i, k)), S(N)) = 0
+  Fix k
+    assume hk : k < m
+      s : S(N) = N + 1 by ring
+      dN : delta(N, N) = 1 by delta.same(N)
+      cN : c(N) = -G
+        c(N)
+          = A(N, k0) * d_N * (1 - 1) + 1 * (-G)   by dN
+          = -G                                    by ring
+      h1 : ∀i:ℕ. i < N ⇒ c(i) * A(i, k) = A(N, k0) * (d_i * A(i, k))
+        Fix i
+          assume hi : i < N
+            c(i) * A(i, k)
+              = A(N, k0) * d_i * A(i, k)    by pa(i, hi)
+              = A(N, k0) * (d_i * A(i, k))  by ring
+      e1 : sum((i : ℕ ↦ c(i) * A(i, k)), N) = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), N) by sum.cong(N, h1)
+      e2 : sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), N) = A(N, k0) * sum((i : ℕ ↦ d_i * A(i, k)), N) by sum.smul(A(N, k0), (i : ℕ ↦ d_i * A(i, k)), N)
+      h3 : ∀i:ℕ. i < N ⇒ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k)) = A(N, k0) * (d_i * A(i, k)) + (-A(N, k)) * (d_i * A(i, k0))
+        Fix i
+          assume hi : i < N
+            ring
+      e3 : sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), N) = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k)) + (-A(N, k)) * (d_i * A(i, k0))), N) by sum.cong(N, h3)
+      e4 : sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k)) + (-A(N, k)) * (d_i * A(i, k0))), N) = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), N) + sum((i : ℕ ↦ (-A(N, k)) * (d_i * A(i, k0))), N) by sum.add((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), (i : ℕ ↦ (-A(N, k)) * (d_i * A(i, k0))), N)
+      e5 : sum((i : ℕ ↦ (-A(N, k)) * (d_i * A(i, k0))), N) = (-A(N, k)) * sum((i : ℕ ↦ d_i * A(i, k0)), N) by sum.smul(-A(N, k), (i : ℕ ↦ d_i * A(i, k0)), N)
+      z : A(N, k0) * sum((i : ℕ ↦ d_i * A(i, k)), N) + (-A(N, k)) * G = 0
+        A(N, k0) * sum((i : ℕ ↦ d_i * A(i, k)), N) + (-A(N, k)) * G
+          = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), N) + (-A(N, k)) * G                                  by eq.symm(e2)
+          = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), N) + sum((i : ℕ ↦ (-A(N, k)) * (d_i * A(i, k0))), N)  by eq.symm(e5)
+          = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k)) + (-A(N, k)) * (d_i * A(i, k0))), N)                    by eq.symm(e4)
+          = sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), N)                               by eq.symm(e3)
+          = 0                                                                                                by hd(k, hk)
+      sum((i : ℕ ↦ c(i) * A(i, k)), S(N))
+        = sum((i : ℕ ↦ c(i) * A(i, k)), N + 1)                            by s
+        = sum((i : ℕ ↦ c(i) * A(i, k)), N) + c(N) * A(N, k)               by sum.succ((i : ℕ ↦ c(i) * A(i, k)), N)
+        = sum((i : ℕ ↦ A(N, k0) * (d_i * A(i, k))), N) + c(N) * A(N, k)   by e1
+        = A(N, k0) * sum((i : ℕ ↦ d_i * A(i, k)), N) + c(N) * A(N, k)     by e2
+        = A(N, k0) * sum((i : ℕ ↦ d_i * A(i, k)), N) + (-G) * A(N, k)     by cN
+        = A(N, k0) * sum((i : ℕ ↦ d_i * A(i, k)), N) + (-A(N, k)) * G     by ring
+        = 0                                                               by z
+pa, pb
+
+-- 消去のあと、k₀ 列と最後の列を入れ替えた行列 B' への解が、元の行列の消去 B への解になる
+thm lin.hd :
+  A : ℕ × ℕ → ℝ, N : ℕ, j : ℕ, k0 : ℕ, n : ℕ, d : ℕ → ℝ,
+  hk0 : k0 < S(j),
+  hd' : ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), n) = 0
+  ⊢ ∀k:ℕ. k < S(j) ⇒ sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n) = 0
+
+Fix k
+  assume hk : k < S(j)
+    s : S(j) = j + 1 by ring
+    hk1 : k < j + 1 by EQ2(s, hk)
+    hk01 : k0 < j + 1 by EQ2(s, hk0)
+    c1 : k < j ∨ k = j by nat.lt_succ(hk1)
+    e0 : k = k0 ∨ ¬(k = k0) by em
+    cases e0
+      Case left ek
+        h0 : ∀i:ℕ. i < n ⇒ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k)) = 0
+          Fix i
+            assume hi : i < n
+              d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))
+                = d_i * (A(N, k0) * A(i, k0) - A(i, k0) * A(N, k0))   by ek
+                = 0                                                   by ring
+        z : sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n) = sum((i : ℕ ↦ 0), n) by sum.cong(n, h0)
+        sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n)
+          = sum((i : ℕ ↦ 0), n)   by z
+          = 0                     by sum.zeros(n)
+      Case right nk
+        cases c1
+          Case left kj
+            dz : delta(k, k0) = 0 by delta.diff(k, k0, nk)
+            h1 : ∀i:ℕ. i < n ⇒ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k)) = d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))
+              Fix i
+                assume hi : i < n
+                  d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k)) + 0
+                    = d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + 0 * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))   by ring
+                    = d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))   by eq.symm(dz)
+            z : sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n) = sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), n) by sum.cong(n, h1)
+            sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n)
+              = sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), n)   by z
+              = 0   by hd'(k, kj)
+          Case right kj
+            c2 : k0 < j ∨ k0 = j by nat.lt_succ(hk01)
+            cases c2
+              Case left k0j
+                dN : delta(k0, k0) = 1 by delta.same(k0)
+                h2 : ∀i:ℕ. i < n ⇒ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k)) = d_i * (A(N, k0) * A(i, k0) - A(i, k0) * A(N, k0) + delta(k0, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))
+                  Fix i
+                    assume hi : i < n
+                      d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))
+                        = d_i * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j))   by kj
+                        = d_i * (A(N, k0) * A(i, k0) - A(i, k0) * A(N, k0) + 1 * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))   by ring
+                        = d_i * (A(N, k0) * A(i, k0) - A(i, k0) * A(N, k0) + delta(k0, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))   by eq.symm(dN)
+                z : sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n) = sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k0) - A(i, k0) * A(N, k0) + delta(k0, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), n) by sum.cong(n, h2)
+                sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), n)
+                  = sum((i : ℕ ↦ d_i * (A(N, k0) * A(i, k0) - A(i, k0) * A(N, k0) + delta(k0, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), n)   by z
+                  = 0   by hd'(k0, k0j)
+              Case right e
+                eq : k = k0 by linarith
+                bot.elim(nk(eq))
+
+-- 最後の行が 0 なら、その行だけを 1 にした c が解
+thm lin.row0 :
+  A : ℕ × ℕ → ℝ, N : ℕ, j : ℕ,
+  hz : ∀k:ℕ. k < j ⇒ A(N, k) = 0
+  ⊢ ∃c:ℕ → ℝ. (∃i:ℕ. i ≤ N ∧ c_i ≠ 0) ∧ ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ c_i * A(i, k)), S(N)) = 0
+
+dN : delta(N, N) = 1 by delta.same(N)
+choose (i : ℕ ↦ delta(i, N))
+ne : 1 ≠ 0 by decide
+nt : ∃i:ℕ≤N. delta(i, N) ≠ 0
+  le0 : N ≤ N by linarith
+  choose N, le0
+  EQ2(eq.symm(dN), ne)
+eqs : ∀k:ℕ<j. sum((i : ℕ ↦ delta(i, N) * A(i, k)), S(N)) = 0
+  Fix k | hk : k < j
+    hz1 : ∀i:ℕ. i < S(N) ⇒ i ≠ N ⇒ delta(i, N) * A(i, k) = 0
+      Fix i
+        assume hi : i < S(N)
+          assume hne : i ≠ N
+            dz : delta(i, N) = 0 by delta.diff(i, N, hne)
+            delta(i, N) * A(i, k)
+              = 0 * A(i, k)   by dz
+              = 0             by ring
+    le : S(N) ≤ S(N) by linarith
+    lt : N < S(N) by linarith
+    sg : (N < S(N) ⇒ sum((i : ℕ ↦ delta(i, N) * A(i, k)), S(N)) = delta(N, N) * A(N, k)) ∧ (¬(N < S(N)) ⇒ sum((i : ℕ ↦ delta(i, N) * A(i, k)), S(N)) = 0) by sum.single(hz1)(S(N), le)
+    ak : A(N, k) = 0 by hz(k, hk)
+    sum((i : ℕ ↦ delta(i, N) * A(i, k)), S(N))
+      = delta(N, N) * A(N, k)   by sg.left(lt)
+      = 1 * A(N, k)             by dN
+      = 0                       by ak
+nt, eqs
+
+thm lin.dep :
+  ⊢ ∀m:ℕ. ∀N:ℕ. ∀A:ℕ × ℕ → ℝ. m ≤ N ⇒ ∃c:ℕ → ℝ. (∃i:ℕ. i ≤ N ∧ c_i ≠ 0) ∧ ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ c_i * A(i, k)), S(N)) = 0
+
+Fix m
+  induction m
+    Case zero
+      Fix N, A
+        assume h0 : 0 ≤ N
+          ne : 1 ≠ 0 by decide
+          choose (i : ℕ ↦ 1)
+          nt : ∃i:ℕ≤N. 1 ≠ 0
+            choose 0, h0
+            ne
+          eqs : ∀k:ℕ<0. sum((i : ℕ ↦ 1 * A(i, k)), S(N)) = 0
+            Fix k | hk : k < 0
+              bot.elim(linarith)
+          nt, eqs
+    Case succ j, IH : ∀N:ℕ. ∀A:ℕ × ℕ → ℝ. j ≤ N ⇒ ∃c:ℕ → ℝ. (∃i:ℕ. i ≤ N ∧ c_i ≠ 0) ∧ ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ c_i * A(i, k)), S(N)) = 0
+      Fix N, A
+        assume hN : S(j) ≤ N
+          ex : (∃k0:ℕ<S(j). A(N, k0) ≠ 0) ∨ ¬(∃k0:ℕ<S(j). A(N, k0) ≠ 0) by em
+          cases ex
+            Case left hex
+              Obtain k0, hk0 : hex
+              lt : k0 < S(j) by hk0.left
+              nz : A(N, k0) ≠ 0 by hk0.right
+              nc : N = 0 ∨ (∃M:ℕ. N = S(M)) by nat.cases(N)
+              cases nc
+                Case left z
+                  bot.elim(linarith)
+                Case right e
+                  Obtain M, hM : e
+                  sM : S(M) = M + 1 by ring
+                  sj : S(j) = j + 1 by ring
+                  jM : j ≤ M by linarith
+                  ih : ∃d:ℕ → ℝ. (∃i:ℕ. i ≤ M ∧ d(i) ≠ 0) ∧ ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ d(i) * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), S(M)) = 0 by IH(M, ((i, k) : ℕ × ℕ ↦ A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j))), jM)
+                  Obtain d, hdd : ih
+                  hd1 : ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ d(i) * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), N) = 0
+                    Fix k
+                      assume hk : k < j
+                        EQ2(eq.symm(hM), hdd.right(k, hk))
+                  hd2 : ∀k:ℕ. k < S(j) ⇒ sum((i : ℕ ↦ d(i) * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), N) = 0 by lin.hd(lt, hd1)
+                  lf : ∃c:ℕ → ℝ. (∀i:ℕ. i < N ⇒ c(i) = A(N, k0) * d(i)) ∧ ∀k:ℕ. k < S(j) ⇒ sum((i : ℕ ↦ c(i) * A(i, k)), S(N)) = 0 by lin.lift(hd2)
+                  Obtain c, hc : lf
+                  Obtain i, hi : hdd.left
+                  iM : i ≤ M by hi.left
+                  di : d(i) ≠ 0 by hi.right
+                  iN : i < N by linarith
+                  ci : c(i) = A(N, k0) * d(i) by hc.left(i, iN)
+                  iN2 : i ≤ N by linarith
+                  cne : c(i) ≠ 0
+                    assume c0 : c(i) = 0
+                      p0 : A(N, k0) * d(i) = 0 by eq.trans(eq.symm(ci), c0)
+                      a0 : A(N, k0) = 0 by mul.cancel(p0, di)
+                      nz(a0)
+                  choose c
+                  nt : ∃i:ℕ≤N. c(i) ≠ 0
+                    choose i, iN2
+                    cne
+                  nt, hc.right
+            Case right nex
+              hz : ∀k:ℕ. k < S(j) ⇒ A(N, k) = 0
+                Fix k
+                  assume hk : k < S(j)
+                    by_contra nz
+                      ex2 : ∃k0:ℕ<S(j). A(N, k0) ≠ 0
+                        choose k, hk
+                        nz
+                      nex(ex2)
+              lin.row0(hz)

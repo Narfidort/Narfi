@@ -368,6 +368,11 @@ impl<'a> Checker<'a> {
                 if ts.iter().zip(us).all(|(t, u)| self.ut(t, u)) {
                     return true;
                 }
+                // 後ろの引数から決まるメタ変数もある（?F(0) = sum(?F, 1) の ?F は右辺から決まる）
+                self.restore(save.clone());
+                if ts.iter().zip(us).rev().all(|(t, u)| self.ut(t, u)) {
+                    return true;
+                }
                 // 引数が合わなくても、展開すれば一致することがある
                 self.restore(save);
                 match (self.unfold_head(&a), self.unfold_head(&b)) {
@@ -428,6 +433,19 @@ impl<'a> Checker<'a> {
             (Term::App(f, xs), u) | (u, Term::App(f, xs)) if self.is_open_fn_meta(f) => {
                 let (f, xs, u) = (f.clone(), xs.clone(), u.clone());
                 self.solve_app(&f, &xs, &u)
+            }
+            // ?F(i)(x)（関数を返す関数の適用）
+            (Term::App(at, xs), u) | (u, Term::App(at, xs))
+                if at == "@"
+                    && xs.len() >= 2
+                    && matches!(&xs[0], Term::App(f, _) if self.is_open_fn_meta(f))
+                    && !matches!(u, Term::App(at2, ys) if at2 == "@" && ys.len() == xs.len()) =>
+            {
+                let Term::App(f, ys) = &xs[0] else { unreachable!() };
+                let mut all = ys.clone();
+                all.extend(xs[1..].iter().cloned());
+                let (f, u) = (f.clone(), u.clone());
+                self.solve_app(&f, &all, &u)
             }
             (Term::Num(x), Term::Num(y)) => x == y,
             (Term::App(f, xs), Term::App(g, ys)) if f == g && xs.len() == ys.len() => {
@@ -498,8 +516,20 @@ impl<'a> Checker<'a> {
     fn pattern_params(&self, f: &str, xs: &[Term], body_vars: &BTreeSet<String>) -> Option<Vec<(String, String)>> {
         let i = Self::fn_meta_index(f)?;
         let ty = Ty::parse(&self.zonk_sort(&self.fn_metas[i].1))?;
+        // 関数を返す関数 ℕ → (σ → τ) は、引数を続けて受ける（?F(i)(x) を ?F(i, x) と見る）
         let arg_tys: Vec<Ty> = match ty {
-            Ty::Fun(a, _) => a,
+            Ty::Fun(mut a, mut r) => {
+                while a.len() < xs.len() {
+                    match *r {
+                        Ty::Fun(a2, r2) => {
+                            a.extend(a2);
+                            r = r2;
+                        }
+                        _ => break,
+                    }
+                }
+                a
+            }
             Ty::Prop => vec![],
             _ => return None,
         };
@@ -534,7 +564,16 @@ impl<'a> Checker<'a> {
         if let Term::App(g, ys) = u {
             if ys.len() == xs.len() && !self.is_open_fn_meta(g) {
                 let save = self.save();
-                self.fn_metas[i].0 = Some(Term::Var(g.clone()));
+                // 定義の名前は値として渡せないので、λ で包む（f ↦ (i ↦ f(i))）
+                let head = match self.env.kernel.defs.get(g) {
+                    Some(d) if d.params.len() == ys.len() => {
+                        let ps: Vec<(String, String)> = d.params.iter().enumerate().map(|(k, (_, t))| (format!("#d{k}"), t.clone())).collect();
+                        let args: Vec<Term> = ps.iter().map(|(p, _)| Term::Var(p.clone())).collect();
+                        Term::Lam(ps, Box::new(Term::App(g.clone(), args)))
+                    }
+                    _ => Term::Var(g.clone()),
+                };
+                self.fn_metas[i].0 = Some(head);
                 if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
                     return true;
                 }
@@ -553,7 +592,33 @@ impl<'a> Checker<'a> {
             return false;
         }
         let subs: Vec<(String, Term)> = xnames.iter().cloned().zip(ps.iter().map(|(p, _)| Term::Var(p.clone()))).collect();
-        self.fn_metas[i].0 = Some(Term::Lam(ps, Box::new(u.subst_many(&subs))));
+        let mut body = u.subst_many(&subs);
+        // 関数を返す関数 ℕ → (σ → τ) の解は、入れ子の λ（i ↦ (x ↦ …)）
+        let mut chunks: Vec<usize> = vec![];
+        let mut t = Ty::parse(&self.zonk_sort(&self.fn_metas[i].1));
+        while let Some(Ty::Fun(a, r)) = t {
+            chunks.push(a.len());
+            t = Some(*r);
+        }
+        let mut cut = ps.len();
+        let mut groups: Vec<Vec<(String, String)>> = vec![];
+        let mut start = 0;
+        for c in &chunks {
+            if start >= ps.len() {
+                break;
+            }
+            let end = (start + c).min(ps.len());
+            groups.push(ps[start..end].to_vec());
+            start = end;
+        }
+        if start < ps.len() {
+            groups.push(ps[start..].to_vec());
+        }
+        let _ = &mut cut;
+        for g in groups.into_iter().rev() {
+            body = Term::Lam(g, Box::new(body));
+        }
+        self.fn_metas[i].0 = Some(body);
         true
     }
 

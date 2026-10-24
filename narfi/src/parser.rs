@@ -529,6 +529,19 @@ impl SubScope {
         SubScope { seqs, declared }
     }
 
+    /// 束縛変数（∀a:ℕ → ℝ. …・(a : ℕ → ℝ ↦ …)）も、型が列なら列として読む
+    fn bind(&self, ps: &[(String, String)]) -> Option<SubScope> {
+        let seqs: Vec<&String> = ps.iter().filter(|(_, t)| t.starts_with("ℕ →")).map(|(x, _)| x).collect();
+        if seqs.is_empty() {
+            return None;
+        }
+        let mut sc = SubScope { seqs: self.seqs.clone(), declared: self.declared.clone() };
+        for x in seqs {
+            sc.seqs.insert(x.clone());
+        }
+        Some(sc)
+    }
+
     /// x が数列の添字の形なら (数列, 添字)
     fn split(&self, x: &str) -> Option<(String, Term)> {
         if self.seqs.is_empty() || self.declared.contains(x) {
@@ -569,8 +582,14 @@ impl SubScope {
                     },
                 }
             }
-            Term::Lam(ps, b) => Term::Lam(ps.clone(), Box::new(self.term(b))),
-            Term::Set(ps, phi) => Term::Set(ps.clone(), Box::new(self.formula(phi))),
+            Term::Lam(ps, b) => match self.bind(ps) {
+                Some(sc) => Term::Lam(ps.clone(), Box::new(sc.term(b))),
+                None => Term::Lam(ps.clone(), Box::new(self.term(b))),
+            },
+            Term::Set(ps, phi) => match self.bind(ps) {
+                Some(sc) => Term::Set(ps.clone(), Box::new(sc.formula(phi))),
+                None => Term::Set(ps.clone(), Box::new(self.formula(phi))),
+            },
             Term::Num(_) | Term::Meta(_) => t.clone(),
         }
     }
@@ -593,8 +612,14 @@ impl SubScope {
             Formula::Imp(a, b) => Formula::Imp(bx(a), bx(b)),
             Formula::And(a, b) => Formula::And(bx(a), bx(b)),
             Formula::Or(a, b) => Formula::Or(bx(a), bx(b)),
-            Formula::Forall(x, s, b) => Formula::Forall(x.clone(), s.clone(), bx(b)),
-            Formula::Exists(x, s, b) => Formula::Exists(x.clone(), s.clone(), bx(b)),
+            Formula::Forall(x, s, b) => match self.bind(&[(x.clone(), s.clone())]) {
+                Some(sc) => Formula::Forall(x.clone(), s.clone(), Box::new(sc.formula(b))),
+                None => Formula::Forall(x.clone(), s.clone(), bx(b)),
+            },
+            Formula::Exists(x, s, b) => match self.bind(&[(x.clone(), s.clone())]) {
+                Some(sc) => Formula::Exists(x.clone(), s.clone(), Box::new(sc.formula(b))),
+                None => Formula::Exists(x.clone(), s.clone(), bx(b)),
+            },
             Formula::Bot => Formula::Bot,
         }
     }
@@ -1676,9 +1701,6 @@ fn subscript_apps(decl: &mut Decl) {
         }
     }
     let sc = SubScope::new(&vars);
-    if sc.seqs.is_empty() {
-        return;
-    }
     for c in &mut decl.ctx {
         if let CtxItem::Hyp(_, f) = c {
             *f = sc.formula(f);
@@ -2316,9 +2338,7 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
     };
     p.expect_end()?;
     let sc = SubScope::new(&params);
-    let (body, term, fv) = if sc.seqs.is_empty() {
-        (body, term, fv)
-    } else {
+    let (body, term, fv) = {
         let body = sc.formula(&body);
         let term = term.map(|(r, t)| (r, sc.term(&t)));
         let mut fv = body.free_vars();

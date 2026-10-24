@@ -1,5 +1,7 @@
 -- 有限和 Σ_{k<n} a_k（原始再帰による定義）と基本的な性質
 
+import algebra.nat_order
+
 rec sum(a : ℕ → ℝ, n : ℕ) : ℝ
   sum(a, 0) = 0
   sum(a, n + 1) = sum(a, n) + a_n
@@ -47,3 +49,198 @@ Fix c, a, n
         = c * (sum(a, m) + a_m)                  by ring
         = c * sum(a, m + 1)                      by EQ2(eq.symm(sum.succ(a, m)), refl)
         = c * sum(a, S(m))                       by EQ2(e, refl)
+
+-- 0 を何個足しても 0
+@name ja "零の和"
+@name en "sum of zeros"
+thm sum.zeros :
+  ⊢ ∀m:ℕ. sum((j : ℕ ↦ 0), m) = 0
+
+Fix m
+  induction m
+    Case zero
+      sum.zero((j : ℕ ↦ 0))
+    Case succ k, IH : sum((j : ℕ ↦ 0), k) = 0
+      s : S(k) = k + 1 by ring
+      sum((j : ℕ ↦ 0), S(k))
+        = sum((j : ℕ ↦ 0), k + 1)     by s
+        = sum((j : ℕ ↦ 0), k) + 0     by sum.succ((j : ℕ ↦ 0), k)
+        = 0 + 0                       by IH
+        = 0                           by ring
+
+-- 項ごとに等しければ和も等しい（添字が範囲内の項だけ見ればよい）
+@name ja "和の項ごとの等しさ"
+@name en "sums of termwise equal sequences"
+thm sum.cong :
+  g : ℕ → ℝ, h : ℕ → ℝ
+  ⊢ ∀m:ℕ. (∀i:ℕ. i < m ⇒ g_i = h_i) ⇒ sum(g, m) = sum(h, m)
+
+Fix m
+  induction m
+    Case zero
+      assume H : ∀i:ℕ. i < 0 ⇒ g_i = h_i
+        sum(g, 0)
+          = 0         by sum.zero(g)
+          = sum(h, 0) by EQ2(eq.symm(sum.zero(h)), refl)
+    Case succ k, IH : (∀i:ℕ. i < k ⇒ g_i = h_i) ⇒ sum(g, k) = sum(h, k)
+      assume H : ∀i:ℕ. i < S(k) ⇒ g_i = h_i
+        s : S(k) = k + 1 by ring
+        H0 : ∀i:ℕ. i < k ⇒ g_i = h_i
+          Fix i
+            assume hi : i < k
+              hi1 : i < S(k) by linarith
+              H(i, hi1)
+        hk : k < S(k) by linarith
+        Hk : g_k = h_k by H(k, hk)
+        sum(g, S(k))
+          = sum(g, k + 1)       by s
+          = sum(g, k) + g_k     by sum.succ(g, k)
+          = sum(h, k) + g_k     by IH(H0)
+          = sum(h, k) + h_k     by Hk
+          = sum(h, k + 1)       by eq.symm(sum.succ(h, k))
+          = sum(h, S(k))        by EQ2(eq.symm(s), refl)
+
+-- 二重和の順序を入れ替えられる
+@name ja "二重和の交換"
+@name en "interchange of double sums"
+thm sum.swap :
+  u : ℕ × ℕ → ℝ
+  ⊢ ∀a:ℕ. ∀b:ℕ. sum((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), a) = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), a)), b)
+
+Fix a, b
+  induction a
+    Case zero
+      hz : ∀i:ℕ. i < b ⇒ sum((j : ℕ ↦ u(j, i)), 0) = 0
+        Fix i
+          assume hi : i < b
+            sum.zero((j : ℕ ↦ u(j, i)))
+      z : sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), 0)), b) = sum((k : ℕ ↦ 0), b) by sum.cong(b, hz)
+      sum((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), 0)
+        = 0                                                  by sum.zero((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)))
+        = sum((k : ℕ ↦ 0), b)                                by eq.symm(sum.zeros(b))
+        = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), 0)), b)        by eq.symm(z)
+    Case succ c, IH : sum((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), c) = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), c)), b)
+      s : S(c) = c + 1 by ring
+      hs : ∀k:ℕ. k < b ⇒ sum((i : ℕ ↦ u(i, k)), S(c)) = sum((i : ℕ ↦ u(i, k)), c) + u(c, k)
+        Fix k
+          assume hk : k < b
+            sum((i : ℕ ↦ u(i, k)), S(c))
+              = sum((i : ℕ ↦ u(i, k)), c + 1)             by s
+              = sum((i : ℕ ↦ u(i, k)), c) + u(c, k)       by sum.succ((i : ℕ ↦ u(i, k)), c)
+      st : sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), S(c))), b) = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), c) + u(c, k)), b) by sum.cong(b, hs)
+      sum((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), S(c))
+        = sum((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), c + 1)                                         by s
+        = sum((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), c) + sum((k : ℕ ↦ u(c, k)), b)                 by sum.succ((i : ℕ ↦ sum((k : ℕ ↦ u(i, k)), b)), c)
+        = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), c)), b) + sum((k : ℕ ↦ u(c, k)), b)                 by IH
+        = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), c) + u(c, k)), b)                                   by eq.symm(sum.add((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), c)), (k : ℕ ↦ u(c, k)), b))
+        = sum((k : ℕ ↦ sum((i : ℕ ↦ u(i, k)), S(c))), b)                                          by eq.symm(st)
+
+-- 和から 1 項だけ取り出す：k 以外の項が 0 なら、Σ_{i<m} g_i は k < m のとき g_k、そうでなければ 0
+thm sum.single :
+  g : ℕ → ℝ, k : ℕ, M : ℕ, hz : ∀i:ℕ. i < M ⇒ i ≠ k ⇒ g_i = 0
+  ⊢ ∀m:ℕ. m ≤ M ⇒ (k < m ⇒ sum(g, m) = g_k) ∧ (¬(k < m) ⇒ sum(g, m) = 0)
+
+Fix m
+  induction m
+    Case zero
+      assume hM : 0 ≤ M
+        l : k < 0 ⇒ sum(g, 0) = g_k
+          assume h : k < 0
+            bot.elim(linarith)
+        r : ¬(k < 0) ⇒ sum(g, 0) = 0
+          assume h : ¬(k < 0)
+            sum.zero(g)
+        l, r
+    Case succ j, IH : j ≤ M ⇒ (k < j ⇒ sum(g, j) = g_k) ∧ (¬(k < j) ⇒ sum(g, j) = 0)
+      s : S(j) = j + 1 by ring
+      assume hM : S(j) ≤ M
+        hM1 : j + 1 ≤ M by EQ2(s, hM)
+        hmM : j ≤ M by linarith
+        hm : j < M by linarith
+        IH1 : (k < j ⇒ sum(g, j) = g_k) ∧ (¬(k < j) ⇒ sum(g, j) = 0) by IH(hmM)
+        step : sum(g, S(j)) = sum(g, j) + g_j
+          sum(g, S(j))
+            = sum(g, j + 1)    by s
+            = sum(g, j) + g_j  by sum.succ(g, j)
+        l : k < S(j) ⇒ sum(g, S(j)) = g_k
+          assume h : k < S(j)
+            h1 : k < j + 1 by EQ2(s, h)
+            c : k < j ∨ k = j by nat.lt_succ(h1)
+            cases c
+              Case left hl
+                ne : j ≠ k
+                  assume e : j = k
+                    linarith
+                gm : g_j = 0 by hz(j, hm, ne)
+                sum(g, S(j))
+                  = sum(g, j) + g_j   by step
+                  = g_k + g_j         by IH1.left(hl)
+                  = g_k + 0           by gm
+                  = g_k               by ring
+              Case right he
+                nl : ¬(k < j)
+                  assume h2 : k < j
+                    linarith
+                sum(g, S(j))
+                  = sum(g, j) + g_j   by step
+                  = 0 + g_j           by IH1.right(nl)
+                  = 0 + g_k           by he
+                  = g_k               by ring
+        r : ¬(k < S(j)) ⇒ sum(g, S(j)) = 0
+          assume h : ¬(k < S(j))
+            nl : ¬(k < j)
+              assume h2 : k < j
+                h3 : k < j + 1 by linarith
+                h4 : k < S(j) by EQ2(eq.symm(s), h3)
+                h(h4)
+            ne : j ≠ k
+              assume e : j = k
+                h3 : k < j + 1 by linarith
+                h4 : k < S(j) by EQ2(eq.symm(s), h3)
+                h(h4)
+            gm : g_j = 0 by hz(j, hm, ne)
+            sum(g, S(j))
+              = sum(g, j) + g_j   by step
+              = 0 + g_j           by IH1.right(nl)
+              = 0 + 0             by gm
+              = 0                 by ring
+        l, r
+
+-- 和を前半と後半に分ける：Σ_{k<a+b} u_k = Σ_{k<a} u_k + Σ_{j<b} u_{a+j}
+@name ja "和の分割"
+@name en "splitting a sum"
+thm sum.cat :
+  u : ℕ → ℝ
+  ⊢ ∀a:ℕ. ∀b:ℕ. sum(u, a + b) = sum(u, a) + sum((j : ℕ ↦ u_{a + j}), b)
+
+Fix a, b
+  induction b
+    Case zero
+      e0 : a + 0 = a by ring
+      sum(u, a + 0)
+        = sum(u, a)                              by e0
+        = sum(u, a) + 0                          by ring
+        = sum(u, a) + sum((j : ℕ ↦ u_{a + j}), 0)  by EQ2(eq.symm(sum.zero((j : ℕ ↦ u_{a + j}))), refl)
+    Case succ k, IH : sum(u, a + k) = sum(u, a) + sum((j : ℕ ↦ u_{a + j}), k)
+      s : S(k) = k + 1 by ring
+      e1 : a + S(k) = (a + k) + 1 by ring
+      sum(u, a + S(k))
+        = sum(u, (a + k) + 1)                                                  by e1
+        = sum(u, a + k) + u_{a + k}                                            by sum.succ(u, a + k)
+        = sum(u, a) + sum((j : ℕ ↦ u_{a + j}), k) + u_{a + k}                  by IH
+        = sum(u, a) + sum((j : ℕ ↦ u_{a + j}), k + 1)                          by sum.succ((j : ℕ ↦ u_{a + j}), k)
+        = sum(u, a) + sum((j : ℕ ↦ u_{a + j}), S(k))                           by EQ2(eq.symm(s), refl)
+
+-- 1 項の和
+@name ja "1 項の和"
+@name en "sum of one term"
+thm sum.one :
+  u : ℕ → ℝ
+  ⊢ sum(u, 1) = u_0
+
+s1 : 1 = 0 + 1 by ring
+sum(u, 1)
+  = sum(u, 0 + 1)   by s1
+  = sum(u, 0) + u_0 by sum.succ(u, 0)
+  = 0 + u_0         by sum.zero(u)
+  = u_0             by ring

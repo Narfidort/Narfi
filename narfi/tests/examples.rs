@@ -141,7 +141,7 @@ fn primitive_recursion() {
 /// 行列（関数を値にする定義・β・Σ）：2×2 のケイリー・ハミルトンなどがすべて通る
 #[test]
 fn matrices() {
-    let out = run(&["lib/algebra/matrix.narfi"]);
+    let out = run(&["lib/algebra/delta.narfi", "lib/algebra/matrix.narfi"]);
     assert!(!out.contains('✗') && !out.contains("構文エラー"), "{out}");
     for n in ["cayley_hamilton2", "mmul.add_left", "mat2.det", "delta.same"] {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
@@ -206,6 +206,16 @@ fn benchmarks() {
                 assert!(out.lines().any(|l| l.trim_start().starts_with(&format!("✓ {name}"))), "lib/bench/{f}.narfi の {name} が通らなくなった\n{out}");
             }
         }
+    }
+}
+
+/// 線形代数：未知数が方程式より多ければ自明でない解（lin.dep）、次元の上界（dim.bound）
+#[test]
+fn linear_algebra_lib() {
+    let out = run(&["lib/linear/dependence.narfi", "lib/linear/dimension.narfi", "lib/linear/span.narfi", "lib/linear/tri.narfi"]);
+    assert!(!out.contains('✗') && !out.contains('△') && !out.contains("構文エラー"), "{out}");
+    for n in ["lin.dep", "dim.bound", "cdim.add", "cdim.tri", "sq.sum"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }
 

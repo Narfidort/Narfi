@@ -1,0 +1,133 @@
+-- 「m 個の関数の 1 次結合に入る」：族 f_0, …, f_N が、m 個の関数 e_0, …, e_{m−1} で張られる空間に入る
+--   次元の上界（cdim.bound）と、2 つの族を合わせたときの個数の和（cdim.add）
+
+import linear.dimension
+
+def cdim(f : ℕ → (ℕ → ℝ) → ℝ, N : ℕ, m : ℕ) :⇔ ∃e:ℕ → (ℕ → ℝ) → ℝ. ∃A:ℕ × ℕ → ℝ. ∀i:ℕ. i ≤ N ⇒ ∀x:ℕ → ℝ. f_i(x) = sum((k : ℕ ↦ A(i, k) * e_k(x)), m)
+
+-- 1 次独立なら、個数は m より小さい（N + 1 ≤ m）
+thm cdim.bound :
+  f : ℕ → (ℕ → ℝ) → ℝ, N : ℕ, m : ℕ,
+  h : cdim(f, N, m),
+  hind : ∀c:ℕ → ℝ. (∀x:ℕ → ℝ. sum((i : ℕ ↦ c_i * f_i(x)), S(N)) = 0) ⇒ ∀i:ℕ. i ≤ N ⇒ c_i = 0
+  ⊢ N < m
+
+Obtain e, h1 : h
+Obtain A, h2 : h1
+dim.bound(h2, hind)
+
+-- 関数として等しい族でも同じ
+thm cdim.cong :
+  f : ℕ → (ℕ → ℝ) → ℝ, f2 : ℕ → (ℕ → ℝ) → ℝ, N : ℕ, m : ℕ,
+  h : cdim(f, N, m),
+  hq : ∀i:ℕ. i ≤ N ⇒ ∀x:ℕ → ℝ. f2_i(x) = f_i(x)
+  ⊢ cdim(f2, N, m)
+
+Obtain e, h1 : h
+Obtain A, h2 : h1
+choose e
+choose A
+Fix i
+  assume hi : i ≤ N
+    Fix x
+      f2_i(x)
+        = f_i(x)                                     by hq(i, hi, x)
+        = sum((k : ℕ ↦ A(i, k) * e(k)(x)), m)        by h2(i, hi, x)
+
+-- 2 つの族を足した族は、個数が足し算になる空間に入る
+thm cdim.add :
+  u : ℕ → (ℕ → ℝ) → ℝ, v : ℕ → (ℕ → ℝ) → ℝ, N : ℕ, m1 : ℕ, m2 : ℕ,
+  hu : cdim(u, N, m1),
+  hv : cdim(v, N, m2)
+  ⊢ cdim((i : ℕ ↦ (x : ℕ → ℝ ↦ u_i(x) + v_i(x))), N, m1 + m2)
+
+Obtain e1, hu1 : hu
+Obtain A1, hu2 : hu1
+Obtain e2, hv1 : hv
+Obtain A2, hv2 : hv1
+let E := (k : ℕ ↦ (x : ℕ → ℝ ↦ sum((j : ℕ ↦ delta(k, j) * e1(j)(x)), m1) + sum((j : ℕ ↦ delta(k, m1 + j) * e2(j)(x)), m2)))
+let Mx := ((i, k) : ℕ × ℕ ↦ sum((j : ℕ ↦ delta(k, j) * A1(i, j)), m1) + sum((j : ℕ ↦ delta(k, m1 + j) * A2(i, j)), m2))
+choose E
+choose Mx
+Fix i
+  assume hi : i ≤ N
+    Fix x
+      sA : ∀k:ℕ. k < m1 ⇒ Mx(i, k) = A1(i, k)
+        Fix k
+          assume hk : k < m1
+            p1 : sum((j : ℕ ↦ delta(k, j) * A1(i, j)), m1) = A1(i, k) by dsum.pick(m1, k, hk)
+            p2 : sum((j : ℕ ↦ delta(k, m1 + j) * A2(i, j)), m2) = 0 by dsum.below(m1, m2, k, hk)
+            Mx(i, k)
+              = A1(i, k) + 0   by p1, p2
+              = A1(i, k)       by ring
+      sE : ∀k:ℕ. k < m1 ⇒ E(k)(x) = e1(k)(x)
+        Fix k
+          assume hk : k < m1
+            p1 : sum((j : ℕ ↦ delta(k, j) * e1(j)(x)), m1) = e1(k)(x) by dsum.pick(m1, k, hk)
+            p2 : sum((j : ℕ ↦ delta(k, m1 + j) * e2(j)(x)), m2) = 0 by dsum.below(m1, m2, k, hk)
+            E(k)(x)
+              = e1(k)(x) + 0   by p1, p2
+              = e1(k)(x)       by ring
+      tA : ∀j:ℕ. j < m2 ⇒ Mx(i, m1 + j) = A2(i, j)
+        Fix j
+          assume hj : j < m2
+            nlt : ¬(m1 + j < m1)
+              assume h : m1 + j < m1
+                linarith
+            p1 : sum((l : ℕ ↦ delta(m1 + j, l) * A1(i, l)), m1) = 0 by dsum.out(m1, m1 + j, nlt)
+            p2 : sum((l : ℕ ↦ delta(m1 + j, m1 + l) * A2(i, l)), m2) = A2(i, j) by dsum.shift(m1, m2, j, hj)
+            Mx(i, m1 + j)
+              = 0 + A2(i, j)   by p1, p2
+              = A2(i, j)       by ring
+      tE : ∀j:ℕ. j < m2 ⇒ E(m1 + j)(x) = e2(j)(x)
+        Fix j
+          assume hj : j < m2
+            nlt : ¬(m1 + j < m1)
+              assume h : m1 + j < m1
+                linarith
+            p1 : sum((l : ℕ ↦ delta(m1 + j, l) * e1(l)(x)), m1) = 0 by dsum.out(m1, m1 + j, nlt)
+            p2 : sum((l : ℕ ↦ delta(m1 + j, m1 + l) * e2(l)(x)), m2) = e2(j)(x) by dsum.shift(m1, m2, j, hj)
+            E(m1 + j)(x)
+              = 0 + e2(j)(x)   by p1, p2
+              = e2(j)(x)       by ring
+      h1 : ∀k:ℕ. k < m1 ⇒ Mx(i, k) * E(k)(x) = A1(i, k) * e1(k)(x)
+        Fix k
+          assume hk : k < m1
+            Mx(i, k) * E(k)(x)
+              = A1(i, k) * E(k)(x)    by sA(k, hk)
+              = A1(i, k) * e1(k)(x)   by sE(k, hk)
+      h2 : ∀j:ℕ. j < m2 ⇒ Mx(i, m1 + j) * E(m1 + j)(x) = A2(i, j) * e2(j)(x)
+        Fix j
+          assume hj : j < m2
+            Mx(i, m1 + j) * E(m1 + j)(x)
+              = A2(i, j) * E(m1 + j)(x)    by tA(j, hj)
+              = A2(i, j) * e2(j)(x)        by tE(j, hj)
+      c1 : sum((k : ℕ ↦ Mx(i, k) * E(k)(x)), m1) = sum((k : ℕ ↦ A1(i, k) * e1(k)(x)), m1) by sum.cong(m1, h1)
+      c2 : sum((j : ℕ ↦ Mx(i, m1 + j) * E(m1 + j)(x)), m2) = sum((j : ℕ ↦ A2(i, j) * e2(j)(x)), m2) by sum.cong(m2, h2)
+      u1 : u(i)(x) = sum((k : ℕ ↦ A1(i, k) * e1(k)(x)), m1) by hu2(i, hi, x)
+      v1 : v(i)(x) = sum((k : ℕ ↦ A2(i, k) * e2(k)(x)), m2) by hv2(i, hi, x)
+      sc : sum((k : ℕ ↦ Mx(i, k) * E(k)(x)), m1 + m2) = sum((k : ℕ ↦ Mx(i, k) * E(k)(x)), m1) + sum((j : ℕ ↦ Mx(i, m1 + j) * E(m1 + j)(x)), m2) by sum.cat(m1, m2)
+      u(i)(x) + v(i)(x)
+        = sum((k : ℕ ↦ A1(i, k) * e1(k)(x)), m1) + v(i)(x)                                             by u1
+        = sum((k : ℕ ↦ A1(i, k) * e1(k)(x)), m1) + sum((k : ℕ ↦ A2(i, k) * e2(k)(x)), m2)               by v1
+        = sum((k : ℕ ↦ Mx(i, k) * E(k)(x)), m1) + sum((k : ℕ ↦ A2(i, k) * e2(k)(x)), m2)               by eq.symm(c1)
+        = sum((k : ℕ ↦ Mx(i, k) * E(k)(x)), m1) + sum((j : ℕ ↦ Mx(i, m1 + j) * E(m1 + j)(x)), m2)      by eq.symm(c2)
+        = sum((k : ℕ ↦ Mx(i, k) * E(k)(x)), m1 + m2)                                                   by eq.symm(sc)
+
+-- 個数は等しい数に書き換えてよい
+thm cdim.resize :
+  f : ℕ → (ℕ → ℝ) → ℝ, N : ℕ, m : ℕ, m2 : ℕ,
+  h : cdim(f, N, m),
+  hm : m = m2
+  ⊢ cdim(f, N, m2)
+
+Obtain e, h1 : h
+Obtain A, h2 : h1
+choose e
+choose A
+Fix i
+  assume hi : i ≤ N
+    Fix x
+      f_i(x)
+        = sum((k : ℕ ↦ A(i, k) * e(k)(x)), m)    by h2(i, hi, x)
+        = sum((k : ℕ ↦ A(i, k) * e(k)(x)), m2)   by hm

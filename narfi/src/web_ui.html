@@ -1361,6 +1361,7 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "import", preview: "import", desc: "import analysis.limits" },
   { cmd: "thm", preview: "thm", desc: "theorem: thm name :" },
   { cmd: "axiom", preview: "axiom", desc: "axiom name : Γ ⊢ φ" },
+  { cmd: "const", preview: "const", desc: "const c : σ（意味を決めない記号）" },
   { cmd: "rec", preview: "rec", desc: "primitive recursion: rec f(n : ℕ) : τ" },
   { cmd: "typedef", preview: "typedef", desc: "typedef T := {x : σ | φ}" },
   { cmd: "@name", preview: "@name", desc: "display name: @name ja \"…\"" },
@@ -1372,7 +1373,7 @@ const KEYWORD_COMPLETIONS = [
   { cmd: "sorry", preview: "sorry", desc: "placeholder goal" }
 ];
 
-const DECL_KWS = new Set(["thm", "axiom", "def", "rec", "notation", "import", "typedef", "edition"]);
+const DECL_KWS = new Set(["thm", "axiom", "const", "def", "rec", "notation", "import", "typedef", "edition"]);
 const STEP_KWS = new Set(["Fix", "assume", "by_contra", "Obtain", "choose", "cases", "Case", "induction", "let", "by"]);
 const JUST_KWS = new Set(["ring", "linarith", "refl", "decide", "sorry", "left", "right", "zero", "succ", "EQ1", "EQ2"]);
 const UPRIGHT_FNS = new Set(["max", "min", "sup", "inf", "sin", "cos", "tan", "exp", "log", "ln", "gcd", "lcm", "det", "dim", "ker", "im", "deg", "sgn", "mod", "Prop"]);
@@ -2417,7 +2418,7 @@ function computeHeaderLines() {
   let inHead = false;
   for (let i = 0; i < docLines.length; i++) {
     const t = serializeSeqToAscii(docLines[i].rootSeq).trim();
-    if (/^(thm|axiom|def|rec|typedef|notation|import)\b/.test(t) && docLines[i].indent === 0) {
+    if (/^(thm|axiom|const|def|rec|typedef|notation|import)\b/.test(t) && docLines[i].indent === 0) {
       set.add(i + 1);
       inHead = /^thm\b/.test(t) && !/\|-(?!>)|⊢/.test(t);
       continue;

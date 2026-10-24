@@ -1,0 +1,4 @@
+-- ℕ の順序の基本（仮置き。ℕ の順序を帰納法から作るまで）
+
+axiom nat.lt_succ : k : ℕ, m : ℕ, h : k < m + 1 ⊢ k < m ∨ k = m
+axiom nat.not_lt : a : ℕ, b : ℕ, h : ¬(a < b) ⊢ b ≤ a
