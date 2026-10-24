@@ -263,6 +263,10 @@ pub struct SyntaxTable {
     pub fns: BTreeSet<String>,
     /// ℕ を 1 つ受け取る const・def（添字で書ける列）
     pub seq_globals: BTreeSet<String>,
+    /// 添字 2 つで書ける const・def：ℕ × ℕ → σ（A_{i,j} は A(i, j)）と ℕ → (ℕ → σ)（p_{i,j} は p(i)(j)）
+    pub idx2_globals: BTreeSet<String>,
+    /// 最初の引数が ℕ で、引数が 2 つ以上の値の定義：f_i(x) は f(i, x)
+    pub idx_fns: BTreeSet<String>,
     /// 定義の本体に現れた述語（あとから同じ名前を def して循環させないため）
     pub def_preds: BTreeSet<String>,
     /// typedef で作った型・定数
@@ -300,6 +304,33 @@ pub fn with_syntax<R>(f: impl FnOnce(&mut SyntaxTable) -> R) -> R {
 }
 
 /// 型紙の文字を表示に使う形（LaTeX）
+/// 記法の型紙の上付き f^{-1} は、字句では ^ ( - 1 ) になる。LaTeX では ^{-1} に戻す
+fn sup_parens(s: &str) -> String {
+    let mut out = s.to_string();
+    while let Some(i) = out.find("^\\;(") {
+        let start = i + "^\\;(".len();
+        let mut depth = 1;
+        let mut end = None;
+        for (k, c) in out[start..].char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(start + k);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(e) = end else { break };
+        let inner = out[start..e].replace(' ', "");
+        out = format!("{}^{{{}}}{}", &out[..i], inner, &out[e + 1..]);
+    }
+    out
+}
+
 pub fn lit_latex(s: &str) -> String {
     match s {
         "→" => "\\to".into(),
@@ -391,6 +422,16 @@ fn applied_names(ts: &[Term]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     ts.iter().for_each(|t| go(t, &mut out));
     out
+}
+
+/// 添字 2 つで書く名前か（文脈の変数は seqs に「名前\u{1}2」で入る）
+pub fn is_idx2(f: &str) -> bool {
+    SUB_SEQS.with(|s| s.borrow().contains(&format!("{f}\u{1}2"))) || with_syntax(|t| t.idx2_globals.contains(f))
+}
+
+/// 型が添字 2 つの形か（ℕ × ℕ → σ・ℕ → (ℕ → σ)・ℕ → ℕ → σ）
+pub fn is_idx2_type(t: &str) -> bool {
+    t.starts_with("ℕ × ℕ →") || t.starts_with("ℕ → (ℕ →") || t.starts_with("ℕ → ℕ →")
 }
 
 /// 以後の表示で、seqs の適用を添字（a_n）で書く（検査中の文脈の数列）
@@ -820,8 +861,13 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                     .collect();
                 format!("[{}]", rows.join(", "))
             }
-            None => format!("({} ↦ {})", binder_typed(ps), show_term(b, 0)),
+            None => bind_seqs(ps, || format!("({} ↦ {})", binder_typed(ps), show_term(b, 0))),
         },
+        // p_{i,j}（p : ℕ → (ℕ → σ) の p(i)(j)）
+        Term::App(f, args) if f == "@" && args.len() == 2 && matches!(&args[0], Term::App(p, xs) if xs.len() == 1 && is_idx2(p)) => {
+            let Term::App(p, xs) = &args[0] else { unreachable!() };
+            format!("{p}_{{{}, {}}}", show_term(&xs[0], 0), show_term(&args[1], 0))
+        }
         Term::App(f, args) if f == "@" && !args.is_empty() => {
             let a: Vec<String> = args[1..].iter().map(|a| show_term(a, 0)).collect();
             format!("{}({})", show_term(&args[0], 5), a.join(", "))
@@ -858,6 +904,16 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                     let inner = show_term(a, 0);
                     let sep = if inner.starts_with('-') { " " } else { "" };
                     (format!("|{sep}{inner}|"), 5)
+                }
+                (_, [a, b]) if is_idx2(f) => (format!("{f}_{{{}, {}}}", show_term(a, 0), show_term(b, 0)), 5),
+                (_, [i, rest @ ..]) if !rest.is_empty() && with_syntax(|t| t.idx_fns.contains(f)) => {
+                    let sub = match i {
+                        Term::Var(x) if x.chars().count() == 1 => format!("{f}_{x}"),
+                        Term::Num(n) if *n < 10 => format!("{f}_{n}"),
+                        _ => format!("{f}_{{{}}}", show_term(i, 0)),
+                    };
+                    let a: Vec<String> = rest.iter().map(|a| show_term(a, 0)).collect();
+                    (format!("{sub}({})", a.join(", ")), 5)
                 }
                 (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) || with_syntax(|t| t.seq_globals.contains(f)) => match a {
                     Term::Var(x) if x.chars().count() == 1 => (format!("{f}_{x}"), 5),
@@ -923,7 +979,37 @@ fn iff_parts(f: &Formula) -> Option<(&Formula, &Formula)> {
     }
 }
 
+/// 束縛した列（∀a:ℕ → ℝ・(x : ℕ → ℝ ↦ …)）も、その中では添字で書く
+fn bind_seqs<R>(ps: &[(String, String)], f: impl FnOnce() -> R) -> R {
+    let add: Vec<String> = ps
+        .iter()
+        .flat_map(|(x, t)| {
+            let mut v = vec![];
+            if t.starts_with("ℕ →") {
+                v.push(x.clone());
+            }
+            if is_idx2_type(t) {
+                v.push(format!("{x}\u{1}2"));
+            }
+            v
+        })
+        .collect();
+    if add.is_empty() {
+        return f();
+    }
+    let mut seqs = SUB_SEQS.with(|s| s.borrow().clone());
+    seqs.extend(add);
+    with_sub_seqs(&seqs, f)
+}
+
 pub fn show_formula(f: &Formula, prec: u8) -> String {
+    match f {
+        Formula::Forall(x, ty, _) | Formula::Exists(x, ty, _) => bind_seqs(&[(x.clone(), ty.clone())], || show_formula_inner(f, prec)),
+        _ => show_formula_inner(f, prec),
+    }
+}
+
+fn show_formula_inner(f: &Formula, prec: u8) -> String {
     let (s, p) = match f {
         Formula::Bot => ("⊥".to_string(), 5),
         Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (
@@ -1241,15 +1327,20 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     .collect();
                 format!("\\begin{{pmatrix}} {} \\end{{pmatrix}}", rows.join(" \\\\ "))
             }
-            None => format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0)),
+            None => bind_seqs(ps, || format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0))),
         },
         Term::App(f, args) if notation_for_fn(f).and_then(|n| n.split(args)).is_some() => {
             let n = notation_for_fn(f).unwrap();
             let seqs = applied_names(&n.split(args).unwrap().0);
             let before = SUB_SEQS.with(|s| std::mem::replace(&mut *s.borrow_mut(), seqs));
             let s = n.render(args, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            let s = sup_parens(&s);
             SUB_SEQS.with(|s| *s.borrow_mut() = before);
             if prec > 4 { format!("\\left({s}\\right)") } else { s }
+        }
+        Term::App(f, args) if f == "@" && args.len() == 2 && matches!(&args[0], Term::App(p, xs) if xs.len() == 1 && is_idx2(p)) => {
+            let Term::App(p, xs) = &args[0] else { unreachable!() };
+            format!("{}_{{{},{}}}", ident_to_latex(p), show_term_latex(&xs[0], 0), show_term_latex(&args[1], 0))
         }
         Term::App(f, args) if f == "@" && !args.is_empty() => {
             let a: Vec<String> = args[1..].iter().map(|a| show_term_latex(a, 0)).collect();
@@ -1268,6 +1359,11 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 // 略記の表示の中の数列：a(n) を a_{n} と書く
+                (_, [a, b]) if is_idx2(f) => (format!("{}_{{{},{}}}", ident_to_latex(f), show_term_latex(a, 0), show_term_latex(b, 0)), 5),
+                (_, [i, rest @ ..]) if !rest.is_empty() && with_syntax(|t| t.idx_fns.contains(f)) => {
+                    let a: Vec<String> = rest.iter().map(|a| show_term_latex(a, 0)).collect();
+                    (format!("{}_{{{}}}\\left({}\\right)", ident_to_latex(f), show_term_latex(i, 0), a.join(", ")), 5)
+                }
                 (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) || with_syntax(|t| t.seq_globals.contains(f)) => (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5),
                 ("max" | "min", [a, b]) => (format!("\\{f}\\{{{}, {}\\}}", show_term_latex(a, 0), show_term_latex(b, 0)), 5),
                 ("+" | "-", [a, b]) => (
@@ -1308,6 +1404,8 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                 }
                 // 行列の演算（lib/algebra/matrix）
                 ("det2", [a]) => (format!("\\det {}", show_term_latex(a, 6)), 5),
+                // 単位行列の成分 mid(i, j) は I_{ij}
+                ("mid", [a, b]) => (format!("I_{{{} {}}}", show_term_latex(a, 0), show_term_latex(b, 0)), 5),
                 ("mtr", [a, _]) => (format!("\\operatorname{{tr}} {}", show_term_latex(a, 6)), 5),
                 ("mmul", [a, b, _]) => (format!("{} {}", show_term_latex(a, 3), show_term_latex(b, 3)), 2),
                 ("madd", [a, b]) => (format!("{} + {}", show_term_latex(a, 1), show_term_latex(b, 2)), 1),
@@ -1419,6 +1517,13 @@ fn binder_latex(q: &str, x: &str, ty: &str) -> String {
 }
 
 pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
+    match f {
+        Formula::Forall(x, ty, _) | Formula::Exists(x, ty, _) => bind_seqs(&[(x.clone(), ty.clone())], || show_formula_latex_inner(f, prec)),
+        _ => show_formula_latex_inner(f, prec),
+    }
+}
+
+fn show_formula_latex_inner(f: &Formula, prec: u8) -> String {
     let (s, p) = match f {
         Formula::Bot => ("\\bot".to_string(), 5),
         Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (
@@ -1444,6 +1549,7 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
             SUB_SEQS.with(|s| *s.borrow_mut() = seqs);
             // 型紙の中の「(」の前は少し空ける（a_n → α (n → ∞)）
             let shown = n.render(ts, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            let shown = sup_parens(&shown);
             SUB_SEQS.with(|s| s.borrow_mut().clear());
             (shown, 5)
         }

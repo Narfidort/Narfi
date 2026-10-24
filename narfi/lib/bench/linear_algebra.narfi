@@ -18,7 +18,7 @@ import algebra.matrix
 
 thm ch2 :
   A : ℕ × ℕ → ℝ, i : ℕ, j : ℕ, hi : i < 2, hj : j < 2
-  ⊢ mmul(A, A, 2)(i, j) - mtr(A, 2) * A(i, j) + det2(A) * mid(i, j) = 0
+  ⊢ mmul(A, A, 2)(i, j) - mtr(A, 2) * A_{i,j} + det2(A) * mid(i, j) = 0
 
 cayley_hamilton2(A, i, j, hi, hj)
 
@@ -35,11 +35,11 @@ cayley_hamilton2(A, i, j, hi, hj)
 
 thm ker.add :
   T : (ℕ → ℝ) → (ℕ → ℝ), u : ℕ → ℝ, v : ℕ → ℝ,
-  hT : ∀x:ℕ → ℝ. ∀y:ℕ → ℝ. T((n : ℕ ↦ x(n) + y(n))) = (n : ℕ ↦ T(x)(n) + T(y)(n)),
+  hT : ∀x:ℕ → ℝ. ∀y:ℕ → ℝ. T((n : ℕ ↦ x_n + y_n)) = (n : ℕ ↦ T(x)(n) + T(y)(n)),
   hu : T(u) = (n : ℕ ↦ 0), hv : T(v) = (n : ℕ ↦ 0)
-  ⊢ T((n : ℕ ↦ u(n) + v(n))) = (n : ℕ ↦ 0)
+  ⊢ T((n : ℕ ↦ u_n + v_n)) = (n : ℕ ↦ 0)
 
-T((n : ℕ ↦ u(n) + v(n)))
+T((n : ℕ ↦ u_n + v_n))
   = (n : ℕ ↦ T(u)(n) + T(v)(n))   by hT(u, v)
   = (n : ℕ ↦ 0 + T(v)(n))         by hu
   = (n : ℕ ↦ 0 + 0)               by hv

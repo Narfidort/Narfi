@@ -567,9 +567,9 @@ impl<'a> Checker<'a> {
                 // 定義の名前は値として渡せないので、λ で包む（f ↦ (i ↦ f(i))）
                 let head = match self.env.kernel.defs.get(g) {
                     Some(d) if d.params.len() == ys.len() => {
-                        let ps: Vec<(String, String)> = d.params.iter().enumerate().map(|(k, (_, t))| (format!("#d{k}"), t.clone())).collect();
+                        let ps: Vec<(String, String)> = d.params.iter().enumerate().map(|(k, (_, t))| (format!("v{k}'"), t.clone())).collect();
                         let args: Vec<Term> = ps.iter().map(|(p, _)| Term::Var(p.clone())).collect();
-                        Term::Lam(ps, Box::new(Term::App(g.clone(), args)))
+                        self.curried_lam(i, ps, Term::App(g.clone(), args))
                     }
                     _ => Term::Var(g.clone()),
                 };
@@ -592,15 +592,19 @@ impl<'a> Checker<'a> {
             return false;
         }
         let subs: Vec<(String, Term)> = xnames.iter().cloned().zip(ps.iter().map(|(p, _)| Term::Var(p.clone()))).collect();
-        let mut body = u.subst_many(&subs);
-        // 関数を返す関数 ℕ → (σ → τ) の解は、入れ子の λ（i ↦ (x ↦ …)）
+        let body = u.subst_many(&subs);
+        self.fn_metas[i].0 = Some(self.curried_lam(i, ps, body));
+        true
+    }
+
+    /// メタ変数 i の型に合わせて λ を入れ子にする（ℕ → (σ → τ) なら (i ↦ (x ↦ …))）
+    fn curried_lam(&self, i: usize, ps: Vec<(String, String)>, mut body: Term) -> Term {
         let mut chunks: Vec<usize> = vec![];
         let mut t = Ty::parse(&self.zonk_sort(&self.fn_metas[i].1));
         while let Some(Ty::Fun(a, r)) = t {
             chunks.push(a.len());
             t = Some(*r);
         }
-        let mut cut = ps.len();
         let mut groups: Vec<Vec<(String, String)>> = vec![];
         let mut start = 0;
         for c in &chunks {
@@ -614,12 +618,10 @@ impl<'a> Checker<'a> {
         if start < ps.len() {
             groups.push(ps[start..].to_vec());
         }
-        let _ = &mut cut;
         for g in groups.into_iter().rev() {
             body = Term::Lam(g, Box::new(body));
         }
-        self.fn_metas[i].0 = Some(body);
-        true
+        body
     }
 
     /// ?P(xs) =?= φ を解く

@@ -520,7 +520,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
   align-items: center;
   border-left: 1.5px solid var(--text);
   border-right: 1.5px solid var(--text);
-  padding: 0 4px;
+  padding: 0 2px;
   margin: 0 2px;
 }
 /* Root Node */
@@ -564,6 +564,9 @@ html:not(.web) [data-only="web"] { display: none !important; }
   padding: 0 4px;
   margin: 0 2px;
 }
+/* ‖ と ²・³ */
+.mc-vert2 { font-family: KaTeX_Main, serif; margin: 0 0.04em; }
+.mc-supch { font-family: KaTeX_Main, serif; font-size: 0.72em; vertical-align: 0.55em; margin-left: 0.02em; color: inherit; }
 /* 検索・置換 */
 .find-bar { position: fixed; z-index: 50; background: var(--bg-panel, #161b22); border: 1px solid var(--border, #30363d); border-radius: 8px; padding: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 4px; }
 .find-row { display: flex; align-items: center; gap: 4px; }
@@ -2176,7 +2179,8 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
         else if (STEP_KWS.has(word)) cls = "mc-kw-step";
         else if (JUST_KWS.has(word)) cls = "mc-kw-just";
         else if (UPRIGHT_FNS.has(word) || word.includes(".") || word.includes("_")) cls = "mc-ident-fn";
-        else if (word.length > 3 || declNames.has(word)) cls = "mc-ident-fn";
+        // 1 文字の名前（f・g など）は、定義した関数でも数式のとおり斜体
+        else if (word.length > 3 || ((declNames.has(word) || globalFns.has(word)) && word.length > 1)) cls = "mc-ident-fn";
         for (let k = i; k < j; k++) charClasses[k] = cls;
         i = j;
         continue;
@@ -2215,6 +2219,20 @@ function renderSingleItemHtml(seq, it, idx, charCls) {
       let l = idx - 1; while (isSp(l)) l--;
       let r = idx + 1; while (isSp(r)) r++;
       if (isMul(l) || isMul(r)) return `<span class="${charCls} mc-sp-tight" data-seq="${seq.id}" data-idx="${idx}">&nbsp;</span>`;
+    }
+    if (!isCommentLine(seq)) {
+      // ‖（U+2016）は数式フォントにないので ∥ の字形で（幅が合わず空白に見えるため）
+      if (it.ch === "‖") return `<span class="${charCls} mc-vert2" data-seq="${seq.id}" data-idx="${idx}">∥</span>`;
+      // ²・³ は上付きの数字として
+      // 引き算の - は −（数式のマイナス）で描く（-> や -- の一部は除く）
+      if (it.ch === "-") {
+        const nx = seq.items[idx + 1], pv = seq.items[idx - 1];
+        const isCh = (t, c) => t && t.kind === "char" && t.ch === c;
+        if (!isCh(nx, ">") && !isCh(nx, "-") && !isCh(pv, "-") && !isCh(pv, "|") && !isCh(pv, "<")) {
+          return `<span class="${charCls}" data-seq="${seq.id}" data-idx="${idx}">−</span>`;
+        }
+      }
+      if (it.ch === "²" || it.ch === "³") return `<span class="${charCls} mc-supch" data-seq="${seq.id}" data-idx="${idx}">${it.ch === "²" ? "2" : "3"}</span>`;
     }
     const chDisp = it.ch === " " ? "&nbsp;" : escHtml(it.ch);
     return `<span class="${charCls}" data-seq="${seq.id}" data-idx="${idx}">${chDisp}</span>`;
@@ -2576,6 +2594,8 @@ let dragStart = null;     // マウスドラッグの起点
 let selHL = new Map();    // 描画用：seqId → [from, to)
 let declNames = new Set();// thm / axiom / def で宣言された名前（立体で描く）
 
+// 検査器が返す関数の名前（import した定義・定数も）。2 文字以上なら立体で描く
+let globalFns = new Set();
 function collectDeclNames() {
   const names = new Set();
   for (const ln of docLines) {
@@ -2585,7 +2605,7 @@ function collectDeclNames() {
       t += it.ch;
       if (t.length > 80) break;
     }
-    const m = t.match(/^(?:thm|axiom|def)\s+([A-Za-z_][A-Za-z0-9_.']*)/);
+    const m = t.match(/^(?:thm|axiom|def|const|rec)\s+([A-Za-z_][A-Za-z0-9_.']*)/);
     if (m) names.add(m[1]);
   }
   return names;
@@ -4259,6 +4279,7 @@ async function runCheckApi() {
     });
     const data = await resp.json();
     lastCheckData = data;
+    if (data.fns) globalFns = new Set(data.fns);
     offerMigrate(data);
     noteLessonProgress(data);
     registerNotations(data.notations);

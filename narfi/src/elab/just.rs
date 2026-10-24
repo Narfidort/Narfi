@@ -283,7 +283,7 @@ impl<'a> Checker<'a> {
                 }
             }
             Term::Var(n) if n == "sorry" => {
-                self.sorries.push((self.line, self.snapshot.0.show(), e.clone()));
+                self.sorries.push((self.line, self.snapshot.0.show(), (e.to_string(), e.to_latex())));
                 Ok(Proof::Sorry(e))
             }
             Term::Var(n) if n == "linarith" => self.linarith(ctx, vec![], &e),

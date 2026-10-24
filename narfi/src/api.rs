@@ -155,14 +155,17 @@ pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: 
         .map(|(l, m, rep)| format!("{{\"line\":{l},\"msg\":{},\"replace\":{}}}", json_str(m), json_str(rep)))
         .collect();
 
+    // 関数の名前（定義・定数。import したものも）：エディタで立体にする
+    let fns: Vec<String> = crate::syntax::with_syntax(|t| t.fns.iter().chain(t.consts.iter()).cloned().collect());
     format!(
-        "{{\"ok\":{},\"parse_error\":{},\"decls\":[{}],\"notes\":[{}],\"notations\":[{}],\"warnings\":[{}]}}",
+        "{{\"ok\":{},\"parse_error\":{},\"decls\":[{}],\"notes\":[{}],\"notations\":[{}],\"warnings\":[{}],\"fns\":{}}}",
         perr_json == "null" && reports.iter().all(|r| r.err.is_none()),
         perr_json,
         decls_json.join(","),
         notes_json.join(","),
         notations_json.join(","),
-        warnings_json.join(",")
+        warnings_json.join(","),
+        json_str_array(&fns)
     )
 }
 
@@ -181,7 +184,27 @@ fn patch_line_with_sorry(src: &str, target_line: usize) -> String {
         .join("\n")
 }
 
+/// 宣言の変数の列（a : ℕ → ℝ）。見出し・Prose・LaTeX でも添字で書くため
+pub fn decl_seqs(d: &Decl) -> std::collections::BTreeSet<String> {
+    let mut seqs = std::collections::BTreeSet::new();
+    for c in &d.ctx {
+        if let crate::parser::CtxItem::Var(x, t) = c {
+            if t.starts_with("ℕ →") {
+                seqs.insert(x.clone());
+            }
+            if crate::syntax::is_idx2_type(t) {
+                seqs.insert(format!("{x}\u{1}2"));
+            }
+        }
+    }
+    seqs
+}
+
 fn format_decl_report_json(d: &Decl, r: &Report) -> String {
+    crate::syntax::with_sub_seqs(&decl_seqs(d), || format_decl_report_json_in(d, r))
+}
+
+fn format_decl_report_json_in(d: &Decl, r: &Report) -> String {
     let status = if r.is_axiom {
         "axiom"
     } else if r.err.is_some() {
@@ -229,8 +252,8 @@ fn format_decl_report_json(d: &Decl, r: &Report) -> String {
                 "{{\"line\":{},\"ctx\":{},\"goal\":{},\"goal_latex\":{}}}",
                 line,
                 json_str_array(ctx),
-                json_str(&g.to_string()),
-                json_str(&g.to_latex())
+                json_str(&g.0),
+                json_str(&g.1)
             )
         })
         .collect();

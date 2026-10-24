@@ -512,7 +512,13 @@ const IMPLICIT_STOP: [&str; 14] =
 
 struct SubScope {
     seqs: BTreeSet<String>,
+    /// f_i(x) を f(i, x) と読む定義
+    idx_fns: BTreeSet<String>,
     declared: BTreeSet<String>,
+    /// 添字 2 つ：ℕ × ℕ → σ（A_{i,j} は A(i, j)）
+    mats: BTreeSet<String>,
+    /// 添字 2 つ：ℕ → (ℕ → σ)（p_{i,j} は p(i)(j)）
+    seq2s: BTreeSet<String>,
 }
 
 impl SubScope {
@@ -520,25 +526,46 @@ impl SubScope {
         let is_seq = |t: &str| t.starts_with("ℕ →");
         let declared: BTreeSet<String> = vars.iter().map(|(x, _)| x.clone()).collect();
         let mut seqs: BTreeSet<String> = vars.iter().filter(|(_, t)| is_seq(t)).map(|(x, _)| x.clone()).collect();
+        let mut mats: BTreeSet<String> = vars.iter().filter(|(_, t)| t.starts_with("ℕ × ℕ →")).map(|(x, _)| x.clone()).collect();
+        let mut seq2s: BTreeSet<String> =
+            vars.iter().filter(|(_, t)| is_seq(t) && crate::syntax::is_idx2_type(t)).map(|(x, _)| x.clone()).collect();
         // ファイルの const・def の列（同じ名前の変数があればそちらが優先）
-        for g in with_syntax(|t| t.seq_globals.clone()) {
-            if !declared.contains(&g) {
-                seqs.insert(g);
+        let (gs, g2, gf) = with_syntax(|t| (t.seq_globals.clone(), t.idx2_globals.clone(), t.idx_fns.clone()));
+        let idx_fns: BTreeSet<String> = gf.into_iter().filter(|g| !declared.contains(g)).collect();
+        seqs.extend(idx_fns.iter().cloned());
+        for g in gs.iter() {
+            if !declared.contains(g) {
+                seqs.insert(g.clone());
             }
         }
-        SubScope { seqs, declared }
+        for g in g2 {
+            if !declared.contains(&g) {
+                if gs.contains(&g) {
+                    seq2s.insert(g);
+                } else {
+                    mats.insert(g);
+                }
+            }
+        }
+        SubScope { seqs, idx_fns, declared, mats, seq2s }
     }
 
     /// 束縛変数（∀a:ℕ → ℝ. …・(a : ℕ → ℝ ↦ …)）も、型が列なら列として読む
     fn bind(&self, ps: &[(String, String)]) -> Option<SubScope> {
-        let seqs: Vec<&String> = ps.iter().filter(|(_, t)| t.starts_with("ℕ →")).map(|(x, _)| x).collect();
+        let seqs: Vec<&String> = ps.iter().filter(|(_, t)| t.starts_with("ℕ →") || t.starts_with("ℕ × ℕ →")).map(|(x, _)| x).collect();
         if seqs.is_empty() {
             return None;
         }
-        let mut sc = SubScope { seqs: self.seqs.clone(), declared: self.declared.clone() };
-        for x in seqs {
-            sc.seqs.insert(x.clone());
+        let mut sc = SubScope { seqs: self.seqs.clone(), idx_fns: self.idx_fns.clone(), declared: self.declared.clone(), mats: self.mats.clone(), seq2s: self.seq2s.clone() };
+        for (x, t) in ps {
+            if t.starts_with("ℕ →") {
+                sc.seqs.insert(x.clone());
+            }
+            if t.starts_with("ℕ →") && crate::syntax::is_idx2_type(t) {
+                sc.seq2s.insert(x.clone());
+            }
         }
+        let _ = seqs;
         Some(sc)
     }
 
@@ -573,10 +600,26 @@ impl SubScope {
             },
             Term::App(f, args) => {
                 let args: Vec<Term> = args.iter().map(|a| self.term(a)).collect();
+                // delta_{i,j} の delta は δ（ギリシャ文字の名前は字句解析で文字になるが、_ が付くとならない）
+                let fg: String = match f.strip_suffix('_') {
+                    Some(b) => format!("{}_", greek_word_to_char(b).unwrap_or(b)),
+                    None => f.clone(),
+                };
+                let f = &fg;
                 match f.strip_suffix('_') {
+                    // A_{i,j} は A(i, j)、p_{i,j} は p(i)(j)
+                    Some(b) if args.len() == 2 && self.mats.contains(b) && !self.declared.contains(f) => Term::App(b.to_string(), args),
+                    Some(b) if args.len() == 2 && self.seq2s.contains(b) && !self.declared.contains(f) => {
+                        crate::syntax::apply_term(&Term::App(b.to_string(), vec![args[0].clone()]), &args[1..])
+                    }
                     Some(b) if self.seqs.contains(b) && !self.declared.contains(f) => Term::App(b.to_string(), args),
-                    // f_i(x) は f(i)(x)
+                    // f_i(x) は f(i)(x)（f(i, x) と定義したなら f(i, x)）
                     _ => match self.split(f) {
+                        Some((b, i)) if self.idx_fns.contains(&b) => {
+                            let mut all = vec![i];
+                            all.extend(args);
+                            Term::App(b, all)
+                        }
                         Some((b, i)) => crate::syntax::apply_term(&Term::App(b, vec![i]), &args),
                         None => Term::App(f.clone(), args),
                     },
@@ -781,8 +824,14 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
                 }
             }
             let word: String = cs[st..i].iter().collect();
+            // delta₁・eps' のようにギリシャ文字の名前に添字・プライムが付いたものも δ₁・ε'（δ_1 と同じ名前）
+            let ascii_head: String = word.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+            let tail = &word[ascii_head.len()..];
+            let greek_tail = !tail.is_empty() && tail.chars().all(|c| ('₀'..='₉').contains(&c) || c == '\'');
             let mapped = if let Some(g) = greek_word_to_char(&word) {
                 Tok::Ident(g.into())
+            } else if let (true, Some(g)) = (greek_tail, greek_word_to_char(&ascii_head)) {
+                Tok::Ident(format!("{g}{tail}"))
             } else {
                 match word.as_str() {
                     "forall" => Tok::Sym("∀".into()),
@@ -1771,6 +1820,9 @@ fn parse_item_at(
                 if ty.starts_with("ℕ →") {
                     t.seq_globals.insert(name.clone());
                 }
+                if crate::syntax::is_idx2_type(&ty) {
+                    t.idx2_globals.insert(name.clone());
+                }
             });
             items.push(Item::Const { name, ty, line: l.no });
             *i += 1;
@@ -2564,6 +2616,16 @@ fn register_def(d: &Def) -> PResult<()> {
             // ℕ を 1 つ受け取る値の定義は列：f_i は f(i)
             if d.params.len() == 1 && d.params[0].1 == "ℕ" {
                 t.seq_globals.insert(d.name.clone());
+            }
+            // ℕ を 2 つ受け取る値の定義：A_{i,j} は A(i, j)
+            // （添字で書くのは 1 文字の名前だけ：δ_{i,j} はよいが mid_{i,j} は読みにくい）
+            if d.params.len() == 2 && d.params.iter().all(|(_, s)| s == "ℕ") {
+                if d.name.chars().count() == 1 || greek_word_to_char(&d.name).is_some() {
+                    t.idx2_globals.insert(d.name.clone());
+                }
+            } else if d.params.len() >= 2 && d.params[0].1 == "ℕ" {
+                // 最初の引数が ℕ の定義：f_i(x) は f(i, x)
+                t.idx_fns.insert(d.name.clone());
             }
         }
         t.def_preds.extend(preds);

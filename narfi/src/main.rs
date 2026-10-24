@@ -320,7 +320,7 @@ fn print_report(path: &str, r: &Report) {
                     for c in ctx {
                         println!("        {c}");
                     }
-                    println!("        ⊢ {g}");
+                    println!("        ⊢ {}", g.0);
                 }
             } else {
                 println!("  ✓ {}{}", r.name, notes);
@@ -364,7 +364,7 @@ fn print_diag(r: &Report) {
         println!(
             "SORRY\t{}\t{}",
             line,
-            esc(&format!("残っている goal:\n{}", state(ctx, &g.to_string())))
+            esc(&format!("残っている goal:\n{}", state(ctx, &g.0)))
         );
     }
 }

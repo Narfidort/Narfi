@@ -58,3 +58,28 @@ thm mul.by :
 x
   <= 2 by h
   < 3 by decide
+
+-- 添字 2 つ：A_{i,j} は A(i, j)、p_{i,j} は p(i)(j)
+const q : Nat -> (Nat -> Real)
+
+thm sub.two :
+  A : Nat × Nat -> Real, i : Nat, j : Nat, h : A_{i,j} = q_{i,j}
+  |- A(i, j) = q_i(j)
+
+h
+
+-- 最初の引数が ℕ の定義：g_i(x) は g(i, x)
+def g(i : Nat, x : Real) : Real := x * x
+
+thm sub.fn :
+  x : Real
+  |- g_2(x) = g(2, x)
+
+refl
+
+-- ギリシャ文字の名前の添字：delta_1 と δ_1 は同じ名前
+thm sub.greek :
+  |- forall delta_1:Real. delta_1 = δ_1
+
+Fix d
+  refl

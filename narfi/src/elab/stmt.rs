@@ -81,6 +81,7 @@ impl<'a> Checker<'a> {
             ctx.entries.push(Entry::Hyp(h.clone(), f.clone()));
         }
         self.line = d.line;
+        self.set_snapshot(ctx.clone(), Some(st.concl.clone()));
         self.record_step(d.line, 0, &format!("thm {}", d.name), &ctx, &Some(st.concl.clone()));
         if d.body.is_empty() {
             self.set_snapshot(ctx, Some(st.concl.clone()));

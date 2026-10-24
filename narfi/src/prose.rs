@@ -74,6 +74,10 @@ fn sort_decl_latex(t: &str) -> String {
 }
 
 pub fn decl_header_latex(d: &Decl) -> String {
+    crate::syntax::with_sub_seqs(&crate::api::decl_seqs(d), || decl_header_latex_in(d))
+}
+
+fn decl_header_latex_in(d: &Decl) -> String {
     let mut parts = Vec::new();
     for c in &d.ctx {
         match c {
@@ -108,6 +112,10 @@ pub fn decl_to_japanese_prose(d: &Decl, steps: &[StepTrace]) -> Vec<ProseBlock> 
 
 /// 宣言の証明を、ロケール（ja・en）の文章にする。文の型紙は src/locale/*.txt の [prose]
 pub fn decl_to_prose(d: &Decl, steps: &[StepTrace], lc: &crate::locale::Locale) -> Vec<ProseBlock> {
+    crate::syntax::with_sub_seqs(&crate::api::decl_seqs(d), || decl_to_prose_in(d, steps, lc))
+}
+
+fn decl_to_prose_in(d: &Decl, steps: &[StepTrace], lc: &crate::locale::Locale) -> Vec<ProseBlock> {
     let mut out = Vec::new();
     let il = |x: &str| ident_to_latex(x);
     if d.generated {
@@ -309,6 +317,10 @@ pub fn latex_document(title: &str, items: &[(&Decl, &[StepTrace])]) -> String {
 
 /// 1つの宣言を提出レポート用の LaTeX ソース（theorem + proof 環境）に変換する
 pub fn decl_to_latex_env(d: &Decl, steps: &[StepTrace]) -> String {
+    crate::syntax::with_sub_seqs(&crate::api::decl_seqs(d), || decl_to_latex_env_in(d, steps))
+}
+
+fn decl_to_latex_env_in(d: &Decl, steps: &[StepTrace]) -> String {
     // 文は見出しの下に、別行の数式として置く（見出しの横に置くと上下中央にそろって間が空く）
     let statement = format!("\\leavevmode\n\\[\n{}\n\\]", decl_header_latex(d));
     let title = crate::syntax::display_name(&d.name, crate::locale::current().name).unwrap_or_else(|| d.name.replace('_', "\\_"));

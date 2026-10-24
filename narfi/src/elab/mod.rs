@@ -192,7 +192,8 @@ pub struct Checker<'a> {
     line: usize,
     snapshot: (Ctx, Option<Formula>),
     /// sorry で飛ばした箇所：(行, 文脈, 残っている goal)
-    pub sorries: Vec<(usize, Vec<String>, Formula)>,
+    /// （行・文脈・goal の表示（ふつう・LaTeX））
+    pub sorries: Vec<(usize, Vec<String>, (String, String))>,
     pub steps: Vec<StepTrace>,
     trace: bool,
     depth: usize,
@@ -240,7 +241,7 @@ impl<'a> Checker<'a> {
             goal_latex: goal.as_ref().map(|g| g.to_latex()),
             hints: goal.as_ref().map(|g| self.hints(ctx, g)).unwrap_or_default(),
             terms: self.context_terms(ctx, goal),
-            seqs: self.seq_vars(ctx).into_iter().collect(),
+            seqs: self.seq_vars(ctx).into_iter().filter(|x| !x.contains('\u{1}')).collect(),
         });
     }
 
@@ -252,9 +253,20 @@ impl<'a> Checker<'a> {
     fn seq_vars(&self, ctx: &Ctx) -> std::collections::BTreeSet<String> {
         ctx.entries
             .iter()
-            .filter_map(|e| match e {
-                Entry::Var(x, s, _) if self.zonk_sort(s).starts_with("ℕ →") => Some(x.clone()),
-                _ => None,
+            .flat_map(|e| match e {
+                Entry::Var(x, s, _) => {
+                    let s = self.zonk_sort(s);
+                    let mut v = vec![];
+                    if s.starts_with("ℕ →") {
+                        v.push(x.clone());
+                    }
+                    // 添字 2 つ（A_{i,j}・p_{i,j}）の印
+                    if crate::syntax::is_idx2_type(&s) {
+                        v.push(format!("{x}\u{1}2"));
+                    }
+                    v
+                }
+                _ => vec![],
             })
             .collect()
     }
@@ -446,7 +458,8 @@ pub struct Report {
     pub axioms: BTreeSet<String>,
     /// 使った算術の規則と、未完成なら "sorry"
     pub oracles: BTreeSet<String>,
-    pub sorries: Vec<(usize, Vec<String>, Formula)>,
+    /// （行・文脈・goal の表示（ふつう・LaTeX））
+    pub sorries: Vec<(usize, Vec<String>, (String, String))>,
     pub steps: Vec<StepTrace>,
     /// 証明木（JSON。src/derivation.rs）
     pub tree: Option<String>,
