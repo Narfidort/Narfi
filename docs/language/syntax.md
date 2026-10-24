@@ -199,6 +199,8 @@ notation \max_{i ≤ m} f := top((i : ℕ ↦ f), m)             -- 値になる
 
 v2.13 で消した書き方：`have h : φ := j`（→ `h : φ by j`）、`contradiction h k`（→ `k(h)`）、`unfold …`（書かなくてよい）、`suffices ψ := j`（→ ψ を示してから閉じる）。
 
+古い書き方（v2.11〜v2.13 で消した、ならばの `→`・`max(a, b)`・述語の定義の `:=`・`have`・`contradiction`・`unfold`・`axiom c : σ`）は、`narfi migrate --write ファイル` か、エディタの File → Update Old Syntax で今の書き方に直せる（古い書き方のファイルを開くと、直すかを聞かれる）。直せない行（`suffices` など）はそのまま残る。
+
 連鎖：
 
 ```

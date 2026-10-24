@@ -82,6 +82,9 @@ fn handle(req: &str) -> String {
         "convert" => {
             use_memory_files(FILES.with(|f| f.borrow().clone()));
             let src = get("src");
+            if get("mode") == "migrate" {
+                return crate::migrate::migrate_json(&src, None);
+            }
             let out = match get("mode").as_str() {
                 "to_jp_sugar" | "to_ja" => crate::prose::convert_source_to_locale(&src, "ja"),
                 "to_en" => crate::prose::convert_source_to_locale(&src, "en"),

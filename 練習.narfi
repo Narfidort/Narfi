@@ -24,8 +24,8 @@ sorry
 
 -- 1.2  → を示すには assume
 thm ex1.imp_trans :
-  h : P → Q, k : Q → R
-  ⊢ P → R
+  h : P ⇒ Q, k : Q ⇒ R
+  ⊢ P ⇒ R
 
 sorry
 
@@ -40,8 +40,8 @@ sorry
 
 -- 1.4  対偶。¬Q は Q → ⊥ のこと
 thm ex1.contrapositive :
-  h : P → Q
-  ⊢ ¬Q → ¬P
+  h : P ⇒ Q
+  ⊢ ¬Q ⇒ ¬P
 
 sorry
 
@@ -58,7 +58,7 @@ sorry
 
 -- 2.2  ∃ を使うには Obtain、∃ を示すには choose
 thm ex2.exists_imp :
-  h : ∀x. P(x) → Q(x), e : ∃x. P(x)
+  h : ∀x. P(x) ⇒ Q(x), e : ∃x. P(x)
   ⊢ ∃x. Q(x)
 
 sorry

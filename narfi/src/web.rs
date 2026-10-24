@@ -155,6 +155,11 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
         ("POST", "/api/convert") => {
             let src = json_get_str(&body, "src").unwrap_or_default();
             let mode = json_get_str(&body, "mode").unwrap_or_default();
+            if mode == "migrate" {
+                let file = json_get_str(&body, "path").and_then(|p| safe_resolve_path(&p));
+                let res = crate::migrate::migrate_json(&src, file.as_deref().and_then(|f| f.parent()));
+                return send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes());
+            }
             let converted = match mode.as_str() {
                 "to_jp_sugar" | "to_ja" => prose::convert_source_to_locale(&src, "ja"),
                 "to_en" => prose::convert_source_to_locale(&src, "en"),

@@ -1,0 +1,20 @@
+-- 古い書き方（v2.11〜v2.13 で消した）。narfi migrate で今の書き方に直せることを確かめる（tests/examples.rs）
+
+axiom ge.max.left : a : Nat, b : Nat, n : Nat, h : n >= max(a, b) |- n >= a
+
+def pos(x : Real) := x > 0
+
+thm imp_trans :
+  P : Prop, Q : Prop, R : Prop, f : P -> Q, g : Q -> R
+  |- P -> R
+
+assume p : P
+  have q : Q := f(p)
+  g(q)
+
+thm nn :
+  a : Nat, b : Nat, n : Nat, h : n >= a + b
+  |- n >= a
+
+have k : b >= 0 := nat.nonneg(b)
+linarith

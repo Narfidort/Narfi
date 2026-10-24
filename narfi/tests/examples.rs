@@ -208,3 +208,18 @@ fn benchmarks() {
         }
     }
 }
+
+/// 古い書き方は narfi migrate で今の書き方に直り、検査が通る
+#[test]
+fn migrate_legacy() {
+    let dir = std::env::temp_dir().join("narfi_migrate_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("legacy.narfi");
+    std::fs::copy("tests/regress/legacy.narfi", &f).unwrap();
+    let before = run(&[f.to_str().unwrap()]);
+    assert!(before.contains("構文エラー"), "{before}");
+    let st = std::process::Command::new(env!("CARGO_BIN_EXE_narfi")).args(["migrate", "--write", f.to_str().unwrap()]).status().unwrap();
+    assert!(st.success());
+    let after = run(&[f.to_str().unwrap()]);
+    assert!(!after.contains("構文エラー") && after.contains("2 個の定理をすべて検証しました"), "{after}");
+}

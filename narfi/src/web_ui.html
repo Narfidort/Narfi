@@ -1017,6 +1017,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <button class="menu-item" onclick="openFolder()" data-only="web"><span class="mi-label">Upload Folder…</span><span class="kbd"></span></button>
       <button class="menu-item" onclick="revealDir('workspace')" data-only="web"><span class="mi-label">Download All (.zip)</span><span class="kbd"></span></button>
       <div class="menu-sep"></div>
+      <button class="menu-item" onclick="migrateCurrent()" title="v2.11〜v2.13 で消した書き方（→ のならば・have・max(a, b) など）を今の書き方に書き換える"><span class="mi-label">Update Old Syntax</span><span class="kbd"></span></button>
       <button class="menu-item" onclick="saveFile()"><span class="mi-label">Save</span><span class="kbd">⌘S</span></button>
       <button class="menu-item" onclick="saveAs()"><span class="mi-label">Save As…</span><span class="kbd">⇧⌘S</span></button>
       <button id="btnAutosave" class="menu-item check" onclick="toggleAutosave()" title="編集が止まって約1秒後に自動で保存する"><span class="mi-label">Auto Save</span><span class="kbd"></span></button>
@@ -4003,6 +4004,7 @@ async function runCheckApi() {
     });
     const data = await resp.json();
     lastCheckData = data;
+    offerMigrate(data);
     noteLessonProgress(data);
     registerNotations(data.notations);
     updateStatusPill(data);
@@ -4013,6 +4015,29 @@ async function runCheckApi() {
   } catch (e) {
     console.error("check error", e);
   }
+}
+
+// 古い書き方（消した書き方）のエラーがあれば、今の書き方に直すかを 1 度だけ聞く
+const LEGACY_MSG = /ならばは ⇒|は \S+\{a, b\} と書く|述語の定義は :⇔|値の定義は := で書く|` は使わない：|記号を宣言するなら `const/;
+const migrateOffered = new Set();
+function offerMigrate(data) {
+  const msgs = [data.parse_error && data.parse_error.msg, ...(data.decls || []).map(d => d.error && d.error.msg)].filter(Boolean);
+  if (!msgs.some(m => LEGACY_MSG.test(m))) return;
+  const key = currentFilePath || "(untitled)";
+  if (migrateOffered.has(key)) return;
+  migrateOffered.add(key);
+  setTimeout(() => {
+    if (confirm("このファイルには、今は使わない古い書き方があります。今の書き方に直しますか？（File → Update Old Syntax でも直せます）")) migrateCurrent();
+  }, 50);
+}
+
+async function migrateCurrent() {
+  const resp = await fetch("/api/convert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ src: serializeDocToAscii(), mode: "migrate", path: currentFilePath }) });
+  const r = await resp.json();
+  if (!r.changes || !r.changes.length) { alert("直せる古い書き方は見つからなかった。"); return; }
+  await loadSrc(r.src, currentFilePath);
+  noteEdited();
+  alert(`${r.changes.length} 行を今の書き方に直した：\n\n` + r.changes.slice(0, 15).join("\n") + (r.changes.length > 15 ? "\n…" : ""));
 }
 
 function updateStatusPill(data) {

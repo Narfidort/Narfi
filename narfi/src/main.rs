@@ -9,6 +9,7 @@ use std::process::ExitCode;
 fn usage() -> ExitCode {
     eprintln!("使い方:");
     eprintln!("  narfi check [--trace] <ファイル.narfi>...   定理の検証");
+    eprintln!("  narfi migrate [--write] file.narfi       古い書き方を今の書き方に書き換える");
     eprintln!("  narfi web [--port 3000] [--no-open] [--dir フォルダ]  Web エディタを起動");
     eprintln!("  narfi prose <ファイル.narfi>                自然な日本語の証明文(Markdown)を出力");
     eprintln!("  narfi latex <ファイル.narfi>                提出用 LaTeX ソースを出力");
@@ -54,6 +55,34 @@ fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         // ソースの変換（JP Sugar View・ASCII 正規化と同じもの）
+        // 古い書き方を今の書き方に（--write で上書き。なければ標準出力へ）
+        "migrate" => {
+            let write = args.iter().any(|a| a == "--write");
+            let Some(path) = args.iter().skip(1).find(|a| !a.starts_with("--")) else {
+                return usage();
+            };
+            let src = match std::fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{path}: 読めない: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            let dir = Path::new(path).parent().map(|d| d.to_path_buf());
+            let (out, done) = narfi::migrate::migrate(&src, &|s| narfi::migrate::errors_of(narfi::module::parse_source(s, dir.as_deref())));
+            for (l, m) in &done {
+                eprintln!("  {path}:{l}: {m}");
+            }
+            if write {
+                if let Err(e) = std::fs::write(path, &out) {
+                    eprintln!("{path}: 書けない: {e}");
+                    return ExitCode::from(2);
+                }
+            } else {
+                print!("{out}");
+            }
+            return ExitCode::SUCCESS;
+        }
         "convert" => {
             let (Some(mode), Some(path)) = (args.get(1), args.get(2)) else {
                 return usage();
