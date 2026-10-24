@@ -29,8 +29,10 @@
   // ---------------------------------------------------------------- WebAssembly
 
   let wasm = null;
+  let wasmTag = null;
   async function instantiate() {
     const resp = await realFetch("/narfi.wasm");
+    wasmTag = resp.headers.get("etag");
     const bytes = await resp.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(bytes, {});
     wasm = instance.exports;
@@ -38,6 +40,25 @@
     const fs = loadFs();
     for (const [path, src] of Object.entries(fs)) call({ op: "put_file", path, src });
   }
+
+  // 新しい版が出たら知らせる（開いたままのタブは古い検査器のままなので）
+  let updateShown = false;
+  async function checkUpdate() {
+    if (updateShown || !wasmTag) return;
+    try {
+      const r = await realFetch("/narfi.wasm", { method: "HEAD", cache: "no-store" });
+      const tag = r.headers.get("etag");
+      if (!tag || tag === wasmTag) return;
+      updateShown = true;
+      const bar = document.createElement("div");
+      bar.style.cssText = "position:fixed;left:50%;bottom:36px;transform:translateX(-50%);z-index:9999;background:#1f6feb;color:#fff;padding:8px 14px;border-radius:8px;font:13px -apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.35)";
+      bar.innerHTML = 'Narfi の新しい版があります。 <button style="margin-left:8px;border:0;border-radius:5px;padding:3px 10px;cursor:pointer">再読み込み</button>';
+      bar.querySelector("button").onclick = () => location.reload();
+      document.body.appendChild(bar);
+    } catch (_) {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
+  setInterval(checkUpdate, 10 * 60 * 1000);
 
   function call(req) {
     const b = enc.encode(JSON.stringify(req));

@@ -996,7 +996,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
   resize: none;
   outline: none;
 }
-.mc-mul { display: inline-block; width: 0.32em; text-align: center; opacity: 0.3; color: var(--text-dim); }
+.mc-mul { display: inline-block; width: 0.42em; text-align: center; opacity: 0.75; color: var(--text-dim); }
+.mc-sp-tight { display: inline-block; width: 0.06em; overflow: hidden; }
 .mc-ghost { color: var(--text-faint); font-style: italic; margin-left: 6px; user-select: none; }
 .mc-ghost-key { font-family: "JetBrains Mono", monospace; font-size: 10px; font-style: normal; border: 1px solid var(--border); border-radius: 2px; padding: 0 4px; margin-left: 6px; }
 </style>
@@ -2093,6 +2094,14 @@ function renderSingleItemHtml(seq, it, idx, charCls) {
     // 積の * は、教科書のように記号なしに近い形で（消したり選んだりできるよう、薄い点として残す）
     if (it.ch === "*" && !isCommentLine(seq)) {
       return `<span class="mc-mul" data-seq="${seq.id}" data-idx="${idx}">·</span>`;
+    }
+    // 積の * のまわりの空白は詰める（a * b を ab に近い間隔で）
+    if (it.ch === " " && !isCommentLine(seq)) {
+      const isMul = (j) => { const t = seq.items[j]; return t && ((t.kind === "char" && t.ch === "*") || (t.kind === "sym" && t.ascii === "*")); };
+      const isSp = (j) => { const t = seq.items[j]; return t && t.kind === "char" && t.ch === " "; };
+      let l = idx - 1; while (isSp(l)) l--;
+      let r = idx + 1; while (isSp(r)) r++;
+      if (isMul(l) || isMul(r)) return `<span class="${charCls} mc-sp-tight" data-seq="${seq.id}" data-idx="${idx}">&nbsp;</span>`;
     }
     const chDisp = it.ch === " " ? "&nbsp;" : escHtml(it.ch);
     return `<span class="${charCls}" data-seq="${seq.id}" data-idx="${idx}">${chDisp}</span>`;

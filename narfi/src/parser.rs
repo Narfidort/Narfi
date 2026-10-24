@@ -2323,7 +2323,7 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
     p.tyenv = params.iter().filter(|(_, t)| !t.contains('→') && t != "?").cloned().collect();
     let names: Vec<String> = params.iter().map(|(x, _)| x.clone()).collect();
     let is_global = |v: &str| with_syntax(|t| t.defs.contains_key(v) || t.consts.contains(v));
-    let (body, term, fv) = match result.as_deref() {
+    let (body, term, _fv) = match result.as_deref() {
         None | Some("Prop") => {
             let f = p.formula()?;
             let fv = f.free_vars();
