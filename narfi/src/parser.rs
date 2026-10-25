@@ -417,7 +417,12 @@ pub fn expand_tex_macros(s: &str) -> String {
                     }
                     if let Some((body, end_k)) = extract_braced(&cs, k) {
                         let body_exp = expand_tex_macros(&body);
-                        out.push_str(&format!("{cmd}({body_exp})"));
+                        // \norm{x} は ‖x‖（記法の型紙と同じ字面。norm(x) という関数ではない）
+                        if cmd == "norm" {
+                            out.push_str(&format!("‖{body_exp}‖"));
+                        } else {
+                            out.push_str(&format!("{cmd}({body_exp})"));
+                        }
                         i = end_k;
                         continue;
                     }
@@ -922,9 +927,16 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             i += 2;
             continue;
         }
+        // x² は x^2 と同じ字句にする（記法の型紙と使い方で書き方が違っても合うように）
+        if c == '²' || c == '³' {
+            out.push(Tok::Sym("^".into()));
+            out.push(Tok::Num(if c == '²' { 2 } else { 3 }));
+            i += 1;
+            continue;
+        }
         let sym = match c {
             '*' => "·".to_string(),
-            '²' | '³' | '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
+            '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
             | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆' | '⊊'
             | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−'
             | '·' | '/' | '^' | '⇐' | '⇒' | '⇔' | '∴' | '×' | '{' | '}' | '↦' | '[' | ']' => {

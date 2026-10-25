@@ -559,11 +559,19 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .mc-norm {
   display: inline-flex;
   align-items: center;
-  border-left: 3px double var(--text);
-  border-right: 3px double var(--text);
-  padding: 0 4px;
+  padding: 0 2px;
   margin: 0 2px;
 }
+/* ‖ ‖：細い 2 本の線（絶対値 | | と同じ太さ。中身の高さに合わせて伸びる） */
+.mc-norm::before, .mc-norm::after {
+  content: "";
+  align-self: stretch;
+  width: 4px;
+  margin: 0.18em 0;
+  background: linear-gradient(to right, var(--text) 0 1.2px, transparent 1.2px 2.8px, var(--text) 2.8px 4px);
+}
+.mc-norm::before { margin-right: 2px; }
+.mc-norm::after { margin-left: 2px; }
 /* ‖ と ²・³ */
 .mc-vert2 { font-family: KaTeX_Main, serif; margin: 0 0.04em; }
 .mc-supch { font-family: KaTeX_Main, serif; font-size: 0.72em; vertical-align: 0.55em; margin-left: 0.02em; color: inherit; }
@@ -1687,6 +1695,22 @@ function parseAsciiToItems(str) {
       }
     }
 
+    // ‖…‖ -> ノルムの部品（括弧の外で、次の ‖ まで）
+    if (ch === "‖") {
+      let depth = 0, close = -1;
+      for (let k = i + 1; k < str.length; k++) {
+        const c = str[k];
+        if (c === "(" || c === "[" || c === "{") depth++;
+        else if (c === ")" || c === "]" || c === "}") depth--;
+        else if (c === "‖" && depth === 0) { close = k; break; }
+      }
+      if (close > i + 1) {
+        items.push(makeDelim("norm", "‖", "‖", parseAsciiToItems(str.substring(i + 1, close))));
+        i = close + 1;
+        continue;
+      }
+    }
+
     // |...| -> Abs node。開きの | は直後に空白がないもの（`Fix x | h` の | や `|-` は除く）、
     // 閉じの | は直前に空白がないもの。括弧の中の | は閉じとみなさない。
     if (ch === "|" && i + 1 < str.length && str[i + 1] !== "-" && !/\s/.test(str[i + 1])) {
@@ -1998,6 +2022,9 @@ function serializeSeqToAscii(seq) {
       out += `abs(${serializeSeqToAscii(it.body).trim()})`;
     } else if (it.kind === "sqrt") {
       out += `sqrt(${serializeSeqToAscii(it.body).trim()})`;
+    } else if (it.kind === "delim" && it.fnName === "norm") {
+      // ノルムは ‖x‖ と書く（notation の型紙 ‖x - y‖² と同じ字面にする）
+      out += `‖${serializeSeqToAscii(it.body).trim()}‖`;
     } else if (it.kind === "delim") {
       out += `${it.fnName}(${serializeSeqToAscii(it.body).trim()})`;
     } else if (it.kind === "matrix") {

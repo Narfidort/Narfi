@@ -83,3 +83,12 @@ thm sub.greek :
 
 Fix d
   refl
+
+-- x² と x^2 は同じ字句。\norm{x} は ‖x‖（記法の型紙と同じ字面）
+def nsq(x : Real) : Real := x * x
+  notation ‖x‖^2
+
+thm sup.norm :
+  |- ‖3‖² = \norm{3}^2
+
+refl

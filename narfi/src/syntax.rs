@@ -195,7 +195,18 @@ impl Notation {
         let mut depth = 0usize;
         let mut closers: Vec<usize> = vec![];
         let mut open_next = false;
+        // 型紙の ^ 2 は x² と書く（字句では x² も x^2 と同じ）
+        let mut items: Vec<TItem> = Vec::new();
         for it in &self.items {
+            match (items.last(), it) {
+                (Some(TItem::Lit(a)), TItem::Lit(b)) if a == "^" && (b == "2" || b == "3") => {
+                    let sup = if b == "2" { "²" } else { "³" };
+                    *items.last_mut().unwrap() = TItem::Lit(sup.to_string());
+                }
+                _ => items.push(it.clone()),
+            }
+        }
+        for it in &items {
             let piece = match it {
                 TItem::Lit(s) if s.ends_with('_') && crate::parser::UNDER_OPS.contains(&&s[..s.len() - 1]) => {
                     open_next = true;
