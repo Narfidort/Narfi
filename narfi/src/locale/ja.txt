@@ -12,15 +12,17 @@
 =	Fix {x}	{x} を任意にとって固定する
 =	by_contra {h:id}	背理法により {h} と仮定する
 =	assume {h:id} : {f}	{h} : {f} と仮定する
-=	Obtain {v}, {h:id} : {j}	{j} より {h} なる {v} が存在する
+=	Obtain {v} | {h} : {f} by {j}	{j} より {h} : {f} を満たす {v} をとる
+=	Obtain {v} | {h} by {j}	{j} より {h} を満たす {v} をとる
+=	Obtain {v} by {j}	{j} より {v} をとる
 =	cases {h}	{h} で場合分けする
 =	Case left {h}	左の場合（{h}）
 =	Case right {h}	右の場合（{h}）
 =	induction {n}	{n} についての帰納法
 =	Case zero	基底段階
 =	Case succ {k}, {h} : {f}	帰納段階 {k}, {h} : {f}
-=	choose left	左を示す
-=	choose right	右を示す
+=	left	左を示す
+=	right	右を示す
 =	choose {t}	{t} をとればよい
 =	let {x} := {t}	{x} := {t} とおく
 =	{h:id} : {f} by {j}	{j} より {h} : {f} が成り立つ

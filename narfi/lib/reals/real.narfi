@@ -61,7 +61,7 @@ thm cls.surj :
   ⊢ ∀r:RealC. ∃a:CauSeq. r = cls(a)
 
 Fix r
-  Obtain a, ha : RealC.rep_prop(r)
+  Obtain a | ha by RealC.rep_prop(r)
   choose a
   r
     = RealC.abs(RealC.rep(r))           by eq.symm(RealC.abs_rep(r))

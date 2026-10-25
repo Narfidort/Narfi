@@ -20,10 +20,10 @@ thm nat.cases :
 Fix n
   induction n
     Case zero
-      choose left
+      left
       refl
     Case succ k, IH : k = 0 ∨ (∃m:ℕ. k = S(m))
-      choose right
+      right
       choose k
       refl
 
@@ -35,23 +35,23 @@ Fix n | h : n < 2
   c : n = 0 ∨ (∃m:ℕ. n = S(m)) by nat.cases(n)
   cases c
     Case left z
-      choose left
+      left
       z
     Case right e
-      Obtain m, hm : e
+      Obtain m | hm by e
       d : m = 0 ∨ (∃p:ℕ. m = S(p)) by nat.cases(m)
       cases d
         Case left mz
-          choose right
+          right
           n
             = S(m)   by hm
             = S(0)   by EQ2(mz, refl)
             = 1      by ring
         Case right f
-          Obtain p, hp : f
+          Obtain p | hp by f
           q : p ≥ 0 by nat.nonneg(p)
           r : n = S(S(p)) by EQ2(hp, hm)
-          choose right
+          right
           linarith
 
 -- クロネッカーのデルタ δ(i, j)：i = j なら 1、そうでなければ 0
@@ -66,11 +66,11 @@ Fix i, j
   cases c
     Case left e
       choose 1
-      choose left
+      left
       e, refl
     Case right ne
       choose 0
-      choose right
+      right
       ne, refl
 
 thm delta.spec :

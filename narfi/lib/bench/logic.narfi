@@ -36,8 +36,8 @@ thm surjective.comp :
   ⊢ surjective((x : ℝ ↦ g(f(x))))
 
 Fix z
-  Obtain y, hy : hg(z)
-  Obtain x, hx : hf(y)
+  Obtain y | hy by hg(z)
+  Obtain x | hx by hf(y)
   choose x
   g(f(x))
     = g(y)   by EQ2(hx, refl)

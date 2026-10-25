@@ -156,6 +156,71 @@ fn candidates(line: &str, msg: &str) -> Vec<String> {
             out.push(format!("const{rest}"));
         }
     }
+    if msg.contains("Obtain は `Obtain x | h by 根拠`") {
+        // Obtain x, h1, h2 : e → Obtain x | h1, h2 by e。Obtain x : e → Obtain x by e
+        let indent = &line[..line.len() - line.trim_start().len()];
+        if let Some(rest) = line.trim_start().strip_prefix("Obtain") {
+            if let Some(colon) = top_level(rest, ':') {
+                let (head, just) = (&rest[..colon], rest[colon + 1..].trim());
+                let mut names = split_top(head);
+                if !names.is_empty() {
+                    let v = names.remove(0);
+                    if names.is_empty() {
+                        out.push(format!("{indent}Obtain {v} by {just}"));
+                    } else {
+                        out.push(format!("{indent}Obtain {v} | {} by {just}", names.join(", ")));
+                    }
+                }
+            }
+        }
+    }
+    if msg.contains("だけで書く（`choose` は ∃ の値を選ぶときだけ）") {
+        let indent = &line[..line.len() - line.trim_start().len()];
+        let t = line.trim();
+        if t == "choose left" {
+            out.push(format!("{indent}left"));
+        } else if t == "choose right" {
+            out.push(format!("{indent}right"));
+        }
+    }
+    out
+}
+
+/// 括弧の外にある最初の c の位置
+fn top_level(s: &str, c: char) -> Option<usize> {
+    let mut depth = 0i32;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            _ if ch == c && depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// 括弧の外の , で分ける（N(ε, δ) は 1 つ）
+fn split_top(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut cur = String::new();
+    for ch in s.chars() {
+        match ch {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            _ => {}
+        }
+        if ch == ',' && depth == 0 {
+            out.push(cur.trim().to_string());
+            cur.clear();
+        } else {
+            cur.push(ch);
+        }
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur.trim().to_string());
+    }
     out
 }
 

@@ -19,8 +19,8 @@ thm dvd.trans :
   a : ℤ, b : ℤ, c : ℤ, hab : dvd(a, b), hbc : dvd(b, c)
   ⊢ dvd(a, c)
 
-Obtain k, hk : hab
-Obtain l, hl : hbc
+Obtain k | hk by hab
+Obtain l | hl by hbc
 choose k * l
 c
   = b * l           by hl
@@ -40,8 +40,8 @@ thm even.add :
   m : ℤ, n : ℤ, hm : even(m), hn : even(n)
   ⊢ even(m + n)
 
-Obtain k, hk : hm
-Obtain l, hl : hn
+Obtain k | hk by hm
+Obtain l | hl by hn
 choose k + l
 m + n
   = 2k + 2l      by hk, hl
@@ -60,7 +60,7 @@ thm odd.sq :
   n : ℤ, h : odd(n)
   ⊢ odd(n^2)
 
-Obtain k, hk : h
+Obtain k | hk by h
 choose 2k^2 + 2k
 n^2
   = (2k + 1)^2           by hk

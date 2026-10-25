@@ -184,7 +184,7 @@ Fix m
           ex : (∃k0:ℕ<S(j). A(N, k0) ≠ 0) ∨ ¬(∃k0:ℕ<S(j). A(N, k0) ≠ 0) by em
           cases ex
             Case left hex
-              Obtain k0, hk0 : hex
+              Obtain k0 | hk0 by hex
               lt : k0 < S(j) by hk0.left
               nz : A(N, k0) ≠ 0 by hk0.right
               nc : N = 0 ∨ (∃M:ℕ. N = S(M)) by nat.cases(N)
@@ -192,20 +192,20 @@ Fix m
                 Case left z
                   bot.elim(linarith)
                 Case right e
-                  Obtain M, hM : e
+                  Obtain M | hM by e
                   sM : S(M) = M + 1 by ring
                   sj : S(j) = j + 1 by ring
                   jM : j ≤ M by linarith
                   ih : ∃d:ℕ → ℝ. (∃i:ℕ. i ≤ M ∧ d(i) ≠ 0) ∧ ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ d(i) * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), S(M)) = 0 by IH(M, ((i, k) : ℕ × ℕ ↦ A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j))), jM)
-                  Obtain d, hdd : ih
+                  Obtain d | hdd by ih
                   hd1 : ∀k:ℕ. k < j ⇒ sum((i : ℕ ↦ d(i) * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k) + delta(k, k0) * (A(N, k0) * A(i, j) - A(i, k0) * A(N, j)))), N) = 0
                     Fix k
                       assume hk : k < j
                         EQ2(eq.symm(hM), hdd.right(k, hk))
                   hd2 : ∀k:ℕ. k < S(j) ⇒ sum((i : ℕ ↦ d(i) * (A(N, k0) * A(i, k) - A(i, k0) * A(N, k))), N) = 0 by lin.hd(lt, hd1)
                   lf : ∃c:ℕ → ℝ. (∀i:ℕ. i < N ⇒ c(i) = A(N, k0) * d(i)) ∧ ∀k:ℕ. k < S(j) ⇒ sum((i : ℕ ↦ c(i) * A(i, k)), S(N)) = 0 by lin.lift(hd2)
-                  Obtain c, hc : lf
-                  Obtain i, hi : hdd.left
+                  Obtain c | hc by lf
+                  Obtain i | hi by hdd.left
                   iM : i ≤ M by hi.left
                   di : d(i) ≠ 0 by hi.right
                   iN : i < N by linarith

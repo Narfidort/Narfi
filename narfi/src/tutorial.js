@@ -1,13 +1,14 @@
 // Narfi のチュートリアル（エディタ右側の Learn タブ）。対象：理系の高校生でもわかるように。
 // 各レッスン：本文（p・paper：紙の証明・code：エディタと同じ見た目で描く・steps：1 行ずつ・type：打ち方・check・pitfalls・keys・h）、
-// 練習（task・hints・exercise・answer）。答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。
+// 練習（file：自分のファイルに作る練習のファイル・task・hints・exercise・answer）。番号とファイル名の番号はそろえる。
+// 例と答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。
 
 window.NARFI_TUTORIAL = [
   {
     "title": "1. はじめての証明",
     "blocks": [
       {
-        "p": "**ねらい**：Narfi で定理を書いて、証明が正しいかを検査器に確かめてもらう。"
+        "p": "**ねらい**：定理を書いて、正しいかどうかを検査器に確かめてもらう。Narfi では、書いた証明の一歩一歩を検査器が確かめ、通れば右上が緑（verified）になる。"
       },
       {
         "paper": [
@@ -16,7 +17,7 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "p": "Narfi では、同じことをこう書きます。"
+        "p": "Narfi では、同じことをこう書く。"
       },
       {
         "code": "thm double_gt :\n  x : Real, h : x > 1\n  |- 2x > 2\n\nlinarith"
@@ -25,63 +26,71 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "thm double_gt :",
-            "「定理を書きます。名前は double_gt」という宣言"
+            "「定理を書く。名前は double_gt」。名前は自分で決める（英字・数字・`_`・`.`）"
           ],
           [
             "x : Real, h : x > 1",
-            "**仮定**。$x$ は実数、$x > 1$ が成り立つ。この仮定に $h$ という名前を付けている（あとで使うため）"
+            "**仮定**。$x$ は実数（`Real`）。$x > 1$ が成り立ち、その事実に $h$ という名前を付ける。名前を付けるのは、あとで「$h$ より」と使うため"
           ],
           [
             "|- 2x > 2",
-            "⊢ の右が**示したいこと**（結論）"
+            "`|-`（⊢）の右が**示したいこと**（結論）"
           ],
           [
             "linarith",
-            "**証明**。`linarith` は「仮定から不等式の計算で分かる」という意味。検査器がその計算を実際に確かめる"
+            "**証明**。空行のあとに書く。`linarith` は「仮定の一次の不等式を足したり定数倍したりすれば分かる」という根拠。検査器がその計算を実際に確かめる"
           ]
         ]
+      },
+      {
+        "p": "仮定と結論をまとめた形 `仮定 ⊢ 結論` は、「仮定がすべて成り立つとき、結論が成り立つ」と読む。"
       },
       {
         "type": [
           [
             "Real",
-            "ℝ（実数）。`Nat` は ℕ"
+            "ℝ（実数）。`Nat` は ℕ（0, 1, 2, …）"
           ],
           [
             "\\|-",
-            "⊢（「〜のとき、〜が成り立つ」の区切り）"
+            "⊢（仮定と結論の区切り）"
           ],
           [
             ">=  <=  !=",
-            "≥　≤　≠"
+            "≥　≤　≠（打つと自動で変わる）"
+          ],
+          [
+            "2x",
+            "2·x（数と文字の積は、間に何も書かなくてよい）"
           ]
         ]
       },
       {
-        "check": "「練習を開く」を押すと、証明の所が `sorry`（まだ書いていない、の印）になっています。右上が **1 incomplete**（黄色）。`sorry` の行にカーソルを置いて右の **Goal** タブを見ると、使える仮定と、示すべきもの（⊢ の右）が出ています。`sorry` を消して `linarith` と書くと、右上が **1 theorem verified**（緑）になります。"
+        "check": "「練習のファイルを開く」を押すと、自分のファイルに `learn/01-…` ができて開く。証明の所が `sorry`（まだ書いていない、の印）で、右上は **incomplete**（黄色）。`sorry` の行にカーソルを置くと、右の **Goal** タブに使える仮定と示すべきもの（⊢ の右）が出る。`sorry` を正しい証明に書き換えると緑になる。"
       },
       {
         "pitfalls": [
           [
             "「linarith では … を示せない」",
-            "仮定から一次の不等式の計算だけでは出ない。仮定が足りないか、$x^2$ のような 2 次の式が入っている"
+            "一次の不等式の計算では出ない。仮定が足りないか、使い方を変える必要がある（このあとのレッスンで、根拠の書き方を増やしていく）"
           ]
         ]
       }
     ],
-    "task": "$x > 1$、$y > 2$ のとき、$x + y > 3$ を示す。",
+    "file": "learn/01-はじめての証明.narfi",
+    "task": "実数 $a < b$ のとき、$a < \\dfrac{a+b}{2}$（$a$ と $b$ の真ん中は $a$ より大きい）を示す。",
     "hints": [
-      "Goal タブで、仮定 2 つと示すべき $x + y > 3$ を確かめる。",
-      "2 つの不等式を足せば出る。`linarith` がその計算をしてくれる。"
+      "Goal タブで、仮定 $h : a < b$ と、示すべき $a < (a+b)/2$ を確かめる。",
+      "両辺を 2 倍すると $2a < a + b$、つまり $a < b$。一次の不等式の計算なので `linarith` で通る。"
     ],
-    "exercise": "-- 練習 1：sorry を消して証明を書く\n\nthm sum_gt :\n  x : Real, y : Real, h : x > 1, k : y > 2\n  |- x + y > 3\n\nsorry\n",
-    "answer": "thm sum_gt :\n  x : Real, y : Real, h : x > 1, k : y > 2\n  |- x + y > 3\n\nlinarith\n"
+    "exercise": "-- 練習 1：真ん中は左端より大きい\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm mid_left :\n  a : Real, b : Real, h : a < b\n  |- a < (a + b)/2\n\nsorry\n",
+    "answer": "thm mid_left :\n  a : Real, b : Real, h : a < b\n  |- a < (a + b)/2\n\nlinarith\n"
   },
   {
     "title": "2. 式変形をつなげる",
     "blocks": [
       {
-        "p": "**ねらい**：紙と同じように、式を縦に並べて変形する。各行に「なぜそう変形できるか」（根拠）を `by` の後ろに書く。"
+        "p": "**ねらい**：紙と同じように、式を縦に並べて変形する（**連鎖**）。各行の右に、その変形の**根拠**を `by` の後ろに書く。"
       },
       {
         "paper": [
@@ -99,46 +108,146 @@ window.NARFI_TUTORIAL = [
           ],
           [
             "<= b + 1   by linarith",
-            "1 行目の変形。根拠は「仮定 $h$ からの不等式の計算」"
+            "1 段目。字下げして、関係（`=`・`<=`・`<` など）から書く"
           ],
           [
             "<= b + 2   by linarith",
-            "2 行目。最後まで来ると、全体として $a + 1 \\le b + 2$ が示された"
+            "2 段目。最後まで来ると、全体として $a + 1 \\le b + 2$ が示されたことになる"
           ]
         ]
       },
       {
-        "p": "根拠には、仮定の名前（`by h`）、計算（`by ring`：多項式の計算、`by linarith`：不等式の計算）が書けます。"
+        "h": "根拠の種類"
       },
       {
-        "p": "**根拠がわからないとき**は、`by …` を書かずに `<= b + 1` とだけ書いてみてください。エラーになって、検査器が見つけた根拠の候補が出ます。行末で **Tab** を押すと入ります。"
+        "p": "`by` の後ろに書けるもの：`ring`（多項式の計算で等しい）、`linarith`（一次の不等式の計算）、**仮定の名前**。"
+      },
+      {
+        "p": "**等式の仮定を根拠に書くと、その等式で書き換える**。たとえば $h : a = b + 2$ のとき、`by h` は「$a$ を $b + 2$ に置き換えた」という意味になる。"
+      },
+      {
+        "code": "thm sub_two :\n  a : Real, b : Real, h : a = b + 2\n  |- a - b = 2\n\na - b\n  = (b + 2) - b   by h\n  = 2             by ring"
+      },
+      {
+        "steps": [
+          [
+            "= (b + 2) - b   by h",
+            "$h$ で $a$ を $b + 2$ に書き換えた"
+          ],
+          [
+            "= 2             by ring",
+            "あとは文字式の計算（展開・整理）。`ring` が確かめる"
+          ]
+        ]
+      },
+      {
+        "p": "**根拠がわからないとき**は、`by …` を書かずに `= 2` とだけ書いてみる。エラーになり、検査器が見つけた根拠の候補が行末に薄く出る。**Tab** で入る。"
       },
       {
         "type": [
           [
             "<=",
-            "≤（打つと自動で ≤ になる）"
+            "≤"
+          ],
+          [
+            "x^2",
+            "$x^2$（`^` で上付きの欄ができる）"
           ],
           [
             "by",
             "根拠を書く前の区切り"
           ]
         ]
+      },
+      {
+        "pitfalls": [
+          [
+            "「ring では … を示せない」",
+            "左右が文字式として等しくない。書き換えが足りない（先に `by h` の段を入れる）か、変形を写し間違えている"
+          ],
+          [
+            "`2ab` が通らない",
+            "`ab` は「ab という 1 つの名前」と読まれる。文字どうしの積は `a*b`（表示は $a \\cdot b$）、`2*a*b` と書く"
+          ]
+        ]
       }
     ],
-    "task": "$x \\le y$、$y < z$ から $x < z$ を、変形の連鎖で示す。",
+    "file": "learn/02-式変形.narfi",
+    "task": "$x = y + 1$ のとき、$x^2 = y^2 + 2y + 1$ を、連鎖で示す。",
     "hints": [
-      "`x` から始めて、`<= y` と `< z` の 2 行。",
-      "1 行目の根拠は仮定 `h`、2 行目は仮定 `k`。"
+      "$x^2$ から始める。1 段目で $x$ を $y + 1$ に書き換える：`= (y + 1)^2   by h`。",
+      "2 段目は展開：`= y^2 + 2y + 1   by ring`。"
     ],
-    "exercise": "-- 練習 2：式変形の連鎖\n\nthm chain2 :\n  x : Real, y : Real, z : Real, h : x <= y, k : y < z\n  |- x < z\n\nsorry\n",
-    "answer": "thm chain2 :\n  x : Real, y : Real, z : Real, h : x <= y, k : y < z\n  |- x < z\n\nx\n  <= y   by h\n  < z    by k\n"
+    "exercise": "-- 練習 2：書き換えてから展開する\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm square_shift :\n  x : Real, y : Real, h : x = y + 1\n  |- x^2 = y^2 + 2y + 1\n\nsorry\n",
+    "answer": "thm square_shift :\n  x : Real, y : Real, h : x = y + 1\n  |- x^2 = y^2 + 2y + 1\n\nx^2\n  = (y + 1)^2       by h\n  = y^2 + 2y + 1    by ring\n"
   },
   {
-    "title": "3. 「ならば」を示す・使う",
+    "title": "3. 途中の事実と、定理を使う",
     "blocks": [
       {
-        "p": "**ねらい**：「$P$ ならば $Q$」（$P \\Rightarrow Q$）を示すには、$P$ を仮定して $Q$ を示す。高校の数学と同じ。"
+        "p": "**ねらい**：証明の途中で分かったことを書き留める（**事実の行**）。前に示した定理（や認めた事実）を名前で呼んで使う。"
+      },
+      {
+        "p": "**事実の行** `名前 : 命題 by 根拠` は「根拠より、命題が成り立つ。これを 名前 と呼ぶ」。書き留めた事実は、それより下の行で使える。"
+      },
+      {
+        "code": "axiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm sq_plus_one :\n  t : Real\n  |- t^2 + 1 > 0\n\nh : t^2 >= 0 by sq_nonneg\nlinarith"
+      },
+      {
+        "steps": [
+          [
+            "axiom sq_nonneg : x : Real |- x^2 >= 0",
+            "**公理**：証明しないで認める事実（「2 乗は 0 以上」）。`thm` と同じ形で書き、証明は付けない"
+          ],
+          [
+            "h : t^2 >= 0 by sq_nonneg",
+            "sq_nonneg を使って「$t^2 \\ge 0$」を書き留める。$x$ に何を入れるか（ここでは $t$）は、書いた命題から検査器が読み取る"
+          ],
+          [
+            "linarith",
+            "$h$ を使って $t^2 + 1 > 0$"
+          ]
+        ]
+      },
+      {
+        "p": "自分で書いた `thm` も同じように名前で使える。`linarith` は $t^2$ のような式も 1 つのかたまりとして扱えるので、事実の行で書き留めておけば計算に使える。"
+      },
+      {
+        "type": [
+          [
+            "axiom 名前 : 仮定 |- 結論",
+            "証明なしで認める事実（練習のため。ライブラリの数学では、なるべく定理として示す）"
+          ],
+          [
+            "h : φ by 根拠",
+            "事実の行：φ を書き留めて h と呼ぶ"
+          ]
+        ]
+      },
+      {
+        "pitfalls": [
+          [
+            "「引数が多すぎる」",
+            "`sq_nonneg(t)` のように変数を渡す必要はない（仮定の並びの変数は、命題から読み取られる）。`by sq_nonneg` と書く"
+          ]
+        ]
+      }
+    ],
+    "file": "learn/03-定理を使う.narfi",
+    "task": "すべての実数 $a, b$ で $a^2 + b^2 \\ge 2ab$ を示す（相加・相乗平均の不等式のもと）。",
+    "hints": [
+      "$(a - b)^2 \\ge 0$ を使う。",
+      "`h : (a - b)^2 >= 0 by sq_nonneg` と書き留める。",
+      "$(a-b)^2 = a^2 - 2ab + b^2$ なので、あとは `linarith`（展開は linarith がする）。"
+    ],
+    "exercise": "-- 練習 3：a² + b² ≥ 2ab\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\naxiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm am_gm2 :\n  a : Real, b : Real\n  |- a^2 + b^2 >= 2*a*b\n\nsorry\n",
+    "answer": "axiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm am_gm2 :\n  a : Real, b : Real\n  |- a^2 + b^2 >= 2*a*b\n\nh : (a - b)^2 >= 0 by sq_nonneg\nlinarith\n"
+  },
+  {
+    "title": "4. 「ならば」を示す・使う",
+    "blocks": [
+      {
+        "p": "**ねらい**：「$P$ ならば $Q$」（$P \\Rightarrow Q$）を**示す**には、$P$ を仮定して $Q$ を示す。仮定 $f : P \\Rightarrow Q$ を**使う**には、$P$ の根拠 $p$ を渡して `f(p)` と書く（すると $Q$）。"
       },
       {
         "paper": [
@@ -153,22 +262,27 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "assume h : x > 2",
-            "「$x > 2$ と仮定する」。仮定の名前を $h$ にする"
+            "「$x > 2$ と仮定する」。仮定の名前を $h$ にする。中身 `: x > 2` は省略できない"
           ],
           [
             "  linarith",
-            "字下げした所では $h$ が使える。示すべきものは $x > 1$ に変わっている"
+            "**字下げした所**では $h$ が使える。示すべきものは $x > 1$ に変わっている"
           ]
         ]
       },
       {
-        "p": "**字下げ**が「仮定が使える範囲」です。`assume` の下は 1 段（スペース 2 つ）下げて書きます。"
-      },
-      {
-        "p": "逆に「ならば」の仮定 $f : P \\Rightarrow Q$ を**使う**ときは、$P$ の根拠 $p$ を渡して `f(p)` と書くと $Q$ になります（三段論法）。"
+        "p": "**字下げ**が「仮定が使える範囲」。`assume` の下は 1 段（スペース 2 つ）下げる。"
       },
       {
         "code": "thm syllogism :\n  P : Prop, Q : Prop, f : P => Q, p : P\n  |- Q\n\nf(p)"
+      },
+      {
+        "steps": [
+          [
+            "f(p)",
+            "$f$（$P$ ならば $Q$）に $P$ の根拠 $p$ を渡すと、$Q$ の根拠になる（三段論法）"
+          ]
+        ]
       },
       {
         "type": [
@@ -191,19 +305,21 @@ window.NARFI_TUTORIAL = [
         ]
       }
     ],
-    "task": "$P \\Rightarrow Q$、$Q \\Rightarrow R$ ならば $P \\Rightarrow R$ を示す。",
+    "file": "learn/04-ならば.narfi",
+    "task": "実数 $a, b$ について「$a > 0$ ならば $b > 0$」が成り立つとする。このとき「$a > 1$ ならば $a + b > 1$」を示す。",
     "hints": [
-      "示すのは「$P$ ならば $R$」。まず `assume p : P`。",
-      "$f(p)$ で $Q$ が手に入る。それを $g$ に渡すと $R$。`g(f(p))` と一度に書いてもよい。"
+      "示すのは「ならば」なので、`assume h : a > 1` から始める。",
+      "$f$ を使うには $a > 0$ の根拠が要る。`ha : a > 0 by linarith` と書き留める。",
+      "`hb : b > 0 by f(ha)`。あとは `linarith`。"
     ],
-    "exercise": "-- 練習 3：ならば を 2 回使う\n\nthm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P => Q, g : Q => R\n  |- P => R\n\nsorry\n",
-    "answer": "thm imp_trans :\n  P : Prop, Q : Prop, R : Prop, f : P => Q, g : Q => R\n  |- P => R\n\nassume p : P\n  g(f(p))\n"
+    "exercise": "-- 練習 4：ならばを使う\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm imp_use :\n  a : Real, b : Real, f : a > 0 => b > 0\n  |- a > 1 => a + b > 1\n\nsorry\n",
+    "answer": "thm imp_use :\n  a : Real, b : Real, f : a > 0 => b > 0\n  |- a > 1 => a + b > 1\n\nassume h : a > 1\n  ha : a > 0 by linarith\n  hb : b > 0 by f(ha)\n  linarith\n"
   },
   {
-    "title": "4. 「かつ」",
+    "title": "5. 「かつ」",
     "blocks": [
       {
-        "p": "**ねらい**：「$P$ かつ $Q$」（$P \\land Q$）の仮定 $h$ からは、`h.left` で $P$、`h.right` で $Q$ が取り出せる。$P \\land Q$ を示すには、2 つの根拠を `,` で並べる。"
+        "p": "**ねらい**：「$P$ かつ $Q$」（$P \\land Q$）の仮定 $h$ からは、`h.left` で $P$、`h.right` で $Q$ が取り出せる。$P \\land Q$ を**示す**には、2 つの根拠を `,` で並べる（`p, q`）。"
       },
       {
         "paper": [
@@ -218,7 +334,7 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "hx : x > 0 by h.left",
-            "$h$ の左側を取り出して、名前 $hx$ を付ける。「名前 : 命題 by 根拠」は**途中で分かったことを書き留める行**"
+            "$h$ の左側を取り出して $hx$ と呼ぶ"
           ],
           [
             "hy : y > 0 by h.right",
@@ -226,9 +342,12 @@ window.NARFI_TUTORIAL = [
           ],
           [
             "linarith",
-            "$hx$ と $hy$ を足して $x + y > 0$"
+            "$hx$ と $hy$ を足して $x + y > 0$（`linarith` は「かつ」の仮定の中も見るので、取り出さなくても通る）"
           ]
         ]
+      },
+      {
+        "p": "**示す**側の例：$a \\le b$ と $b \\le a$ をまとめた $a \\le b \\land b \\le a$ を示すなら、2 つの根拠を並べて `h1, h2`。それぞれの根拠が `linarith` なら `linarith, linarith` と書ける。"
       },
       {
         "type": [
@@ -239,23 +358,28 @@ window.NARFI_TUTORIAL = [
           [
             "h.left / h.right",
             "∧ の左側・右側を取り出す"
+          ],
+          [
+            "p, q",
+            "$P$ の根拠 p と $Q$ の根拠 q で、$P \\land Q$ の根拠"
           ]
         ]
       }
     ],
-    "task": "$P \\land Q$ ならば $Q \\land P$ を示す。",
+    "file": "learn/05-かつ.narfi",
+    "task": "$a < b$ ならば「$a < \\dfrac{a+b}{2}$ かつ $\\dfrac{a+b}{2} < b$」を示す（真ん中は両端の間にある）。",
     "hints": [
-      "`assume h : P and Q`。",
-      "`h.right` が $Q$、`h.left` が $P$。2 つを `,` で並べると $Q \\land P$ になる（`h.right, h.left`）。"
+      "`assume h : a < b` から始める。",
+      "示すのは「かつ」。左右それぞれ一次の不等式の計算で出るので、`linarith, linarith`。"
     ],
-    "exercise": "-- 練習 4：かつ の順番を入れ替える\n\nthm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q => Q and P\n\nsorry\n",
-    "answer": "thm and_swap :\n  P : Prop, Q : Prop\n  |- P and Q => Q and P\n\nassume h : P and Q\n  h.right, h.left\n"
+    "exercise": "-- 練習 5：真ん中は両端の間\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm midpoint :\n  a : Real, b : Real\n  |- a < b => a < (a + b)/2 and (a + b)/2 < b\n\nsorry\n",
+    "answer": "thm midpoint :\n  a : Real, b : Real\n  |- a < b => a < (a + b)/2 and (a + b)/2 < b\n\nassume h : a < b\n  linarith, linarith\n"
   },
   {
-    "title": "5. 「または」",
+    "title": "6. 「または」",
     "blocks": [
       {
-        "p": "**ねらい**：「$P$ または $Q$」（$P \\lor Q$）を**示す**には、どちらを示すか選ぶ（`choose left` / `choose right`）。$P \\lor Q$ の仮定を**使う**には、場合分けする（`cases`）。"
+        "p": "**ねらい**：「$P$ または $Q$」（$P \\lor Q$）を**示す**には、どちらを示すかを選ぶ：`left`（左の $P$ を示す）か `right`（右の $Q$ を示す）。$P \\lor Q$ の仮定を**使う**には、場合分けする（`cases`）。"
       },
       {
         "paper": [
@@ -264,27 +388,30 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "code": "thm or_swap :\n  P : Prop, Q : Prop, h : P or Q\n  |- Q or P\n\ncases h\n  Case left hp\n    choose right\n    hp\n  Case right hq\n    choose left\n    hq"
+        "code": "thm or_swap :\n  P : Prop, Q : Prop, h : P or Q\n  |- Q or P\n\ncases h\n  Case left hp\n    right\n    hp\n  Case right hq\n    left\n    hq"
       },
       {
         "steps": [
           [
             "cases h",
-            "$h$ で場合分けする"
+            "$h$（$P$ または $Q$）で場合分けする"
           ],
           [
             "Case left hp",
-            "$P$ の場合。そのとき分かっていること（$P$）に $hp$ と名前を付ける"
+            "$P$ の場合。分かっていること（$P$）に $hp$ と名前を付ける。この下に、その場合の証明を字下げして書く"
           ],
           [
-            "choose right",
-            "示したい $Q \\lor P$ のうち、右（$P$）を示すと決める"
+            "right",
+            "示したい $Q \\lor P$ のうち、右（$P$）を示すと決める。この行は `right` だけ"
           ],
           [
             "hp",
             "$P$ は $hp$ そのもの"
           ]
         ]
+      },
+      {
+        "p": "場合分けでは、**それぞれの場合で**結論を示す。`left`・`right` は字下げしない（次の行から、選んだ側を示す）。"
       },
       {
         "type": [
@@ -295,28 +422,34 @@ window.NARFI_TUTORIAL = [
           [
             "cases h",
             "場合分け。下に `Case left …` と `Case right …` を同じ字下げで"
+          ],
+          [
+            "left / right",
+            "∨ の左（右）を示すと決める"
           ]
         ]
       }
     ],
-    "task": "$P \\lor Q$、$P \\Rightarrow R$、$Q \\Rightarrow R$ から $R$ を示す。",
+    "file": "learn/06-または.narfi",
+    "task": "$x = 1$ または $x = 2$ のとき、$x^2 - 3x + 2 = 0$ を示す（2 次方程式の解を確かめる）。",
     "hints": [
-      "`cases h` で 2 つの場合に分ける。",
-      "左の場合は `f(hp)`、右の場合は `g(hq)`。"
+      "`cases h` で $x = 1$ の場合と $x = 2$ の場合に分ける。",
+      "それぞれの場合で連鎖：$x^2 - 3x + 2$ から始めて、`by h1` で $x$ を 1 に書き換える。",
+      "`= 1^2 - 3*1 + 2   by h1` のあと `= 0   by ring`。$x = 2$ の場合も同じ。"
     ],
-    "exercise": "-- 練習 5：場合分け\n\nthm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P => R, g : Q => R\n  |- R\n\nsorry\n",
-    "answer": "thm or_elim :\n  P : Prop, Q : Prop, R : Prop, h : P or Q, f : P => R, g : Q => R\n  |- R\n\ncases h\n  Case left hp\n    f(hp)\n  Case right hq\n    g(hq)\n"
+    "exercise": "-- 練習 6：場合分けで解を確かめる\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm roots :\n  x : Real, h : x = 1 or x = 2\n  |- x^2 - 3x + 2 = 0\n\nsorry\n",
+    "answer": "thm roots :\n  x : Real, h : x = 1 or x = 2\n  |- x^2 - 3x + 2 = 0\n\ncases h\n  Case left h1\n    x^2 - 3x + 2\n      = 1^2 - 3*1 + 2   by h1\n      = 0               by ring\n  Case right h2\n    x^2 - 3x + 2\n      = 2^2 - 3*2 + 2   by h2\n      = 0               by ring\n"
   },
   {
-    "title": "6. 「すべての」",
+    "title": "7. 「すべての」",
     "blocks": [
       {
-        "p": "**ねらい**：「すべての $x$ について …」（$\\forall x$）を**示す**には、$x$ を 1 つ任意にとって（`Fix x`）、その $x$ で示す。**使う**ときは、具体的な値を入れる（`h(3)` のように）。"
+        "p": "**ねらい**：「すべての $x$ について …」（$\\forall x$）を**示す**には、$x$ を 1 つ任意にとって（`Fix x`）、その $x$ で示す。仮定の $\\forall$ を**使う**には、具体的な値を入れる（`h(2)` のように）。"
       },
       {
         "paper": [
           "**定理**　すべての実数 $x$ について $x + 1 > x$。",
-          "**証明**　$x$ を任意にとる。$x + 1 > x$ は明らか。$\\blacksquare$"
+          "**証明**　$x$ を任意にとる。$x + 1 > x$ である。$\\blacksquare$"
         ]
       },
       {
@@ -326,39 +459,52 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "Fix x",
-            "「$x$ を任意にとって固定する」。ここから先、示すべきものは $x + 1 > x$"
+            "「$x$ を任意にとって固定する」。字下げした所では、示すべきものが $x + 1 > x$ になる"
           ],
           [
-            "linarith",
+            "  linarith",
             "その $x$ について示す"
           ]
         ]
       },
       {
-        "p": "**使う**例：「すべての $x$ で $f(x) \\ge 0$」という仮定 $h$ があれば、`h(2)` が「$f(2) \\ge 0$」の根拠になります。"
+        "p": "**使う**例：仮定 $h : \\forall x.\\ f(x) \\ge 0$ があれば、`h(2)` が「$f(2) \\ge 0$」の根拠。「すべての $x, y$ について、$x \\le y$ ならば …」のような仮定には、値と根拠を順に渡す：`h(1, 2, k)`（$k$ は $1 \\le 2$ の根拠）。"
+      },
+      {
+        "code": "thm f_two :\n  f : Real -> Real, h : forall x:Real. f(x) >= 0\n  |- f(2) + 1 > 0\n\nk : f(2) >= 0 by h(2)\nlinarith"
       },
       {
         "type": [
           [
             "forall x:Real.",
-            "∀x ∈ ℝ,（すべての実数 x について）。`forall` は空白を打つと ∀ になる"
+            "∀x ∈ ℝ,（すべての実数 x について）"
+          ],
+          [
+            "Fix x, y",
+            "2 つまとめて任意にとる"
+          ],
+          [
+            "f : Real -> Real",
+            "関数 $f : \\mathbb{R} \\to \\mathbb{R}$。`->` は関数の型の矢印"
           ]
         ]
       }
     ],
-    "task": "すべての $x$ で $f(x) \\ge 0$ のとき、$f(2) + 1 > 0$ を示す。",
+    "file": "learn/07-すべての.narfi",
+    "task": "$f$ が単調増加（$x \\le y$ ならば $f(x) \\le f(y)$）のとき、$g(x) = f(x) + 1$ も単調増加であることを示す。",
     "hints": [
-      "まず「$f(2) \\ge 0$」を書き留める：`k : f(2) >= 0 by h(2)`。",
+      "示すのは「すべての $x, y$ について、$x \\le y$ ならば …」。`Fix x, y` のあと `assume hxy : x <= y`。",
+      "$h$ に $x, y, hxy$ を渡す：`k : f(x) <= f(y) by h(x, y, hxy)`。",
       "あとは `linarith`。"
     ],
-    "exercise": "-- 練習 6：すべての を使う\n\nthm f_two :\n  f : Real -> Real, h : forall x:Real. f(x) >= 0\n  |- f(2) + 1 > 0\n\nsorry\n",
-    "answer": "thm f_two :\n  f : Real -> Real, h : forall x:Real. f(x) >= 0\n  |- f(2) + 1 > 0\n\nk : f(2) >= 0 by h(2)\nlinarith\n"
+    "exercise": "-- 練習 7：単調増加\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm mono_shift :\n  f : Real -> Real, h : forall x:Real. forall y:Real. x <= y => f(x) <= f(y)\n  |- forall x:Real. forall y:Real. x <= y => f(x) + 1 <= f(y) + 1\n\nsorry\n",
+    "answer": "thm mono_shift :\n  f : Real -> Real, h : forall x:Real. forall y:Real. x <= y => f(x) <= f(y)\n  |- forall x:Real. forall y:Real. x <= y => f(x) + 1 <= f(y) + 1\n\nFix x, y\n  assume hxy : x <= y\n    k : f(x) <= f(y) by h(x, y, hxy)\n    linarith\n"
   },
   {
-    "title": "7. 「ある」",
+    "title": "8. 「ある」",
     "blocks": [
       {
-        "p": "**ねらい**：「… となる $x$ がある」（$\\exists x$）を**示す**には、例を 1 つ挙げる（`choose 2` のように）。仮定の「ある」を**使う**には、その $x$ を取り出す（`Obtain`）。"
+        "p": "**ねらい**：「… となる $x$ がある」（$\\exists x$）を**示す**には、例を 1 つ挙げる（`choose 2` のように）。仮定の「ある」を**使う**には、その $x$ を取り出して名前を付ける（`Obtain`）。"
       },
       {
         "paper": [
@@ -373,7 +519,7 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "choose 2",
-            "例として $x = 2$ を挙げる。示すべきものは $2 + 3 = 5$ になる"
+            "例として $x = 2$ を挙げる。示すべきものは $2 + 3 = 5$ になる。字下げはしない"
           ],
           [
             "ring",
@@ -382,7 +528,10 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "p": "**使う**例：仮定 $h$ が「$a > 5$ となる $a$ がある」なら、`Obtain a, ha : h` でその $a$ と性質 $ha : a > 5$ が手に入ります。"
+        "p": "**使う**例：仮定 $h$ が「$a > 5$ となる $a$ がある」なら、`Obtain a | ha by h` で、その $a$ と性質 $ha : a > 5$ が手に入る（「$h$ より、$ha$ を満たす $a$ をとる」と読む）。`|` の左が取り出すもの、右がその性質の名前、`by` の右が根拠。"
+      },
+      {
+        "code": "thm exists_gt :\n  h : exists x:Real. x > 5\n  |- exists y:Real. y > 4\n\nObtain a | ha by h\nchoose a\nlinarith"
       },
       {
         "type": [
@@ -391,29 +540,111 @@ window.NARFI_TUTORIAL = [
             "∃x ∈ ℝ,（ある実数 x が存在して）"
           ],
           [
-            "choose 2",
-            "例として 2 を挙げる"
+            "choose t",
+            "例として t を挙げる"
           ],
           [
-            "Obtain a, ha : h",
+            "Obtain a | ha by h",
             "h から a と、a の性質 ha を取り出す"
+          ]
+        ]
+      },
+      {
+        "pitfalls": [
+          [
+            "`Obtain a, ha : h` と書いた",
+            "古い書き方。`:` の右は命題、根拠は `by` の右に書く：`Obtain a | ha by h`（File → Update Old Syntax で直る）"
           ]
         ]
       }
     ],
-    "task": "「$x > 5$ となる $x$ がある」ならば「$y > 4$ となる $y$ がある」。",
+    "file": "learn/08-ある.narfi",
+    "task": "自然数 $n$ が偶数（$n = 2k$ となる $k$ がある）のとき、$n + 2$ も偶数であることを示す。",
     "hints": [
-      "まず `Obtain a, ha : h` で $a$ と $ha : a > 5$ を取り出す。",
-      "例として同じ $a$ を挙げる（`choose a`）。あとは `linarith`。"
+      "$h$ から $k$ を取り出す：`Obtain k | hk by h`（$hk : n = 2k$）。",
+      "$n + 2 = 2(k + 1)$ なので、例として `choose k + 1`。",
+      "残りは $n + 2 = 2(k+1)$。連鎖で `= 2k + 2   by hk`、`= 2(k + 1)   by ring`。"
     ],
-    "exercise": "-- 練習 7：ある を使って、ある を示す\n\nthm exists_gt :\n  h : exists x:Real. x > 5\n  |- exists y:Real. y > 4\n\nsorry\n",
-    "answer": "thm exists_gt :\n  h : exists x:Real. x > 5\n  |- exists y:Real. y > 4\n\nObtain a, ha : h\nchoose a\nlinarith\n"
+    "exercise": "-- 練習 8：偶数に 2 を足しても偶数\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm even_add_two :\n  n : Nat, h : exists k:Nat. n = 2k\n  |- exists m:Nat. n + 2 = 2m\n\nsorry\n",
+    "answer": "thm even_add_two :\n  n : Nat, h : exists k:Nat. n = 2k\n  |- exists m:Nat. n + 2 = 2m\n\nObtain k | hk by h\nchoose k + 1\nn + 2\n  = 2k + 2        by hk\n  = 2(k + 1)      by ring\n"
   },
   {
-    "title": "8. ε を任意にとる（大学の入口）",
+    "title": "9. 「でない」と背理法",
     "blocks": [
       {
-        "p": "**ねらい**：大学の解析で最もよく出る形「任意の $\\varepsilon > 0$ に対して …」を書く。$\\forall \\varepsilon > 0$ は「$\\varepsilon$ を任意にとり、$\\varepsilon > 0$ と仮定する」の 2 つをまとめたもの。"
+        "p": "**ねらい**：「$P$ でない」（$\\lnot P$）は Narfi の中では「$P$ ならば矛盾」（$P \\Rightarrow \\bot$）。だから**示す**には $P$ を仮定して矛盾を示し、**使う**には $P$ の根拠を渡す（`hn(p)` で矛盾）。"
+      },
+      {
+        "paper": [
+          "**定理**　$x > 1$ かつ $x < 0$、ということはない。",
+          "**証明**　そう仮定すると $1 < x < 0$ で矛盾。$\\blacksquare$"
+        ]
+      },
+      {
+        "code": "thm not_both :\n  x : Real\n  |- not (x > 1 and x < 0)\n\nassume h : x > 1 and x < 0\n  linarith"
+      },
+      {
+        "steps": [
+          [
+            "assume h : x > 1 and x < 0",
+            "否定を示すので、中身を仮定する。示すべきものは矛盾（⊥）になる"
+          ],
+          [
+            "  linarith",
+            "**矛盾も `linarith` で示せる**（仮定の不等式から $0 < 0$ が出ることを確かめる）"
+          ]
+        ]
+      },
+      {
+        "p": "**背理法**：結論 $P$ そのものを示すのに「$P$ でない」と仮定して矛盾を導くこともできる。`by_contra hn` と書く。"
+      },
+      {
+        "code": "thm dne :\n  P : Prop, h : not not P\n  |- P\n\nby_contra hn\n  h(hn)"
+      },
+      {
+        "steps": [
+          [
+            "by_contra hn",
+            "「$P$ でない」と仮定し、$hn$ と呼ぶ。示すべきものは矛盾"
+          ],
+          [
+            "  h(hn)",
+            "$h$ は「$\\lnot P$ ならば矛盾」。$hn$ を渡すと矛盾"
+          ]
+        ]
+      },
+      {
+        "type": [
+          [
+            "not",
+            "¬（でない）"
+          ],
+          [
+            "false",
+            "⊥（矛盾）"
+          ],
+          [
+            "by_contra hn",
+            "背理法：結論の否定を hn として仮定する"
+          ]
+        ]
+      }
+    ],
+    "file": "learn/09-でない.narfi",
+    "task": "実数 $x$ が「すべての $\\varepsilon > 0$ について $x < \\varepsilon$」を満たすなら、$x > 0$ ではないことを示す。",
+    "hints": [
+      "示すのは「でない」。`assume hx : x > 0`。示すべきものは矛盾になる。",
+      "$h$ に $\\varepsilon = x$ を入れる（その根拠が $hx$）：`k : x < x by h(x, hx)`。",
+      "$x < x$ は矛盾。`linarith`。"
+    ],
+    "exercise": "-- 練習 9：どんな正の数より小さい\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm small :\n  x : Real, h : forall eps:Real>0. x < eps\n  |- not (x > 0)\n\nsorry\n",
+    "answer": "thm small :\n  x : Real, h : forall eps:Real>0. x < eps\n  |- not (x > 0)\n\nassume hx : x > 0\n  k : x < x by h(x, hx)\n  linarith\n"
+  },
+  {
+    "title": "10. ε を任意にとる（大学の入口）",
+    "blocks": [
+      {
+        "p": "**ねらい**：大学の解析で最もよく出る形「任意の $\\varepsilon > 0$ に対して …」を書く。$\\forall \\varepsilon > 0$ は「$\\varepsilon$ を任意にとり、$\\varepsilon > 0$ と仮定する」の 2 つをまとめたもの。$\\exists \\delta > 0$ は「$\\delta$ を挙げ、$\\delta > 0$ も示す」。"
       },
       {
         "paper": [
@@ -428,7 +659,7 @@ window.NARFI_TUTORIAL = [
         "steps": [
           [
             "Fix eps | h_{eps} : eps > 0",
-            "$\\varepsilon$ を任意にとり、$\\varepsilon > 0$ という仮定に名前 $h_\\varepsilon$ を付ける"
+            "$\\varepsilon$ を任意にとり、$\\varepsilon > 0$ という仮定に $h_\\varepsilon$ と名前を付ける。`|` は「〜であって」"
           ],
           [
             "choose eps/2, linarith",
@@ -444,41 +675,106 @@ window.NARFI_TUTORIAL = [
         "type": [
           [
             "eps",
-            "ε（空白を打つと変わる）。`delta` は δ"
+            "ε（空白で変わる）。`delta` は δ"
           ],
           [
             "h_{eps}",
-            "添字つきの名前 $h_\\varepsilon$。`_` で添字の欄ができる"
+            "添字つきの名前 $h_\\varepsilon$"
           ],
           [
             "/",
             "分数（直前の項が分子になる）"
+          ],
+          [
+            "forall eps:Real>0.",
+            "∀ε > 0,"
           ]
         ]
       }
     ],
-    "task": "上の half_pos を、見ないで書いてみる。",
+    "file": "learn/10-ε.narfi",
+    "task": "任意の $\\varepsilon > 0$ に対し、$\\delta + \\delta < \\varepsilon$ となる $\\delta > 0$ があることを示す。",
     "hints": [
-      "`Fix eps | h_{eps} : eps > 0` で始める。",
-      "$\\delta$ として $\\varepsilon/2$ を選ぶと、$> 0$ も $< \\varepsilon$ も `linarith` で出る。"
+      "形は上の例と同じ。`Fix eps | h_{eps} : eps > 0` から。",
+      "$\\delta = \\varepsilon/2$ だと $\\delta + \\delta = \\varepsilon$ でぎりぎり足りない。もっと小さく、たとえば $\\varepsilon/3$。",
+      "`choose eps/3, linarith` のあと `linarith`。"
     ],
-    "exercise": "-- 練習 8：ε を任意にとる\n\nthm half_pos :\n  |- forall eps:Real>0. exists d:Real>0. d < eps\n\nsorry\n",
-    "answer": "thm half_pos :\n  |- forall eps:Real>0. exists d:Real>0. d < eps\n\nFix eps | h_{eps} : eps > 0\n  choose eps/2, linarith\n  linarith\n"
+    "exercise": "-- 練習 10：δ をうまく選ぶ\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm third :\n  |- forall eps:Real>0. exists d:Real>0. d + d < eps\n\nsorry\n",
+    "answer": "thm third :\n  |- forall eps:Real>0. exists d:Real>0. d + d < eps\n\nFix eps | h_{eps} : eps > 0\n  choose eps/3, linarith\n  linarith\n"
   },
   {
-    "title": "9. 数列の極限",
+    "title": "11. 定義を書く・使う",
     "blocks": [
       {
-        "p": "**ねらい**：数列 $a_n$ が $\\alpha$ に収束する（$\\varepsilon$-$N$ 論法）を `def` で定義し、使う。数列は $a : \\mathbb{N} \\to \\mathbb{R}$ と宣言すると $a_n$ と書ける。"
+        "p": "**ねらい**：自分で言葉を定義する（`def`）。「偶数」「有界」のような性質は `def 名前(引数) :⇔ 命題` と書く（`:⇔` は「〜のことと定める」）。定義した言葉は、証明の中で**必要に応じて自動で開かれる**（中身の命題として扱われる）。"
       },
       {
-        "code": "def is_lim(a : Nat -> Real, alpha : Real) :<=>\n  forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)"
+        "code": "def even(n : Nat) :<=> exists k:Nat. n = 2k\n\nthm even_add :\n  m : Nat, n : Nat, hm : even(m), hn : even(n)\n  |- even(m + n)\n\nObtain a | ha by hm\nObtain b | hb by hn\nchoose a + b\nm + n\n  = 2a + 2b       by ha, hb\n  = 2(a + b)      by ring"
       },
       {
-        "p": "読み方：「任意の $\\varepsilon > 0$ に対し、ある $N$ があって、$n \\ge N$ なら $|a_n - \\alpha| < \\varepsilon$」。"
+        "steps": [
+          [
+            "def even(n : Nat) :<=> exists k:Nat. n = 2k",
+            "「$n$ が偶数」を「$n = 2k$ となる $k$ がある」と定める"
+          ],
+          [
+            "Obtain a | ha by hm",
+            "$hm$ は even(m)。定義を開くと「ある」なので、`Obtain` で $a$ と $ha : m = 2a$ を取り出せる"
+          ],
+          [
+            "choose a + b",
+            "示す even(m + n) も、開くと「ある」。例として $a + b$"
+          ],
+          [
+            "= 2a + 2b       by ha, hb",
+            "根拠を `,` で並べると、両方の等式で書き換える"
+          ]
+        ]
       },
       {
-        "p": "下の行の `notation` は**記法**：この定義を、教科書と同じ $a_n \\to \\alpha\\ (n \\to \\infty)$ の形で書けるようにする。$n$ は引数ではないので束縛変数で、使うときはどの文字でもよい（$a_k \\to \\alpha\\ (k \\to \\infty)$）。$a$ の所には $n$ を含む式が入るので、$a_{n+1} \\to \\alpha\\ (n \\to \\infty)$ も書ける。"
+        "p": "**値の定義**は `def f(x : Real) : Real := 式`（`:=` は「〜と定める」。値を返すもの）。性質の定義は `:⇔`、値の定義は `:=` と使い分ける。"
+      },
+      {
+        "p": "**記法**：定義の下に字下げして `notation 型紙` と書くと、教科書の書き方で使える（例：`notation a_n -> alpha (n -> \\infty)`。次のレッスン）。"
+      },
+      {
+        "type": [
+          [
+            ":<=>",
+            ":⇔（性質を定める）"
+          ],
+          [
+            ":=",
+            "値を定める"
+          ],
+          [
+            "(n:Nat |-> a_n + 1)",
+            "「$n$ を $a_n + 1$ に移す数列」そのもの。`|->` は ↦"
+          ]
+        ]
+      }
+    ],
+    "file": "learn/11-定義.narfi",
+    "task": "数列 $a$ が $M$ で上から抑えられる（すべての $n$ で $a_n \\le M$）とき、数列 $a_n + 1$ は $M + 1$ で上から抑えられることを示す。",
+    "hints": [
+      "示す upper(…, M + 1) は、開くと「すべての $n$ について …」。`Fix n`。",
+      "$h$ に $n$ を入れる：`k : a_n <= M by h(n)`。",
+      "あとは `linarith`（示すべきものは $a_n + 1 \\le M + 1$）。"
+    ],
+    "exercise": "-- 練習 11：上から抑えられる数列\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef upper(a : Nat -> Real, M : Real) :<=> forall n:Nat. a_n <= M\n\nthm upper_shift :\n  a : Nat -> Real, M : Real, h : upper(a, M)\n  |- upper((n:Nat |-> a_n + 1), M + 1)\n\nsorry\n",
+    "answer": "def upper(a : Nat -> Real, M : Real) :<=> forall n:Nat. a_n <= M\n\nthm upper_shift :\n  a : Nat -> Real, M : Real, h : upper(a, M)\n  |- upper((n:Nat |-> a_n + 1), M + 1)\n\nFix n\n  k : a_n <= M by h(n)\n  linarith\n"
+  },
+  {
+    "title": "12. 数列の極限",
+    "blocks": [
+      {
+        "p": "**ねらい**：数列 $a_n$ が $\\alpha$ に収束する（$\\varepsilon$-$N$ 論法）を定義し、使う。数列は $a : \\mathbb{N} \\to \\mathbb{R}$ と宣言すると $a_n$ と書ける。"
+      },
+      {
+        "code": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)"
+      },
+      {
+        "p": "読み方：「任意の $\\varepsilon > 0$ に対し、ある $N$ があって、$n \\ge N$ なら $|a_n - \\alpha| < \\varepsilon$」。下の `notation` は**記法**で、教科書と同じ $a_n \\to \\alpha\\ (n \\to \\infty)$ の形で書けるようにする。$a$ の所には $n$ を含む式が入るので、$a_{n+1} \\to \\alpha\\ (n \\to \\infty)$ とも書ける。"
       },
       {
         "paper": [
@@ -487,14 +783,17 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
+        "code": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N | hN by h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)"
+      },
+      {
         "steps": [
           [
             "Fix eps | h_{eps} : eps > 0",
-            "$\\varepsilon > 0$ をとる（定義は自動で開かれる）"
+            "$\\varepsilon > 0$ をとる（示す収束の定義が開かれる）"
           ],
           [
-            "Obtain N, hN : h(eps, h_{eps})",
-            "仮定 $h$ に $\\varepsilon$ と $h_\\varepsilon$ を渡すと「ある $N$ が…」が出る。その $N$ を取り出す"
+            "Obtain N | hN by h(eps, h_{eps})",
+            "仮定 $h$ に $\\varepsilon$ と $h_\\varepsilon$ を渡すと「ある $N$ が …」。その $N$ を取り出す"
           ],
           [
             "choose N",
@@ -510,7 +809,7 @@ window.NARFI_TUTORIAL = [
           ],
           [
             "hN(n + 1, k)",
-            "$hN$ を $n + 1$ で使う"
+            "$hN$ を $n + 1$ で使うと $|a_{n+1} - \\alpha| < \\varepsilon$"
           ]
         ]
       },
@@ -518,84 +817,99 @@ window.NARFI_TUTORIAL = [
         "type": [
           [
             "a_n, a_{n+1}",
-            "数列の項 $a_n$・$a_{n+1}$"
+            "数列の項"
           ],
           [
             "abs( ) または |x|",
             "絶対値"
           ],
           [
-            "a_{n+1} -> alpha (n -> \\infty)",
-            "$a_{n+1} \\to \\alpha\\ (n \\to \\infty)$。`->` は →、`\\infty` は ∞"
-          ],
-          [
-            "(n:Nat |-> a_{n+1})",
-            "「$n$ を $a_{n+1}$ に移す数列」そのもの。`|->` は ↦（略記の右辺で使う）"
+            "-> と \\infty",
+            "→ と ∞"
           ]
         ]
       }
     ],
-    "task": "上の証明を書く。",
+    "file": "learn/12-極限.narfi",
+    "task": "$a_n \\to \\alpha$ ならば、ある番号 $N$ から先は $a_n < \\alpha + 1$ であることを示す（収束する数列は、いずれ上から抑えられる）。",
     "hints": [
-      "形は練習 8 と同じ。$N$ は $h$ から `Obtain` で取り出したものを、そのまま使う。",
-      "最後に要るのは $|a_{n+1} - \\alpha| < \\varepsilon$。$hN$ は「$n + 1 \\ge N$」の根拠があれば $n + 1$ で使える。"
+      "定義の $\\varepsilon$ に 1 を入れる。$1 > 0$ の根拠を `one : 1 > 0 by decide` と書き留め、`Obtain N | hN by h(1, one)`。",
+      "`choose N` のあと `Fix n | h_n : n >= N`。`k : abs(a_n - alpha) < 1 by hN(n, h_n)`。",
+      "絶対値をはずすのに `abs_lt` を使う：`l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)`。あとは `linarith`。"
     ],
-    "exercise": "-- 練習 9：1 つずらした数列の極限\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nsorry\n",
-    "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\nthm shift :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_{n+1} -> alpha (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N, hN : h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    k : n + 1 >= N by linarith\n    hN(n + 1, k)\n"
+    "exercise": "-- 練習 12：いずれ上から抑えられる\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\nsorry\n",
+    "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\none : 1 > 0 by decide\nObtain N | hN by h(1, one)\nchoose N\nFix n | h_n : n >= N\n  k : abs(a_n - alpha) < 1 by hN(n, h_n)\n  l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)\n  linarith\n"
   },
   {
-    "title": "10. 背理法",
+    "title": "13. 数学的帰納法",
     "blocks": [
       {
-        "p": "**ねらい**：「$P$ でないと仮定して矛盾を導く」（背理法）。`by_contra hn` で「$P$ でない」を仮定し、矛盾（$\\bot$）を示す。"
+        "p": "**ねらい**：自然数 $n$ についての命題を、$n = 0$ のときと「$k$ で成り立てば $k + 1$ でも成り立つ」の 2 つで示す（`induction n`）。漸化式で定めた数列（`rec`）について示すときによく使う。"
       },
       {
-        "paper": [
-          "**定理**　「$P$ でない、ということはない」ならば $P$。",
-          "**証明**　$P$ でないと仮定する。これは仮定に矛盾する。$\\blacksquare$"
-        ]
-      },
-      {
-        "code": "thm dne :\n  P : Prop, h : not not P\n  |- P\n\nby_contra hn\n  h(hn)"
+        "code": "rec double(n : Nat) : Nat\n  double(0) = 0\n  double(n + 1) = double(n) + 2\n\nthm double_eq :\n  |- forall n:Nat. double(n) = 2n\n\nFix n\n  induction n\n    Case zero\n      double(0)\n        = 0       by double.zero\n        = 2*0     by ring\n    Case succ k, IH : double(k) = 2k\n      s : S(k) = k + 1 by ring\n      double(S(k))\n        = double(k + 1)     by s\n        = double(k) + 2     by double.succ(k)\n        = 2k + 2            by IH\n        = 2(k + 1)          by ring\n        = 2S(k)             by s"
       },
       {
         "steps": [
           [
-            "by_contra hn",
-            "「$P$ でない」と仮定し、名前 $hn$ を付ける。示すべきものは矛盾（$\\bot$）"
+            "rec double(n : Nat) : Nat",
+            "漸化式で数列を定める。`double(0) = 0`（初項）と `double(n + 1) = …`（漸化式）。2 つの等式は、それぞれ `double.zero`・`double.succ` という名前で使える"
           ],
           [
-            "h(hn)",
-            "「$P$ でない、ということはない」は「$P$ でないなら矛盾」という意味。$hn$ を渡すと矛盾になる"
+            "induction n",
+            "$n$ についての帰納法。下に `Case zero` と `Case succ k, IH : …` を書く"
+          ],
+          [
+            "Case zero",
+            "$n = 0$ の場合"
+          ],
+          [
+            "Case succ k, IH : double(k) = 2k",
+            "$k$ で成り立つ（帰納法の仮定 $IH$）として、次の数で示す。$IH$ の中身は省略できない"
+          ],
+          [
+            "s : S(k) = k + 1 by ring",
+            "「$k$ の次の数」は $S(k)$ と書かれる。$k + 1$ と同じことを書き留めて、`by s` で書き換える"
           ]
         ]
-      },
-      {
-        "p": "「でない」（$\\lnot P$）は Narfi の中では「$P$ ならば矛盾」（$P \\Rightarrow \\bot$）として扱われます。だから「$P$ でない」を示すには `assume p : P` として矛盾を示し、使うには `hn(p)` と $P$ の根拠を渡します。"
       },
       {
         "type": [
           [
-            "not",
-            "¬（でない）"
+            "rec",
+            "漸化式による定義"
           ],
           [
-            "by_contra hn",
-            "背理法：結論の否定を hn として仮定する"
+            "induction n",
+            "数学的帰納法"
+          ],
+          [
+            "S(k)",
+            "$k$ の次の数（$k + 1$）"
+          ]
+        ]
+      },
+      {
+        "pitfalls": [
+          [
+            "「… と … が合わない」（S(k) と k + 1）",
+            "帰納法の段では $k + 1$ が $S(k)$ の形で出る。`s : S(k) = k + 1 by ring` を書き、連鎖の最初と最後で `by s` を使う"
           ]
         ]
       }
     ],
-    "task": "$P$ ならば「$P$ でない、ということはない」。",
+    "file": "learn/13-帰納法.narfi",
+    "task": "$f(0) = 0$、$f(n+1) = f(n) + 2n + 1$ で定めた数列について、$f(n) = n^2$ を示す（$1 + 3 + 5 + \\dots + (2n-1) = n^2$）。",
     "hints": [
-      "示すのは $\\lnot\\lnot P$、つまり「$\\lnot P$ ならば矛盾」。`assume hn : not P`。",
-      "$hn$ に $P$ の根拠 $h$ を渡すと矛盾：`hn(h)`。"
+      "上の例と同じ形。`Fix n` のあと `induction n`。",
+      "`Case zero` は `odd_sum(0) = 0 by odd_sum.zero`、`= 0^2 by ring` の連鎖。",
+      "`Case succ k, IH : odd_sum(k) = k^2`。連鎖：`= odd_sum(k + 1) by s`、`= odd_sum(k) + 2k + 1 by odd_sum.succ(k)`、`= k^2 + 2k + 1 by IH`、`= (k + 1)^2 by ring`、`= S(k)^2 by s`。"
     ],
-    "exercise": "-- 練習 10：でない、ということはない\n\nthm dni :\n  P : Prop, h : P\n  |- not not P\n\nsorry\n",
-    "answer": "thm dni :\n  P : Prop, h : P\n  |- not not P\n\nassume hn : not P\n  hn(h)\n"
+    "exercise": "-- 練習 13：奇数の和は平方数\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nrec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nsorry\n",
+    "answer": "rec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nFix n\n  induction n\n    Case zero\n      odd_sum(0)\n        = 0     by odd_sum.zero\n        = 0^2   by ring\n    Case succ k, IH : odd_sum(k) = k^2\n      s : S(k) = k + 1 by ring\n      odd_sum(S(k))\n        = odd_sum(k + 1)          by s\n        = odd_sum(k) + 2k + 1     by odd_sum.succ(k)\n        = k^2 + 2k + 1            by IH\n        = (k + 1)^2               by ring\n        = S(k)^2                  by s\n"
   },
   {
-    "title": "11. エディタの使い方",
+    "title": "14. エディタの使い方",
     "blocks": [
       {
         "keys": [
@@ -605,11 +919,15 @@ window.NARFI_TUTORIAL = [
           ],
           [
             "_ , ^",
-            "添字・上付き"
+            "添字・上付き（$a_n$・$a_{i,j}$・$x^2$）"
           ],
           [
             "abs( ) , |x|",
             "絶対値"
+          ],
+          [
+            "[[ ",
+            "行列（成分の中で Enter で行、& で列を足す）"
           ],
           [
             "<= >= != => <=>",
@@ -640,12 +958,12 @@ window.NARFI_TUTORIAL = [
             "まとめて字下げ・戻す"
           ],
           [
-            "ダブルクリック",
-            "名前（添字ごと）を選ぶ"
+            "⌘F / ⌘⌥F",
+            "検索 / 置換（正規表現も使える）"
           ],
           [
-            "⌥ + ←→",
-            "単語ごとに動く"
+            "⇧⌥F",
+            "整形（連鎖の by をそろえる など）"
           ],
           [
             "⌘S / ⌘Z",
@@ -654,13 +972,16 @@ window.NARFI_TUTORIAL = [
         ]
       },
       {
-        "p": "右の **Goal** タブには、カーソルの行で使える仮定と、示すべきものが出ます。困ったら「次の一手」のボタンを押すと、いま書けるものが入ります。"
+        "p": "右の **Goal** タブには、カーソルの行で使える仮定と、示すべきものが出る。困ったら「次の一手」のボタンを押すと、いま書けるものが入る。"
       },
       {
-        "p": "**Prose** タブで証明が文章として、**LaTeX** タブで論文に貼れる形で読めます。下の `JA` を押すと、エディタの中も日本語の証明文の形になります（ファイルは変わりません）。言語は Preferences（右上のアイコンのメニュー、または ⌘,）で選べます。"
+        "p": "**Prose** タブで証明が文章として、**LaTeX** タブで論文に貼れる形で読める。下の `JA` を押すと、エディタの中も日本語の証明文の形になる（ファイルは変わらない）。"
       },
       {
-        "p": "証明の行を右クリック →「証明木を見る」で、証明が論理の規則（自然演繹）の組み合わせとしてどう組み立てられているかが見られます。"
+        "p": "証明の行を右クリック →「証明木を見る」で、証明が論理の規則（自然演繹）の組み合わせとしてどう組み立てられているかが見られる。"
+      },
+      {
+        "p": "古い書き方のファイルは、開くと「今の書き方に直すか」を聞かれる（File → Update Old Syntax でも直せる）。"
       }
     ]
   },
@@ -668,78 +989,101 @@ window.NARFI_TUTORIAL = [
     "title": "付録：早見表",
     "blocks": [
       {
-        "p": "証明は「いま示すべきもの」（Goal タブの ⊢ の右）の形を見て、1 行ずつ書きます。"
-      },
-      {
-        "h": "示すべきものの形で選ぶ"
+        "h": "goal の形から、書くものを選ぶ"
       },
       {
         "keys": [
           [
-            "∀x. φ（すべての）",
-            "Fix x（条件つき ∀ε>0 なら Fix ε | hε : ε > 0）"
+            "P => Q（ならば）",
+            "`assume h : P`（下に字下げして Q を示す）"
           ],
           [
-            "φ ⇒ ψ（ならば）、¬φ",
-            "assume h : φ"
+            "forall x. P（すべての）",
+            "`Fix x`（`forall eps>0` なら `Fix eps | h : eps > 0`）"
           ],
           [
-            "φ ∧ ψ（かつ）",
-            "根拠1, 根拠2"
+            "exists x. P（ある）",
+            "`choose t`（範囲つきなら `choose t, 根拠`）"
           ],
           [
-            "φ ∨ ψ（または）",
-            "choose left / choose right"
+            "P and Q（かつ）",
+            "`根拠1, 根拠2`"
           ],
           [
-            "∃x. φ（ある）",
-            "choose 例"
+            "P or Q（または）",
+            "`left` か `right`"
           ],
           [
-            "= < ≤",
-            "ring・linarith・式変形の連鎖"
+            "not P（でない）",
+            "`assume h : P`（矛盾を示す）"
+          ],
+          [
+            "等式・不等式",
+            "連鎖、`ring`、`linarith`、仮定の名前"
           ],
           [
             "何でも",
-            "by_contra h（背理法）、根拠 1 つで閉じる"
+            "`by_contra hn`（背理法）"
           ]
         ]
       },
       {
-        "h": "仮定の形で選ぶ"
+        "h": "仮定の形から、使い方を選ぶ"
       },
       {
         "keys": [
           [
-            "h : ∃x. φ",
-            "Obtain x, hx : h"
+            "h : P => Q",
+            "`h(p)` で Q"
           ],
           [
-            "h : φ ∨ ψ",
-            "cases h（Case left h1 / Case right h2）"
+            "h : forall x. P",
+            "`h(t)` で P(t)（条件つきなら `h(t, 根拠)`）"
           ],
           [
-            "h : φ ∧ ψ",
-            "h.left・h.right"
+            "h : exists x. P",
+            "`Obtain x | hx by h`"
           ],
           [
-            "h : ∀x. φ",
-            "h(具体的な値)"
+            "h : P and Q",
+            "`h.left`・`h.right`"
           ],
           [
-            "h : φ ⇒ ψ",
-            "h(φ の根拠)"
+            "h : P or Q",
+            "`cases h` の下に `Case left h1`・`Case right h2`"
+          ],
+          [
+            "h : not P",
+            "`h(p)` で矛盾"
+          ],
+          [
+            "h : a = b",
+            "連鎖の根拠 `by h`（a を b に書き換える）"
           ]
         ]
       },
       {
-        "h": "途中で分かったことを書き留める"
+        "h": "書き方の決まり"
       },
       {
-        "p": "`名前 : 命題 by 根拠`。根拠が長ければ `名前 : 命題` の下に字下げして書く。"
-      },
-      {
-        "p": "書き方の完全な一覧は [docs/language/syntax.md](https://github.com/Narfidort/Narfi/blob/main/docs/language/syntax.md)。"
+        "keys": [
+          [
+            "名前 : 右辺",
+            "名前を導入する。右辺は型（もの）か命題"
+          ],
+          [
+            "by 根拠",
+            "根拠はいつも by の右"
+          ],
+          [
+            "|",
+            "「〜であって」：左がもの、右がその仮定（Fix・Obtain）"
+          ],
+          [
+            ",",
+            "同じ種類のものを並べる"
+          ]
+        ]
       }
     ]
   }

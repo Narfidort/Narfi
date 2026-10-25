@@ -12,8 +12,8 @@ thm cdim.bound :
   hind : ∀c:ℕ → ℝ. (∀x:ℕ → ℝ. sum((i : ℕ ↦ c_i * f_i(x)), S(N)) = 0) ⇒ ∀i:ℕ. i ≤ N ⇒ c_i = 0
   ⊢ N < m
 
-Obtain e, h1 : h
-Obtain A, h2 : h1
+Obtain e | h1 by h
+Obtain A | h2 by h1
 dim.bound(h2, hind)
 
 -- 関数として等しい族でも同じ
@@ -23,8 +23,8 @@ thm cdim.cong :
   hq : ∀i:ℕ. i ≤ N ⇒ ∀x:ℕ → ℝ. f2_i(x) = f_i(x)
   ⊢ cdim(f2, N, m)
 
-Obtain e, h1 : h
-Obtain A, h2 : h1
+Obtain e | h1 by h
+Obtain A | h2 by h1
 choose e
 choose A
 Fix i
@@ -41,10 +41,10 @@ thm cdim.add :
   hv : cdim(v, N, m2)
   ⊢ cdim((i : ℕ ↦ (x : ℕ → ℝ ↦ u_i(x) + v_i(x))), N, m1 + m2)
 
-Obtain e1, hu1 : hu
-Obtain A1, hu2 : hu1
-Obtain e2, hv1 : hv
-Obtain A2, hv2 : hv1
+Obtain e1 | hu1 by hu
+Obtain A1 | hu2 by hu1
+Obtain e2 | hv1 by hv
+Obtain A2 | hv2 by hv1
 let E := (k : ℕ ↦ (x : ℕ → ℝ ↦ sum((j : ℕ ↦ delta(k, j) * e1(j)(x)), m1) + sum((j : ℕ ↦ delta(k, m1 + j) * e2(j)(x)), m2)))
 let Mx := ((i, k) : ℕ × ℕ ↦ sum((j : ℕ ↦ delta(k, j) * A1(i, j)), m1) + sum((j : ℕ ↦ delta(k, m1 + j) * A2(i, j)), m2))
 choose E
@@ -121,8 +121,8 @@ thm cdim.resize :
   hm : m = m2
   ⊢ cdim(f, N, m2)
 
-Obtain e, h1 : h
-Obtain A, h2 : h1
+Obtain e | h1 by h
+Obtain A | h2 by h1
 choose e
 choose A
 Fix i

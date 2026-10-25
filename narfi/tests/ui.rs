@@ -215,7 +215,10 @@ fn tutorial_answers_check() {
         let f = dir0.join(format!("code{k}.narfi"));
         std::fs::write(&f, code).unwrap();
         let st = statuses(&f);
-        assert!(!st.is_empty() && st.iter().all(|s| s.starts_with('✓')), "レッスンの例 {k} が通らない: {st:?}\n{code}");
+        assert!(
+            st.iter().any(|s| s.starts_with('✓')) && st.iter().all(|s| s.starts_with('✓') || s.starts_with("公理")),
+            "レッスンの例 {k} が通らない: {st:?}\n{code}"
+        );
     }
     let exercises = field(&json, "exercise");
     let answers = field(&json, "answer");

@@ -30,7 +30,7 @@ thm ex1.imp_trans :
 sorry
 
 
--- 1.3  ∨ を使うには cases、∨ を示すには choose left / choose right
+-- 1.3  ∨ を使うには cases、∨ を示すには left / right
 thm ex1.or_comm :
   h : P ∨ Q
   ⊢ Q ∨ P

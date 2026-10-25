@@ -15,7 +15,7 @@ cases c0
   Case right nl
     hm : m ≤ N by nat.not_lt(nl)
     ld : ∃c:ℕ → ℝ. (∃i:ℕ. i ≤ N ∧ c(i) ≠ 0) ∧ ∀k:ℕ. k < m ⇒ sum((i : ℕ ↦ c(i) * A(i, k)), S(N)) = 0 by lin.dep(m, N, A, hm)
-    Obtain c, hc : ld
+    Obtain c | hc by ld
     s : S(N) = N + 1 by ring
     hle : ∀i:ℕ. i < S(N) ⇒ i ≤ N
       Fix i
@@ -61,7 +61,7 @@ cases c0
           = sum((k : ℕ ↦ g_k(x) * sum((i : ℕ ↦ c(i) * A(i, k)), S(N))), m)                         by sum.cong(m, p3)
           = sum((k : ℕ ↦ 0), m)                                                                    by sum.cong(m, p4)
           = 0                                                                                      by sum.zeros(m)
-    Obtain i0, hi0 : hc.left
+    Obtain i0 | hi0 by hc.left
     i0N : i0 ≤ N by hi0.left
     ne0 : c(i0) ≠ 0 by hi0.right
     z0 : c(i0) = 0 by hind(c, hz, i0, i0N)

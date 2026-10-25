@@ -36,10 +36,10 @@ s1 : ∀x:ℝ. x ∈ B ⇒ x ∈ A ∪ (B ∖ A)
       c : x ∈ A ∨ ¬(x ∈ A) by em
       cases c
         Case left p
-          choose left
+          left
           p
         Case right q
-          choose right
+          right
           hx, q
 s2 : ∀x:ℝ. x ∈ A ∪ (B ∖ A) ⇒ x ∈ B
   Fix x

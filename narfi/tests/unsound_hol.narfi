@@ -44,7 +44,7 @@ thm u.pattern.escape :
   h : ∀x:ℕ. ∃y:ℕ. R(x, y)
   ⊢ ∃y:ℕ. ∀x:ℕ. R(x, y)
 
-Obtain y, hy : h(0)
+Obtain y | hy by h(0)
 choose y
 Fix x
   hy

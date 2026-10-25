@@ -14,8 +14,8 @@ thm conv.add :
   ⊢ ∀ε>0. ∃N:ℕ. ∀n≥N. |(a(n) + b(n)) - (α + β)| < ε
 
 Fix ε | hε : ε > 0
-  Obtain N₁(ε), hN₁ : conv_a(ε/2, pos_half(hε))
-  Obtain N₂(ε), hN₂ : conv_b(ε/2, pos_half(hε))
+  Obtain N₁(ε) | hN₁ by conv_a(ε/2, pos_half(hε))
+  Obtain N₂(ε) | hN₂ by conv_b(ε/2, pos_half(hε))
   let N := max{N₁, N₂}
   choose N
   Fix n | hn : n ≥ N
@@ -33,7 +33,7 @@ thm pointwise :
 
 Fix x
   Fix ε | hε : ε > 0
-    Obtain N(x, ε), hN : conv(x, ε, hε)
+    Obtain N(x, ε) | hN by conv(x, ε, hε)
     choose N
     hN
 

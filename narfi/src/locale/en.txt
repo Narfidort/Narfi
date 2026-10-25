@@ -9,15 +9,17 @@
 =	Fix {x}	Let {x} be arbitrary.
 =	by_contra {h:id}	Suppose, for contradiction, {h}.
 =	assume {h:id} : {f}	Assume {h} : {f}.
-=	Obtain {v}, {h:id} : {j}	Obtain {v} with {h} from {j}.
+=	Obtain {v} | {h} : {f} by {j}	Obtain {v} with {h} : {f} from {j}.
+=	Obtain {v} | {h} by {j}	Obtain {v} with {h} from {j}.
+=	Obtain {v} by {j}	Obtain {v} from {j}.
 =	cases {h}	Split on {h}.
 =	Case left {h}	Left case ({h}):
 =	Case right {h}	Right case ({h}):
 =	induction {n}	Induction on {n}.
 =	Case zero	Base case:
 =	Case succ {k}, {h} : {f}	Step {k}, {h} : {f}:
-=	choose left	Show the left side.
-=	choose right	Show the right side.
+=	left	Show the left side.
+=	right	Show the right side.
 =	choose {t}	Take {t}.
 =	let {x} := {t}	Set {x} := {t}.
 =	{h:id} : {f} by {j}	{h} : {f} follows from {j}.

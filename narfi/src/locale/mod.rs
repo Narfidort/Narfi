@@ -317,13 +317,17 @@ mod tests {
             "Fix x",
             "assume h : P",
             "by_contra h",
-            "Obtain N, hN : h(ε, hε)",
+            "Obtain N | hN by h(ε, hε)",
+            "Obtain x | h1, h2 by e",
+            "Obtain x | hx : x > 0 by e",
+            "Obtain x by e",
+            "right",
             "cases h",
             "Case left h1",
             "induction n",
             "Case zero",
             "Case succ k, IH : P(k)",
-            "choose left",
+            "left",
             "choose N",
             "let N := max(a, b)",
             "k : x > 0 by linarith",
@@ -343,7 +347,7 @@ mod tests {
     #[test]
     fn roundtrip_en() {
         let en = locale("en").unwrap();
-        for std in ["Fix ε | hε : ε > 0", "Fix x", "assume h : P", "Obtain N, hN : h(ε, hε)", "choose N", "k : x > 0 by linarith", "Q ∧ P by q, p"] {
+        for std in ["Fix ε | hε : ε > 0", "Fix x", "assume h : P", "Obtain N | hN by h(ε, hε)", "choose N", "k : x > 0 by linarith", "Q ∧ P by q, p"] {
             let loc = stmt_from_standard(en, std);
             assert_ne!(loc, std, "{std} に英語の読みがない");
             assert_eq!(to_standard(&loc).as_deref(), Some(std), "{std} → {loc} → 戻らない");

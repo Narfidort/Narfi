@@ -806,14 +806,13 @@ const NARFI_AI_SYSTEM_PROMPT: &str = r#"あなたは自然演繹ベースの証�
    - ∀導入: `Fix x` または条件付き `Fix ε | hε : ε > 0` （仮定の中身 `: ε > 0` は必ず書く。日本語シュガー: `hε : ε > 0 を満たす ε を任意にとって固定する`）
    - →導入: `assume h : P` （仮定の中身 `: P` は必ず書く）
    - 背理法: `by_contra hn` （Goal が `⊥` になる。Goal自体が `¬P` のときは `assume` を使う）
-   - ∃除去: `Obtain x, hx : 根拠` または依存関係注釈付き `Obtain N(ε), hN : conv_a(ε/2, pos_half(hε))`
+   - ∃除去: `Obtain x | hx by 根拠` または依存関係注釈付き `Obtain N(ε) | hN by conv_a(ε/2, pos_half(hε))`（中身が ∧ なら `Obtain x | h1, h2 by 根拠`。命題を書いて照合するなら `Obtain x | hx : φ by 根拠`）。字下げしない
    - ∃導入: `choose 項` または範囲付き `choose 項, 条件の根拠` （例: `choose 1/2, decide`）
-   - ∨導入: `choose left` / `choose right`
+   - ∨導入: `left` / `right`（その行だけ。`choose` は ∃ のときだけ）
    - ∨除去: `cases h` の下に字下げして `Case left h1` と `Case right h2`
    - 帰納法: `induction n` の下に字下げして `Case zero` と `Case succ k, IH : P(k)`（帰納法の仮定の中身も書く）
-   - 中間主張: `have h : φ := 根拠`
-   - 十分条件: `suffices ψ := 根拠`
-   - 局所定義: `let N := max(N₁, N₂)`
+   - 事実の行（中間主張）: `h : φ by 根拠`（have は使わない）。φ の証明をブロックで書くなら `h : φ` の下に字下げして書く
+   - 局所定義: `let N := max{N₁, N₂}`
    - 等式・不等式の連鎖:
      左辺
        ≤ 中間項   by 根拠1

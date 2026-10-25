@@ -21,10 +21,10 @@ thm ex1.or_comm :
 
 cases h
   Case left hp
-    choose right
+    right
     hp
   Case right hq
-    choose left
+    left
     hq
 
 
@@ -50,7 +50,7 @@ thm ex2.exists_imp :
   h : ∀x. P(x) ⇒ Q(x), e : ∃x. P(x)
   ⊢ ∃x. Q(x)
 
-Obtain a, ha : e
+Obtain a | ha by e
 choose a
 h(a, ha)
 
@@ -59,7 +59,7 @@ thm ex2.exists_forall :
   h : ∃x. ∀y. R(x, y)
   ⊢ ∀y. ∃x. R(x, y)
 
-Obtain a, ha : h
+Obtain a | ha by h
 Fix y
   choose a
   ha(y)

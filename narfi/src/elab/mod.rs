@@ -348,8 +348,8 @@ impl<'a> Checker<'a> {
             Formula::Imp(a, _) => out.push((format!("assume h : {a}"), "goal が ⇒".into())),
             Formula::And(..) => out.push(("根拠1, 根拠2".into(), "goal が ∧：両側を並べる".into())),
             Formula::Or(..) => {
-                out.push(("choose left".into(), "goal が ∨：左を示す".into()));
-                out.push(("choose right".into(), "goal が ∨：右を示す".into()));
+                out.push(("left".into(), "goal が ∨：左を示す".into()));
+                out.push(("right".into(), "goal が ∨：右を示す".into()));
             }
             Formula::Exists(x, _, _) => out.push((format!("choose 項"), format!("goal が ∃：{x} として何をとるか"))),
             Formula::Atom(r, _) if r == "=" => {
@@ -372,7 +372,7 @@ impl<'a> Checker<'a> {
                     continue;
                 }
                 match self.whnf(f) {
-                    Formula::Exists(x, _, _) => out.push((format!("Obtain {x}, h{x} : {h}"), format!("仮定 {h} が ∃：取り出す"))),
+                    Formula::Exists(x, _, _) => out.push((format!("Obtain {x} | h{x} by {h}"), format!("仮定 {h} が ∃：取り出す"))),
                     Formula::Or(..) => out.push((format!("cases {h}"), format!("仮定 {h} が ∨：場合分け"))),
                     Formula::And(..) => out.push((format!("{h}.left / {h}.right"), format!("仮定 {h} が ∧：片側を使う"))),
                     _ => {}

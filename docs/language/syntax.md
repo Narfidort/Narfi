@@ -15,14 +15,14 @@ kernel はこの規則だけを検算する。エディタで証明の行を右�
 | `∀x. φ` | `Fix x`（条件つき `∀ε>0. φ` なら `Fix ε \| hε : ε > 0`） |
 | `φ ⇒ ψ`、`¬φ` | `assume h : φ` |
 | `φ ∧ ψ` | `根拠1, 根拠2` |
-| `φ ∨ ψ` | `choose left` / `choose right` |
+| `φ ∨ ψ` | `left` / `right` |
 | `∃x. φ` | `choose 項` |
 | `=`、`<`、`≤` | `ring`・`linarith`・連鎖 |
 | 何でも | `by_contra h`、または根拠 1 つで閉じる |
 
 | 仮定の形 | 使い方 |
 |---|---|
-| `h : ∃x. φ` | `Obtain x, hx : h` |
+| `h : ∃x. φ` | `Obtain x \| hx by h` |
 | `h : φ ∨ ψ` | `cases h`（下に `Case left h₁`・`Case right h₂`） |
 | `h : φ ∧ ψ` | `h.left`・`h.right` |
 | `h : ∀x. φ` | `h(t)` |
@@ -187,10 +187,12 @@ notation \max_{i ≤ m} f := top((i : ℕ ↦ f), m)             -- 値になる
 | `Fix ε \| hε : ε > 0` | `∀ε. ε > 0 ⇒ φ` の ε と仮定を一度に | ∀I・⇒I |
 | `assume h : φ` | goal `φ ⇒ ψ` の φ を仮定する。中身 `: φ` は省略できない | ⇒I |
 | `by_contra h` | goal φ の否定 `h : ¬φ` を仮定して ⊥ を示す | RAA（古典論理） |
-| `Obtain x, hx : e` | `e : ∃x. φ` から x と `hx : φ(x)` を取り出す | ∃E |
-| `Obtain N(ε), hN : e` | 同じ。N が ε にだけ依ることを確かめる | ∃E |
-| `choose t` / `choose t, j` | goal `∃x. φ` の x として t をとる（範囲の条件は j で） | ∃I |
-| `choose left` / `choose right` | goal `φ ∨ ψ` のどちらを示すか | ∨I₁ / ∨I₂ |
+| `Obtain x \| hx by e` | `e : ∃x. φ` から x と `hx : φ(x)` を取り出す。下に字下げしない（取り出したものは後ろの行で使える） | ∃E |
+| `Obtain x \| h₁, h₂ by e` | 中身が `A ∧ B` なら、`h₁ : A`・`h₂ : B` に分けて受ける | ∃E・∧E |
+| `Obtain x \| hx : φ by e` | 命題を書くと、e から取り出したものと照合する（読み手のため） | ∃E |
+| `Obtain N(ε) \| hN by e` | 同じ。N が ε にだけ依ることを確かめる | ∃E |
+| `choose t` / `choose t, j` | goal `∃x. φ` の x として t をとる（範囲の条件は j で）。`choose` は ∃ のときだけ | ∃I |
+| `left` / `right` | goal `φ ∨ ψ` の左（右）を示す。その行は `left` だけ | ∨I₁ / ∨I₂ |
 | `cases h` の下に `Case left h₁` / `Case right h₂` | `h : φ ∨ ψ` で場合分け | ∨E |
 | `induction n` の下に `Case zero` / `Case succ k, IH : φ(k)` | 数学的帰納法。IH の中身は省略できない | Ind |
 | `let N := t` | 名前を付ける | （定義の展開） |
@@ -201,9 +203,22 @@ notation \max_{i ≤ m} f := top((i : ℕ ↦ f), m)             -- 値になる
 | 連鎖（下） | 等式・不等式の変形。`by` を書かない段はエラーになり、探した根拠の候補が直し方として出る | 推移律 |
 | `∴ φ`（`therefore`） | 直前の行（またはブロック）で示したことが φ であることを確かめる。ブロックの先頭など、まだ何も示していない所では書けない。エディタは、2 行以上のブロックの終わりに「∴ そのブロックで示したこと」を薄く表示する（ファイルには入らない） | なし |
 
+**記号と予約語の決まり**（どの文でも同じ意味）：
+
+| 記号・語 | 意味 | 例 |
+|---|---|---|
+| `名前 : 右辺` | 名前を導入する。右辺は型（もの）か命題（証拠） | `x : ℝ`、`h : x > 0`、`h : φ by j` |
+| `by j` | 根拠 | `h : φ by j`、`= t by j`、`Obtain x \| h by e` |
+| `\|` | 「〜であって」：左がもの、右がその仮定 | `Fix ε \| hε : ε > 0`、`Obtain x \| hx by e`、`{x \| φ}` |
+| `,` | 同じ種類のものを並べる | `Fix x, y`、`Obtain x \| h₁, h₂ by e`、`by h₁, h₂` |
+| `choose` | ∃ の値を選ぶ（だけ） | `choose N` |
+| `left`・`right` | ∨ の左・右（`left` は ∨I₁、`Case left` は ∨E の左の場合、`h.left` は ∧ の左） | |
+
 v2.13 で消した書き方：`have h : φ := j`（→ `h : φ by j`）、`contradiction h k`（→ `k(h)`）、`unfold …`（書かなくてよい）、`suffices ψ := j`（→ ψ を示してから閉じる）。
 
-古い書き方（v2.11〜v2.13 で消した、ならばの `→`・`max(a, b)`・述語の定義の `:=`・`have`・`contradiction`・`unfold`・`axiom c : σ`）は、`narfi migrate --write ファイル` か、エディタの File → Update Old Syntax で今の書き方に直せる（古い書き方のファイルを開くと、直すかを聞かれる）。直せない行（`suffices` など）はそのまま残る。
+v2.20 で変えた書き方：`Obtain x, h : e`（→ `Obtain x | h by e`。`:` の右はいつも命題、根拠はいつも `by` の右）、`choose left`・`choose right`（→ `left`・`right`。`choose` は ∃ の値を選ぶときだけ）。
+
+古い書き方（v2.11〜v2.20 で消した・変えた、ならばの `→`・`max(a, b)`・述語の定義の `:=`・`have`・`contradiction`・`unfold`・`axiom c : σ`・`Obtain x, h : e`・`choose left`）は、`narfi migrate --write ファイル` か、エディタの File → Update Old Syntax で今の書き方に直せる（古い書き方のファイルを開くと、直すかを聞かれる）。直せない行（`suffices` など）はそのまま残る。
 
 連鎖：
 
@@ -237,7 +252,7 @@ v2.13 で消した書き方：`have h : φ := j`（→ `h : φ by j`）、`contr
 |---|---|---|
 | `and.intro(p, q)` | `p, q` | ∧I |
 | `and.left(h)`、`and.right(h)` | `h.left`、`h.right` | ∧E₁、∧E₂ |
-| `or.left(p)`、`or.right(p)` | `choose left` の下で `p` | ∨I₁、∨I₂ |
+| `or.left(p)`、`or.right(p)` | `left` の次の行で `p` | ∨I₁、∨I₂ |
 | `imp.elim(f, a)` | `f(a)` | →E |
 | `all.elim(h, t)` | `h(t)` | ∀E |
 | `bot.elim(h)` | （`h : ⊥` なら `h` だけで） | ⊥E |
@@ -254,7 +269,7 @@ v2.13 で消した書き方：`have h : φ := j`（→ `h : φ by j`）、`contr
 | `hε : ε > 0 を満たす ε を任意にとって固定する` | `Fix ε \| hε : ε > 0` |
 | `h : P と仮定する` | `assume h : P` |
 | `背理法により h と仮定する` | `by_contra h` |
-| `j より N(ε), hN が存在する` | `Obtain N(ε), hN : j` |
+| `j より hN を満たす N(ε) をとる` | `Obtain N(ε) \| hN by j` |
 | `t をとればよい` | `choose t` |
 | `j より h : φ が成り立つ` | `h : φ by j` |
 | `h : φ を示す`（下に証明） | `h : φ`（下に証明） |

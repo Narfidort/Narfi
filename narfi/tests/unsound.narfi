@@ -28,14 +28,14 @@ thm u.obtain.goal :
   e : ∃x. P(x)
   ⊢ ∀y. P(y)
 Fix y
-  Obtain x, hx : e
+  Obtain x | hx by e
   hx
 
 thm u.forall.swap :
   h : ∃x:ℕ. ∀y:ℕ. R(x, y)
   ⊢ ∀y:ℕ. ∃x:ℕ. R(x, y)
 Fix y
-  Obtain x, hx : h
+  Obtain x | hx by h
   choose y
   hx(y)
 
@@ -43,7 +43,7 @@ thm u.exists.swap :
   h : ∀y:ℕ. ∃x:ℕ. R(x, y)
   ⊢ ∃x:ℕ. ∀y:ℕ. R(x, y)
 Fix y
-  Obtain x, hx : h(y)
+  Obtain x | hx by h(y)
   choose x
   hx
 

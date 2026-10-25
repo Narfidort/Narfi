@@ -280,13 +280,13 @@ kernel のほかに、`src/syntax.rs` の代入・自由変数の計算（`subst
 | `Fix x` / `Fix x \| h : φ` | `AllI(x, σ, …)` / `AllI(x, σ, ImpI(h, φ, …))` |
 | `assume h : φ` | `ImpI(h, φ, …)` |
 | `by_contra h` | `Raa(h, φ, …)` |
-| `Obtain x, h₁, h₂ : e` | `ExE(e, x, h, Cut(h₁, …, AndE(…), Cut(h₂, …)))` |
+| `Obtain x \| h₁, h₂ by e` | `ExE(e, x, h, Cut(h₁, …, AndE(…), Cut(h₂, …)))` |
 | `cases h`（`Case left h₁` / `Case right h₂`） | `OrE` |
 | `induction n`（`Case zero` / `Case succ k, IH : φ`） | `Ind`（文脈の変数なら `AllE(Ind(…), n)`） |
 | `h : φ by j`（後ろに行が続く） | `Cut(h, φ, j, …)`（名前がなければ h = this） |
 | `φ by j`・`j`（goal を閉じる） | j の証明項 |
 | `choose t` / `choose t, j` | `ExI` / `ExI(…, AndI(j, …))` |
-| `choose left` / `right` | `OrI` |
+| `left` / `right` | `OrI` |
 | `let x := t` | `Let` |
 | 連鎖 `a = b by … < c by …` | `Trans`（足りないときは `LinArith`） |
 | `∴ φ` | なし（elab が確かめるだけ） |

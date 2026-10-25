@@ -42,7 +42,7 @@ thm seq_eq.symm :
   ⊢ b ~ a
 
 Fix ε | hε : ε > 0
-  Obtain N, hN : h(ε, hε)
+  Obtain N | hN by h(ε, hε)
   choose N
   Fix n | hn : n ≥ N
     |CauSeq.rep(b)(n) - CauSeq.rep(a)(n)|
@@ -55,8 +55,8 @@ thm seq_eq.trans :
   ⊢ a ~ c
 
 Fix ε | hε : ε > 0
-  Obtain N₁, hN₁ : h1(ε/2, half_pos(hε))
-  Obtain N₂, hN₂ : h2(ε/2, half_pos(hε))
+  Obtain N₁ | hN₁ by h1(ε/2, half_pos(hε))
+  Obtain N₂ | hN₂ by h2(ε/2, half_pos(hε))
   let N := max{N₁, N₂}
   choose N
   Fix n | hn : n ≥ N

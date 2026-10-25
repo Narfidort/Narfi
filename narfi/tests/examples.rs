@@ -241,5 +241,5 @@ fn migrate_legacy() {
     let st = std::process::Command::new(env!("CARGO_BIN_EXE_narfi")).args(["migrate", "--write", f.to_str().unwrap()]).status().unwrap();
     assert!(st.success());
     let after = run(&[f.to_str().unwrap()]);
-    assert!(!after.contains("構文エラー") && after.contains("2 個の定理をすべて検証しました"), "{after}");
+    assert!(!after.contains("構文エラー") && after.contains("3 個の定理をすべて検証しました"), "{after}");
 }

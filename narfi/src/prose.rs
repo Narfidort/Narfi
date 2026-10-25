@@ -282,7 +282,7 @@ fn stmts_to_prose(stmts: &[Stmt], steps: &[StepTrace], depth: usize, out: &mut V
                 out.push(ProseBlock { depth, text });
                 stmts_to_prose(body, steps, depth + 1, out, lc);
             }
-            StmtKind::Obtain { var, deps, hyps, just } => {
+            StmtKind::Obtain { var, deps, hyps, just, .. } => {
                 let dep_note = match deps {
                     Some(ds) if !ds.is_empty() => {
                         let dl: Vec<String> = ds.iter().map(|d| il(d)).collect();
@@ -647,17 +647,25 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
             var,
             deps,
             hyps,
+            stated,
             just,
         } => {
             let v_str = match deps {
                 Some(ds) => format!("{var}({})", ds.join(", ")),
                 None => var.clone(),
             };
-            let h_str = hyps.join(", ");
-            out.push_str(&format!(
-                "{pad}Obtain {v_str}, {h_str} : {}\n",
-                just_str(just)
-            ));
+            // 仮定の名前を省いた（x.prop）なら書かない
+            let named: Vec<&String> = hyps.iter().filter(|h| !h.ends_with(".prop")).collect();
+            let h_str = if named.is_empty() {
+                String::new()
+            } else {
+                let hs: Vec<&str> = named.iter().map(|h| h.as_str()).collect();
+                match stated {
+                    Some(f) => format!(" | {} : {f}", hs.join(", ")),
+                    None => format!(" | {}", hs.join(", ")),
+                }
+            };
+            out.push_str(&format!("{pad}Obtain {v_str}{h_str} by {}\n", just_str(just)));
         }
         StmtKind::Choose { choice, just } => {
             let c_str = match choice {
@@ -665,8 +673,8 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                     Some(j) => format!("choose {t}, {}", just_str(j)),
                     None => format!("choose {t}"),
                 },
-                Choice::Left => "choose left".to_string(),
-                Choice::Right => "choose right".to_string(),
+                Choice::Left => "left".to_string(),
+                Choice::Right => "right".to_string(),
             };
             out.push_str(&format!("{pad}{c_str}\n"));
         }

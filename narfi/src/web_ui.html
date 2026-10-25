@@ -567,6 +567,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
 /* ‖ と ²・³ */
 .mc-vert2 { font-family: KaTeX_Main, serif; margin: 0 0.04em; }
 .mc-supch { font-family: KaTeX_Main, serif; font-size: 0.72em; vertical-align: 0.55em; margin-left: 0.02em; color: inherit; }
+.learn-file { margin-left: 8px; font: 11.5px "JetBrains Mono", Menlo, monospace; color: var(--text-faint); font-weight: 400; }
 /* 検索・置換 */
 .find-bar { position: fixed; z-index: 50; background: var(--bg-panel, #161b22); border: 1px solid var(--border, #30363d); border-radius: 8px; padding: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 4px; }
 .find-row { display: flex; align-items: center; gap: 4px; }
@@ -1042,7 +1043,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
       <div class="menu-sep"></div>
       <button class="menu-item" onclick="formatCurrent()" title="空白を整える：連鎖の by をそろえる・, の後に空白・空行を詰める（証明の意味は変えない）"><span class="mi-label">Format Document</span><span class="kbd">⇧⌥F</span></button>
       <button class="menu-item" onclick="findMenu()"><span class="mi-label">Find / Replace</span><span class="kbd">⌘F</span></button>
-      <button class="menu-item" onclick="migrateCurrent()" title="v2.11〜v2.13 で消した書き方（→ のならば・have・max(a, b) など）を今の書き方に書き換える"><span class="mi-label">Update Old Syntax</span><span class="kbd"></span></button>
+      <button class="menu-item" onclick="migrateCurrent()" title="v2.11〜v2.20 で消した・変えた書き方（→ のならば・have・max(a, b)・Obtain x, h : e・choose left など）を今の書き方に書き換える"><span class="mi-label">Update Old Syntax</span><span class="kbd"></span></button>
       <button class="menu-item" onclick="saveFile()"><span class="mi-label">Save</span><span class="kbd">⌘S</span></button>
       <button class="menu-item" onclick="saveAs()"><span class="mi-label">Save As…</span><span class="kbd">⇧⌘S</span></button>
       <button id="btnAutosave" class="menu-item check" onclick="toggleAutosave()" title="編集が止まって約1秒後に自動で保存する"><span class="mi-label">Auto Save</span><span class="kbd"></span></button>
@@ -1394,8 +1395,10 @@ const COMMAND_DICT = [
 const KEYWORD_COMPLETIONS = [
   { cmd: "Fix", preview: "Fix", desc: "∀-intro: Fix x | hx" },
   { cmd: "assume", preview: "assume", desc: "→-intro: assume h : P" },
-  { cmd: "Obtain", preview: "Obtain", desc: "∃-elim: Obtain x, hx : e" },
-  { cmd: "choose", preview: "choose", desc: "∃/∨-intro: choose t" },
+  { cmd: "Obtain", preview: "Obtain", desc: "∃-elim: Obtain x | hx by e" },
+  { cmd: "left", preview: "left", desc: "∨-intro: 左を示す" },
+  { cmd: "right", preview: "right", desc: "∨-intro: 右を示す" },
+  { cmd: "choose", preview: "choose", desc: "∃-intro: choose t" },
   { cmd: "by_contra", preview: "by_contra", desc: "RAA: by_contra hn" },
   { cmd: "cases", preview: "cases", desc: "∨-elim: cases h" },
   { cmd: "induction", preview: "induction", desc: "induction n" },
@@ -2043,8 +2046,8 @@ thm conv.add :
   |- forall eps>0. exists N:Nat. forall n>=N. abs((a_n + b_n) - (alpha + beta)) < eps
 
 Fix eps | h_{eps} : eps > 0
-  Obtain N_1(eps), hN_1 : conv_a(eps/2, pos_half(h_{eps}))
-  Obtain N_2(eps), hN_2 : conv_b(eps/2, pos_half(h_{eps}))
+  Obtain N_1(eps) | hN_1 by conv_a(eps/2, pos_half(h_{eps}))
+  Obtain N_2(eps) | hN_2 by conv_b(eps/2, pos_half(h_{eps}))
   let N := max{N_1, N_2}
   choose N
   Fix n | h_{n} : n >= N
@@ -4294,7 +4297,7 @@ async function runCheckApi() {
 }
 
 // 古い書き方（消した書き方）のエラーがあれば、今の書き方に直すかを 1 度だけ聞く
-const LEGACY_MSG = /ならばは ⇒|は \S+\{a, b\} と書く|述語の定義は :⇔|値の定義は := で書く|` は使わない：|記号を宣言するなら `const/;
+const LEGACY_MSG = /ならばは ⇒|は \S+\{a, b\} と書く|述語の定義は :⇔|値の定義は := で書く|` は使わない：|記号を宣言するなら `const|Obtain は `Obtain x \| h by 根拠`|だけで書く（`choose` は ∃/;
 const migrateOffered = new Set();
 function offerMigrate(data) {
   const msgs = [data.parse_error && data.parse_error.msg, ...(data.decls || []).map(d => d.error && d.error.msg)].filter(Boolean);
@@ -4836,10 +4839,10 @@ function showLesson(i) {
     if (b.pitfalls) html += b.pitfalls.map(([sym, fix]) => `<div class="pitfall"><div class="box-title">よくあるつまずき</div><div>${inlineMd(sym)}</div><div>→ ${inlineMd(fix)}</div></div>`).join("");
   }
   if (l.exercise || l.file) {
-    html += `<h4>練習</h4>`;
+    html += `<h4>練習${l.file ? `<span class="learn-file">${escHtml(l.file)}</span>` : ""}</h4>`;
     if (l.task) html += `<p>${inlineMd(l.task)}</p>`;
     html += `<div class="learn-actions">
-      <button class="ctrl-btn primary" onclick="${l.file ? "openCourseFile()" : "openExercise()"}">${l.file ? "コースのファイルを開く" : "練習を開く"}</button>
+      <button class="ctrl-btn primary" onclick="openLessonFile()">練習のファイルを開く</button>
       ${(l.hints || []).length ? `<button class="ctrl-btn" id="hintBtn" onclick="nextHint()">ヒント（${(l.hints || []).length}）</button>` : ""}
       <button class="ctrl-btn" onclick="toggleAnswer()">答えを見る</button>
     </div><div id="learnHints"></div><pre id="learnAnswer" hidden>${escHtml(l.answer)}</pre>`;
@@ -4862,10 +4865,15 @@ function nextHint() {
   if (b) b.textContent = hintShown < hs.length ? `次のヒント（あと ${hs.length - hintShown}）` : "ヒントはここまで";
 }
 
-// 練習のタブが「すべて検証済み」になったら、そのレッスンを済みにする
+// 練習のファイル（learn/…・course/…）が「すべて検証済み」になったら、そのレッスンを済みにする
 function noteLessonProgress(data) {
   const t = tabs[activeTab];
-  if (!t || !t.lesson) return;
+  if (!t) return;
+  if (!t.lesson) {
+    const l = allLessons().find((x) => x.file && x.file === currentFilePath);
+    if (!l) return;
+    t.lesson = l.title;
+  }
   const decls = (data.decls || []).filter((d) => !d.is_axiom);
   if (data.parse_error || !decls.length || decls.some((d) => d.status !== "ok")) return;
   const done = learnDone();
@@ -4876,8 +4884,9 @@ function noteLessonProgress(data) {
   if (allLessons()[learnIndex] && allLessons()[learnIndex].title === t.lesson) showLesson(learnIndex);
 }
 
-// コースの章：自分のファイル一覧に course/… を作って開く（すでにあれば、そのまま開く）
-async function openCourseFile() {
+// 練習：自分のファイル一覧に learn/番号-名前.narfi（コースは course/番号-名前.narfi）を作って開く。
+// すでにあれば、そのまま開く（続きから）。番号はレッスン・章の番号とそろえる
+async function openLessonFile() {
   const l = allLessons()[learnIndex];
   if (!l || !l.file) return;
   if (!((workspaceInfo && workspaceInfo.files) || []).includes(l.file)) {
@@ -4889,12 +4898,6 @@ async function openCourseFile() {
   await openPath(l.file);
 }
 
-function openExercise() {
-  const l = allLessons()[learnIndex];
-  if (!l) return;
-  loadSrc(l.exercise, "", { newTab: true, title: `練習${learnIndex}.narfi` });
-  if (tabs[activeTab]) tabs[activeTab].lesson = l.title;
-}
 
 function toggleAnswer() {
   const a = document.getElementById("learnAnswer");
@@ -5079,8 +5082,9 @@ A theorem: "thm name :" then hypotheses "x : Real, h : x > 0" and "|- goal", a b
 Proof statements (one per line):
 - Fix x            (goal forall x. P)        Fix eps | heps : eps > 0   (goal forall eps>0. P)
 - assume h : P     (goal P => Q or not P)
-- choose t         (goal exists x. P; then prove P[t])   choose left / choose right (goal P or Q)
-- Obtain x, hx : h (h : exists x. P)
+- choose t         (goal exists x. P; then prove P[t])
+- left / right     (goal P or Q: prove the left / right side; the line is just "left" or "right")
+- Obtain x | hx by h   (h : exists x. P; "Obtain x | h1, h2 by h" when P is A and B; "Obtain N(eps) | hN by h(eps, heps)" records the dependency)
 - cases h          (h : P or Q) then indented "Case left h1" and "Case right h2", each with an indented proof
 - induction n      then "Case zero" and "Case succ k, IH : P(k)"
 - by_contra h      (assume the negation, prove false)
@@ -5090,7 +5094,7 @@ Proof statements (one per line):
              = b   by j
              <= c  by j
 Justifications: a hypothesis name; h(t) instantiates forall / applies ->; h.left, h.right; "p, q" proves P and Q; ring (algebraic equality); linarith (linear inequalities from hypotheses); refl; lemma names with arguments.
-Blocks: Fix, assume, by_contra, Case open a block; the rest of that proof is indented under them. choose and Obtain do not open a block (continue at the same indentation).
+Blocks: Fix, assume, by_contra, Case open a block; the rest of that proof is indented under them. choose, left, right and Obtain do not open a block (continue at the same indentation).
 Bounded quantifiers: goal "exists d:Real>0. P" → "choose t, j" where j proves t > 0 (e.g. "choose eps/2, linarith"). Goal "forall n:Nat>=N. P" → "Fix n | hn : n >= N". Using h : forall eps:Real>0. P → h(eps, heps).
 Lemmas/axioms written "name : x : Real, h : x > 0 |- P" are used as name(proof of x > 0), e.g. pos_half(heps); variables are inferred.
 Example:
@@ -5099,7 +5103,7 @@ thm shift :
   |- is_lim((n:Nat |-> a_{n+1}), alpha)
 
 Fix eps | heps : eps > 0
-  Obtain N, hN : h(eps, heps)
+  Obtain N | hN by h(eps, heps)
   choose N
   Fix n | hn : n >= N
     k : n + 1 >= N by linarith

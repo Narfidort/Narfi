@@ -31,8 +31,8 @@ thm cont.add :
   ⊢ cont_at((x : ℝ ↦ f(x) + g(x)), a)
 
 Fix ε | hε : ε > 0
-  Obtain δ₁, hδ₁ : hf(ε/2, pos_half(hε))
-  Obtain δ₂, hδ₂ : hg(ε/2, pos_half(hε))
+  Obtain δ₁ | hδ₁ by hf(ε/2, pos_half(hε))
+  Obtain δ₂ | hδ₂ by hg(ε/2, pos_half(hε))
   choose min{δ₁, δ₂}, min.pos(hδ₁.left, hδ₂.left)
   Fix x
     assume hx : |x - a| < min{δ₁, δ₂}
@@ -62,8 +62,8 @@ thm squeeze :
   ⊢ b_n → α (n → ∞)
 
 Fix ε | hε : ε > 0
-  Obtain N₁, hN₁ : ha(ε, hε)
-  Obtain N₂, hN₂ : hc(ε, hε)
+  Obtain N₁ | hN₁ by ha(ε, hε)
+  Obtain N₂ | hN₂ by hc(ε, hε)
   choose max{N₁, N₂}
   Fix n | hn : n ≥ max{N₁, N₂}
     k1 : α - ε < a_n ∧ a_n < α + ε by abs.lt.elim(hN₁(n, ge.max.left(hn)))

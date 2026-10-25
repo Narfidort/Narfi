@@ -160,10 +160,12 @@ pub enum StmtKind {
         name: String,
         body: Vec<Stmt>,
     },
+    /// `Obtain x | h by e`・`Obtain x | h1, h2 : φ by e`（φ を書けば、取り出した命題と照合する）
     Obtain {
         var: String,
         deps: Option<Vec<String>>,
         hyps: Vec<String>,
+        stated: Option<Formula>,
         just: Just,
     },
     Choose {
@@ -692,7 +694,13 @@ impl SubScope {
                 self.stmts(body);
             }
             StmtKind::ByContra { body, .. } => self.stmts(body),
-            StmtKind::Obtain { just, .. } | StmtKind::Close(just) => *just = self.just(just),
+            StmtKind::Obtain { just, stated, .. } => {
+                if let Some(f) = stated {
+                    *f = self.formula(f);
+                }
+                *just = self.just(just);
+            }
+            StmtKind::Close(just) => *just = self.just(just),
             StmtKind::Show { ty, just, body, .. } => {
                 *ty = self.formula(ty);
                 if let Some(j) = just {
@@ -2891,14 +2899,33 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             } else {
                 None
             };
+            // v2.20 で変えた書き方：Obtain x, h : e は Obtain x | h by e
+            if p.is_sym(",") || p.is_sym(":") {
+                return Err(ParseError {
+                    line: n.no,
+                    msg: "Obtain は `Obtain x | h by 根拠` と書く（`Obtain x, h : 根拠` は古い書き方。`:` の右は命題、根拠は `by` の右）".into(),
+                });
+            }
             let mut hyps = Vec::new();
-            while p.eat_sym(",") {
-                hyps.push(p.ident()?);
+            let mut stated = None;
+            if p.eat_sym("|") {
+                loop {
+                    hyps.push(p.ident()?);
+                    if !p.eat_sym(",") {
+                        break;
+                    }
+                }
+                if p.eat_sym(":") {
+                    stated = Some(p.formula()?);
+                }
             }
             if hyps.is_empty() {
                 hyps.push(format!("{var}.prop"));
             }
-            p.expect_sym(":")?;
+            if !p.is_ident("by") {
+                return p.err("Obtain の根拠は `by` の右に書く：`Obtain x | h by 根拠`");
+            }
+            p.pos += 1;
             let just = p.just()?;
             p.expect_end()?;
             no_children(n)?;
@@ -2906,8 +2933,16 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                 var,
                 deps,
                 hyps,
+                stated,
                 just,
             }
+        }
+        // ∨ の導入：goal が φ ∨ ψ のとき、左（右）を示す
+        "left" | "right" if p.toks.len() == 1 => {
+            let choice = if p.is_ident("left") { Choice::Left } else { Choice::Right };
+            p.pos += 1;
+            no_children(n)?;
+            StmtKind::Choose { choice, just: None }
         }
         // v2.13 で消した書き方：今の書き方を案内する
         kw @ ("have" | "suffices" | "contradiction" | "unfold") => {
@@ -2921,15 +2956,15 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
         }
         "choose" => {
             p.pos += 1;
-            let choice = if p.is_ident("left") {
-                p.pos += 1;
-                Choice::Left
-            } else if p.is_ident("right") {
-                p.pos += 1;
-                Choice::Right
-            } else {
-                Choice::Term(p.term()?)
-            };
+            // v2.20 で変えた書き方：∨ は choose ではなく left・right（choose は ∃ だけ）
+            if (p.is_ident("left") || p.is_ident("right")) && p.toks.len() == 2 {
+                let w = if p.is_ident("left") { "left" } else { "right" };
+                return Err(ParseError {
+                    line: n.no,
+                    msg: format!("∨ のどちらを示すかは `{w}` だけで書く（`choose` は ∃ の値を選ぶときだけ）"),
+                });
+            }
+            let choice = Choice::Term(p.term()?);
             let just = if p.eat_sym(",") {
                 Some(p.just()?)
             } else {

@@ -17,7 +17,7 @@ thm notation.shift :
   ⊢ a_{m+1} → α (m → ∞)
 
 Fix ε | hε : ε > 0
-  Obtain N, hN : h(ε, hε)
+  Obtain N | hN by h(ε, hε)
   choose N
   Fix n | hn : n ≥ N
     k : n + 1 ≥ N by linarith

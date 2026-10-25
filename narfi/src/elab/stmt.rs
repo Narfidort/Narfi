@@ -408,7 +408,7 @@ impl<'a> Checker<'a> {
                 self.therefore(&ctx, f, &last)?;
                 self.seq(ctx, rest, goal, last, line)
             }
-            StmtKind::Obtain { var, deps, hyps, just } => {
+            StmtKind::Obtain { var, deps, hyps, stated, just } => {
                 if just.len() != 1 {
                     return self.err("Obtain の根拠は1つ");
                 }
@@ -437,6 +437,13 @@ impl<'a> Checker<'a> {
                 let sort = self.zonk_sort(&ty);
                 self.push(&mut ctx, Entry::Var(var.clone(), sort, VarKind::Obtained));
                 let body = body.subst(&y, &Term::Var(var.clone()));
+                // 書いた命題 φ は、根拠から取り出した命題と同じでなければならない
+                if let Some(st) = stated {
+                    let st = self.infer_written(&ctx, st)?;
+                    if !self.unify(&ctx, &st, &body) {
+                        return self.err(format!("Obtain で書いた「{st}」が、根拠から取り出した「{body}」と一致しない"));
+                    }
+                }
                 let Some(parts) = self.split_and_w(&body, hyps.len()) else {
                     return self.err(format!("「{body}」を {} 個の ∧ に分けられない", hyps.len()));
                 };
@@ -483,7 +490,7 @@ impl<'a> Checker<'a> {
                         return self.err(format!("choose できない：goal「{other}」は ∃ の形ではない"));
                     }
                     (_, other) => {
-                        return self.err(format!("choose left/right できない：goal「{other}」は ∨ の形ではない"));
+                        return self.err(format!("left/right できない：goal「{other}」は ∨ の形ではない"));
                     }
                 };
                 let (goal2, pj) = match just {

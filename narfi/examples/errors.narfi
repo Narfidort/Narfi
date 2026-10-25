@@ -7,7 +7,7 @@ thm wrong.dependency :
 
 Fix x
   Fix ε | hε : ε > 0
-    Obtain N(ε), hN : conv(x, ε, hε)
+    Obtain N(ε) | hN by conv(x, ε, hε)
     choose N
     hN
 
@@ -18,7 +18,7 @@ thm pointwise.to.uniform :
   ⊢ ∀ε:ℝ>0. ∃N:ℕ. ∀x:ℝ. P(x, ε, N)
 
 Fix ε | hε : ε > 0
-  Obtain N, hN : conv(x, ε, hε)
+  Obtain N | hN by conv(x, ε, hε)
   choose N
   Fix x
     hN

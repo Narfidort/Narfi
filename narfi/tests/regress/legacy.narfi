@@ -18,3 +18,13 @@ thm nn :
 
 have k : b >= 0 := nat.nonneg(b)
 linarith
+
+-- v2.20 で変えた書き方：Obtain x, h : e と choose left
+thm ex_or :
+  h : exists x:Real. x > 0
+  |- exists y:Real. y > 0 or y < 0
+
+Obtain x, hx : h
+choose x
+choose left
+hx

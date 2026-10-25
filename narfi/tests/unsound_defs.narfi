@@ -29,8 +29,8 @@ thm wrong.eps :
   ⊢ c_n → α + β (n → ∞)
 
 Fix ε | hε : ε > 0
-  Obtain N₁(ε), hN₁ : conv_a(ε, hε)
-  Obtain N₂(ε), hN₂ : conv_b(ε, hε)
+  Obtain N₁(ε) | hN₁ by conv_a(ε, hε)
+  Obtain N₂(ε) | hN₂ by conv_b(ε, hε)
   let N := max{N₁, N₂}
   choose N
   Fix n | hn : n ≥ N

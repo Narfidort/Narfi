@@ -28,20 +28,20 @@ h1 : ∀x:ℝ. x ∈ f^{-1}[A ∪ B] ⇒ x ∈ f^{-1}[A] ∪ f^{-1}[B]
       k : f(x) ∈ A ∨ f(x) ∈ B by h
       cases k
         Case left k1
-          choose left
+          left
           k1
         Case right k2
-          choose right
+          right
           k2
 h2 : ∀x:ℝ. x ∈ f^{-1}[A] ∪ f^{-1}[B] ⇒ x ∈ f^{-1}[A ∪ B]
   Fix x
     assume h : x ∈ f^{-1}[A] ∪ f^{-1}[B]
       cases h
         Case left k1
-          choose left
+          left
           k1
         Case right k2
-          choose right
+          right
           k2
 setext(h1, h2)
 
@@ -90,7 +90,7 @@ thm image.cap :
 
 Fix y
   assume h : y ∈ f[A ∩ B]
-    Obtain x, hx : h
+    Obtain x | hx by h
     ka : y ∈ f[A]
       choose x
       hx.left.left, hx.right

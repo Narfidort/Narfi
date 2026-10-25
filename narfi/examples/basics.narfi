@@ -44,7 +44,7 @@ thm or_intro :
   h : P
   ⊢ P ∨ Q
 
-choose left
+left
 h
 
 
