@@ -220,6 +220,17 @@ fn tutorial_answers_check() {
             "レッスンの例 {k} が通らない: {st:?}\n{code}"
         );
     }
+    // 教えた書き方（uses）を、練習の答えで本当に使っていること（作る・使うの一方だけの練習にしない）
+    let uses = Command::new("node")
+        .args([
+            "-e",
+            "global.window = {}; require(process.argv[1]); for (const l of window.NARFI_TUTORIAL) if (l.exercise) { if (!l.uses || !l.uses.length) console.log(l.title + ': uses がない'); else for (const u of l.uses) if (!l.answer.includes(u)) console.log(l.title + ': 答えに ' + u + ' がない'); }",
+            "./src/tutorial.js",
+        ])
+        .output()
+        .unwrap();
+    let missing = String::from_utf8(uses.stdout).unwrap();
+    assert!(missing.trim().is_empty(), "{missing}");
     let exercises = field(&json, "exercise");
     let answers = field(&json, "answer");
     assert_eq!(exercises.len(), answers.len());

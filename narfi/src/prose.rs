@@ -408,7 +408,7 @@ pub fn latex_document(title: &str, items: &[(&Decl, &[StepTrace])]) -> String {
     let mut out = String::new();
     out.push_str("\\documentclass[a4paper,11pt]{ltjsarticle}\n");
     out.push_str("\\usepackage{amsmath,amssymb,amsthm}\n");
-    out.push_str("\\usepackage[margin=22mm]{geometry}\n");
+    out.push_str("\\usepackage[margin=15mm]{geometry}\n");
     out.push_str("\\newtheorem{theorem}{定理}\n");
     out.push_str("\\newtheorem{axiom}{公理}\n");
     out.push_str("\\allowdisplaybreaks\n");

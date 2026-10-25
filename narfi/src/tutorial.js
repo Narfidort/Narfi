@@ -1,7 +1,7 @@
 // Narfi のチュートリアル（エディタ右側の Learn タブ）。対象：理系の高校生でもわかるように。
 // 各レッスン：本文（p・paper：紙の証明・code：エディタと同じ見た目で描く・steps：1 行ずつ・type：打ち方・check・pitfalls・keys・h）、
 // 練習（file：自分のファイルに作る練習のファイル・task・hints・exercise・answer）。番号とファイル名の番号はそろえる。
-// 例と答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。
+// 例と答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。生成：Python（/tmp で作って貼る）ではなく、このファイルを直接直してよい。
 
 window.NARFI_TUTORIAL = [
   {
@@ -84,7 +84,10 @@ window.NARFI_TUTORIAL = [
       "両辺を 2 倍すると $2a < a + b$、つまり $a < b$。一次の不等式の計算なので `linarith` で通る。"
     ],
     "exercise": "-- 練習 1：真ん中は左端より大きい\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm mid_left :\n  a : Real, b : Real, h : a < b\n  |- a < (a + b)/2\n\nsorry\n",
-    "answer": "thm mid_left :\n  a : Real, b : Real, h : a < b\n  |- a < (a + b)/2\n\nlinarith\n"
+    "answer": "thm mid_left :\n  a : Real, b : Real, h : a < b\n  |- a < (a + b)/2\n\nlinarith\n",
+    "uses": [
+      "linarith"
+    ]
   },
   {
     "title": "2. 式変形をつなげる",
@@ -179,7 +182,11 @@ window.NARFI_TUTORIAL = [
       "2 段目は展開：`= y^2 + 2y + 1   by ring`。"
     ],
     "exercise": "-- 練習 2：書き換えてから展開する\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm square_shift :\n  x : Real, y : Real, h : x = y + 1\n  |- x^2 = y^2 + 2y + 1\n\nsorry\n",
-    "answer": "thm square_shift :\n  x : Real, y : Real, h : x = y + 1\n  |- x^2 = y^2 + 2y + 1\n\nx^2\n  = (y + 1)^2       by h\n  = y^2 + 2y + 1    by ring\n"
+    "answer": "thm square_shift :\n  x : Real, y : Real, h : x = y + 1\n  |- x^2 = y^2 + 2y + 1\n\nx^2\n  = (y + 1)^2       by h\n  = y^2 + 2y + 1    by ring\n",
+    "uses": [
+      "by h",
+      "by ring"
+    ]
   },
   {
     "title": "3. 途中の事実と、定理を使う",
@@ -241,7 +248,10 @@ window.NARFI_TUTORIAL = [
       "$(a-b)^2 = a^2 - 2ab + b^2$ なので、あとは `linarith`（展開は linarith がする）。"
     ],
     "exercise": "-- 練習 3：a² + b² ≥ 2ab\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\naxiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm am_gm2 :\n  a : Real, b : Real\n  |- a^2 + b^2 >= 2*a*b\n\nsorry\n",
-    "answer": "axiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm am_gm2 :\n  a : Real, b : Real\n  |- a^2 + b^2 >= 2*a*b\n\nh : (a - b)^2 >= 0 by sq_nonneg\nlinarith\n"
+    "answer": "axiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm am_gm2 :\n  a : Real, b : Real\n  |- a^2 + b^2 >= 2*a*b\n\nh : (a - b)^2 >= 0 by sq_nonneg\nlinarith\n",
+    "uses": [
+      "by sq_nonneg"
+    ]
   },
   {
     "title": "4. 「ならば」を示す・使う",
@@ -313,7 +323,11 @@ window.NARFI_TUTORIAL = [
       "`hb : b > 0 by f(ha)`。あとは `linarith`。"
     ],
     "exercise": "-- 練習 4：ならばを使う\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm imp_use :\n  a : Real, b : Real, f : a > 0 => b > 0\n  |- a > 1 => a + b > 1\n\nsorry\n",
-    "answer": "thm imp_use :\n  a : Real, b : Real, f : a > 0 => b > 0\n  |- a > 1 => a + b > 1\n\nassume h : a > 1\n  ha : a > 0 by linarith\n  hb : b > 0 by f(ha)\n  linarith\n"
+    "answer": "thm imp_use :\n  a : Real, b : Real, f : a > 0 => b > 0\n  |- a > 1 => a + b > 1\n\nassume h : a > 1\n  ha : a > 0 by linarith\n  hb : b > 0 by f(ha)\n  linarith\n",
+    "uses": [
+      "assume",
+      "f(ha)"
+    ]
   },
   {
     "title": "5. 「かつ」",
@@ -367,13 +381,19 @@ window.NARFI_TUTORIAL = [
       }
     ],
     "file": "learn/05-かつ.narfi",
-    "task": "$a < b$ ならば「$a < \\dfrac{a+b}{2}$ かつ $\\dfrac{a+b}{2} < b$」を示す（真ん中は両端の間にある）。",
+    "task": "(1) 「$P$ かつ（$P$ ならば $Q$）」から $Q$ を示す（かつを**使う**）。(2) $a < b$ ならば「$a < \\dfrac{a+b}{2}$ かつ $\\dfrac{a+b}{2} < b$」を示す（かつを**作る**）。",
     "hints": [
-      "`assume h : a < b` から始める。",
-      "示すのは「かつ」。左右それぞれ一次の不等式の計算で出るので、`linarith, linarith`。"
+      "(1) `h.left` が $P$、`h.right` が「$P$ ならば $Q$」。",
+      "(1) 「ならば」に $P$ の根拠を渡すと $Q$：`h.right(h.left)`。",
+      "(2) `assume h : a < b` のあと、左右それぞれ一次の不等式なので `linarith, linarith`。"
     ],
-    "exercise": "-- 練習 5：真ん中は両端の間\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm midpoint :\n  a : Real, b : Real\n  |- a < b => a < (a + b)/2 and (a + b)/2 < b\n\nsorry\n",
-    "answer": "thm midpoint :\n  a : Real, b : Real\n  |- a < b => a < (a + b)/2 and (a + b)/2 < b\n\nassume h : a < b\n  linarith, linarith\n"
+    "exercise": "-- 練習 5：かつを使う・作る\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm and_use :\n  P : Prop, Q : Prop, h : P and (P => Q)\n  |- Q\n\nsorry\n\nthm midpoint :\n  a : Real, b : Real\n  |- a < b => a < (a + b)/2 and (a + b)/2 < b\n\nsorry\n",
+    "answer": "thm and_use :\n  P : Prop, Q : Prop, h : P and (P => Q)\n  |- Q\n\nh.right(h.left)\n\nthm midpoint :\n  a : Real, b : Real\n  |- a < b => a < (a + b)/2 and (a + b)/2 < b\n\nassume h : a < b\n  linarith, linarith\n",
+    "uses": [
+      "h.left",
+      "h.right",
+      "linarith, linarith"
+    ]
   },
   {
     "title": "6. 「または」",
@@ -431,14 +451,20 @@ window.NARFI_TUTORIAL = [
       }
     ],
     "file": "learn/06-または.narfi",
-    "task": "$x = 1$ または $x = 2$ のとき、$x^2 - 3x + 2 = 0$ を示す（2 次方程式の解を確かめる）。",
+    "task": "(1) $x > 2$ または $x < -2$ ならば、$x > 1$ または $x < -1$（場合分けで**使い**、`left`/`right` で**作る**）。(2) $x = 1$ または $x = 2$ のとき $x^2 - 3x + 2 = 0$。",
     "hints": [
-      "`cases h` で $x = 1$ の場合と $x = 2$ の場合に分ける。",
-      "それぞれの場合で連鎖：$x^2 - 3x + 2$ から始めて、`by h1` で $x$ を 1 に書き換える。",
-      "`= 1^2 - 3*1 + 2   by h1` のあと `= 0   by ring`。$x = 2$ の場合も同じ。"
+      "(1) `cases h` で 2 つの場合に分ける。",
+      "(1) $x > 2$ の場合は `left`（示すのは $x > 1$）のあと `linarith`。$x < -2$ の場合は `right`。",
+      "(2) 場合ごとに連鎖：`= 1^2 - 3*1 + 2   by h1`、`= 0   by ring`。"
     ],
-    "exercise": "-- 練習 6：場合分けで解を確かめる\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm roots :\n  x : Real, h : x = 1 or x = 2\n  |- x^2 - 3x + 2 = 0\n\nsorry\n",
-    "answer": "thm roots :\n  x : Real, h : x = 1 or x = 2\n  |- x^2 - 3x + 2 = 0\n\ncases h\n  Case left h1\n    x^2 - 3x + 2\n      = 1^2 - 3*1 + 2   by h1\n      = 0               by ring\n  Case right h2\n    x^2 - 3x + 2\n      = 2^2 - 3*2 + 2   by h2\n      = 0               by ring\n"
+    "exercise": "-- 練習 6：または を使う・作る\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm widen :\n  x : Real, h : x > 2 or x < -2\n  |- x > 1 or x < -1\n\nsorry\n\nthm roots :\n  x : Real, h : x = 1 or x = 2\n  |- x^2 - 3x + 2 = 0\n\nsorry\n",
+    "answer": "thm widen :\n  x : Real, h : x > 2 or x < -2\n  |- x > 1 or x < -1\n\ncases h\n  Case left h1\n    left\n    linarith\n  Case right h2\n    right\n    linarith\n\nthm roots :\n  x : Real, h : x = 1 or x = 2\n  |- x^2 - 3x + 2 = 0\n\ncases h\n  Case left h1\n    x^2 - 3x + 2\n      = 1^2 - 3*1 + 2   by h1\n      = 0               by ring\n  Case right h2\n    x^2 - 3x + 2\n      = 2^2 - 3*2 + 2   by h2\n      = 0               by ring\n",
+    "uses": [
+      "cases h",
+      "Case left",
+      "    left\n",
+      "    right\n"
+    ]
   },
   {
     "title": "7. 「すべての」",
@@ -498,7 +524,11 @@ window.NARFI_TUTORIAL = [
       "あとは `linarith`。"
     ],
     "exercise": "-- 練習 7：単調増加\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm mono_shift :\n  f : Real -> Real, h : forall x:Real. forall y:Real. x <= y => f(x) <= f(y)\n  |- forall x:Real. forall y:Real. x <= y => f(x) + 1 <= f(y) + 1\n\nsorry\n",
-    "answer": "thm mono_shift :\n  f : Real -> Real, h : forall x:Real. forall y:Real. x <= y => f(x) <= f(y)\n  |- forall x:Real. forall y:Real. x <= y => f(x) + 1 <= f(y) + 1\n\nFix x, y\n  assume hxy : x <= y\n    k : f(x) <= f(y) by h(x, y, hxy)\n    linarith\n"
+    "answer": "thm mono_shift :\n  f : Real -> Real, h : forall x:Real. forall y:Real. x <= y => f(x) <= f(y)\n  |- forall x:Real. forall y:Real. x <= y => f(x) + 1 <= f(y) + 1\n\nFix x, y\n  assume hxy : x <= y\n    k : f(x) <= f(y) by h(x, y, hxy)\n    linarith\n",
+    "uses": [
+      "Fix x, y",
+      "h(x, y, hxy)"
+    ]
   },
   {
     "title": "8. 「ある」",
@@ -566,7 +596,11 @@ window.NARFI_TUTORIAL = [
       "残りは $n + 2 = 2(k+1)$。連鎖で `= 2k + 2   by hk`、`= 2(k + 1)   by ring`。"
     ],
     "exercise": "-- 練習 8：偶数に 2 を足しても偶数\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm even_add_two :\n  n : Nat, h : exists k:Nat. n = 2k\n  |- exists m:Nat. n + 2 = 2m\n\nsorry\n",
-    "answer": "thm even_add_two :\n  n : Nat, h : exists k:Nat. n = 2k\n  |- exists m:Nat. n + 2 = 2m\n\nObtain k | hk by h\nchoose k + 1\nn + 2\n  = 2k + 2        by hk\n  = 2(k + 1)      by ring\n"
+    "answer": "thm even_add_two :\n  n : Nat, h : exists k:Nat. n = 2k\n  |- exists m:Nat. n + 2 = 2m\n\nObtain k | hk by h\nchoose k + 1\nn + 2\n  = 2k + 2        by hk\n  = 2(k + 1)      by ring\n",
+    "uses": [
+      "Obtain k | hk by h",
+      "choose"
+    ]
   },
   {
     "title": "9. 「でない」と背理法",
@@ -631,14 +665,21 @@ window.NARFI_TUTORIAL = [
       }
     ],
     "file": "learn/09-でない.narfi",
-    "task": "実数 $x$ が「すべての $\\varepsilon > 0$ について $x < \\varepsilon$」を満たすなら、$x > 0$ ではないことを示す。",
+    "task": "(1) 「$Q$ ならば $P$」と「$P$ でない」から「$Q$ でない」を示す（対偶。でないを**使い**、**作る**）。(2) 実数 $x$ が「すべての $\\varepsilon > 0$ について $x < \\varepsilon$」を満たすなら、$x > 0$ ではない。(3) 「$P$ でないなら $Q$」と「$Q$ でない」から $P$ を示す（背理法）。",
     "hints": [
-      "示すのは「でない」。`assume hx : x > 0`。示すべきものは矛盾になる。",
-      "$h$ に $\\varepsilon = x$ を入れる（その根拠が $hx$）：`k : x < x by h(x, hx)`。",
-      "$x < x$ は矛盾。`linarith`。"
+      "(1) 示すのは「$Q$ でない」。`assume q : Q`（示すべきものは矛盾）。",
+      "(1) $f(q)$ が $P$。$h$（$P$ でない）に渡すと矛盾：`h(f(q))`。",
+      "(2) `assume hx : x > 0` のあと、$h$ に $\\varepsilon = x$ を入れる：`k : x < x by h(x, hx)`。$x < x$ は矛盾なので `linarith`。",
+      "(3) `by_contra hn` で「$P$ でない」を仮定。$f(hn)$ が $Q$ なので、$g$ に渡して矛盾：`g(f(hn))`。"
     ],
-    "exercise": "-- 練習 9：どんな正の数より小さい\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm small :\n  x : Real, h : forall eps:Real>0. x < eps\n  |- not (x > 0)\n\nsorry\n",
-    "answer": "thm small :\n  x : Real, h : forall eps:Real>0. x < eps\n  |- not (x > 0)\n\nassume hx : x > 0\n  k : x < x by h(x, hx)\n  linarith\n"
+    "exercise": "-- 練習 9：でないを使う・作る・背理法\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm contra :\n  P : Prop, Q : Prop, f : Q => P, h : not P\n  |- not Q\n\nsorry\n\nthm small :\n  x : Real, h : forall eps:Real>0. x < eps\n  |- not (x > 0)\n\nsorry\n\nthm by_contra_use :\n  P : Prop, Q : Prop, f : not P => Q, g : not Q\n  |- P\n\nsorry\n",
+    "answer": "thm contra :\n  P : Prop, Q : Prop, f : Q => P, h : not P\n  |- not Q\n\nassume q : Q\n  h(f(q))\n\nthm small :\n  x : Real, h : forall eps:Real>0. x < eps\n  |- not (x > 0)\n\nassume hx : x > 0\n  k : x < x by h(x, hx)\n  linarith\n\nthm by_contra_use :\n  P : Prop, Q : Prop, f : not P => Q, g : not Q\n  |- P\n\nby_contra hn\n  g(f(hn))\n",
+    "uses": [
+      "assume q : Q",
+      "h(f(q))",
+      "h(x, hx)",
+      "by_contra hn"
+    ]
   },
   {
     "title": "10. ε を任意にとる（大学の入口）",
@@ -693,14 +734,19 @@ window.NARFI_TUTORIAL = [
       }
     ],
     "file": "learn/10-ε.narfi",
-    "task": "任意の $\\varepsilon > 0$ に対し、$\\delta + \\delta < \\varepsilon$ となる $\\delta > 0$ があることを示す。",
+    "task": "(1) 任意の $\\varepsilon > 0$ に対し、$\\delta + \\delta < \\varepsilon$ となる $\\delta > 0$ がある（$\\forall \\varepsilon > 0$ を**作る**）。(2) 「すべての $\\varepsilon > 0$ で $x \\le \\varepsilon$」ならば $x \\le 1/2$（$\\forall \\varepsilon > 0$ を**使う**）。",
     "hints": [
-      "形は上の例と同じ。`Fix eps | h_{eps} : eps > 0` から。",
-      "$\\delta = \\varepsilon/2$ だと $\\delta + \\delta = \\varepsilon$ でぎりぎり足りない。もっと小さく、たとえば $\\varepsilon/3$。",
-      "`choose eps/3, linarith` のあと `linarith`。"
+      "(1) `Fix eps | h_{eps} : eps > 0` から。$\\delta = \\varepsilon/2$ だとぎりぎり足りない。$\\varepsilon/3$ にする：`choose eps/3, linarith` のあと `linarith`。",
+      "(2) $h$ に $\\varepsilon = 1/2$ を入れる。そのためには「$1/2 > 0$」の根拠が要る：`k : 1/2 > 0 by decide`。",
+      "(2) あとは `h(1/2, k)` で閉じる。"
     ],
-    "exercise": "-- 練習 10：δ をうまく選ぶ\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm third :\n  |- forall eps:Real>0. exists d:Real>0. d + d < eps\n\nsorry\n",
-    "answer": "thm third :\n  |- forall eps:Real>0. exists d:Real>0. d + d < eps\n\nFix eps | h_{eps} : eps > 0\n  choose eps/3, linarith\n  linarith\n"
+    "exercise": "-- 練習 10：ε を作る・使う\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nthm third :\n  |- forall eps:Real>0. exists d:Real>0. d + d < eps\n\nsorry\n\nthm below_half :\n  x : Real, h : forall eps:Real>0. x <= eps\n  |- x <= 1/2\n\nsorry\n",
+    "answer": "thm third :\n  |- forall eps:Real>0. exists d:Real>0. d + d < eps\n\nFix eps | h_{eps} : eps > 0\n  choose eps/3, linarith\n  linarith\n\nthm below_half :\n  x : Real, h : forall eps:Real>0. x <= eps\n  |- x <= 1/2\n\nk : 1/2 > 0 by decide\nh(1/2, k)\n",
+    "uses": [
+      "Fix eps |",
+      "choose eps/3",
+      "h(1/2, k)"
+    ]
   },
   {
     "title": "11. 定義を書く・使う",
@@ -762,7 +808,11 @@ window.NARFI_TUTORIAL = [
       "あとは `linarith`（示すべきものは $a_n + 1 \\le M + 1$）。"
     ],
     "exercise": "-- 練習 11：上から抑えられる数列\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef upper(a : Nat -> Real, M : Real) :<=> forall n:Nat. a_n <= M\n\nthm upper_shift :\n  a : Nat -> Real, M : Real, h : upper(a, M)\n  |- upper((n:Nat |-> a_n + 1), M + 1)\n\nsorry\n",
-    "answer": "def upper(a : Nat -> Real, M : Real) :<=> forall n:Nat. a_n <= M\n\nthm upper_shift :\n  a : Nat -> Real, M : Real, h : upper(a, M)\n  |- upper((n:Nat |-> a_n + 1), M + 1)\n\nFix n\n  k : a_n <= M by h(n)\n  linarith\n"
+    "answer": "def upper(a : Nat -> Real, M : Real) :<=> forall n:Nat. a_n <= M\n\nthm upper_shift :\n  a : Nat -> Real, M : Real, h : upper(a, M)\n  |- upper((n:Nat |-> a_n + 1), M + 1)\n\nFix n\n  k : a_n <= M by h(n)\n  linarith\n",
+    "uses": [
+      "Fix n",
+      "h(n)"
+    ]
   },
   {
     "title": "12. 数列の極限",
@@ -838,7 +888,13 @@ window.NARFI_TUTORIAL = [
       "絶対値をはずすのに `abs_lt` を使う：`l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)`。あとは `linarith`。"
     ],
     "exercise": "-- 練習 12：いずれ上から抑えられる\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\nsorry\n",
-    "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\none : 1 > 0 by decide\nObtain N | hN by h(1, one)\nchoose N\nFix n | h_n : n >= N\n  k : abs(a_n - alpha) < 1 by hN(n, h_n)\n  l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)\n  linarith\n"
+    "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\none : 1 > 0 by decide\nObtain N | hN by h(1, one)\nchoose N\nFix n | h_n : n >= N\n  k : abs(a_n - alpha) < 1 by hN(n, h_n)\n  l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)\n  linarith\n",
+    "uses": [
+      "Obtain N | hN by h",
+      "choose N",
+      "Fix n |",
+      "hN(n, h_n)"
+    ]
   },
   {
     "title": "13. 数学的帰納法",
@@ -906,7 +962,11 @@ window.NARFI_TUTORIAL = [
       "`Case succ k, IH : odd_sum(k) = k^2`。連鎖：`= odd_sum(k + 1) by s`、`= odd_sum(k) + 2k + 1 by odd_sum.succ(k)`、`= k^2 + 2k + 1 by IH`、`= (k + 1)^2 by ring`、`= S(k)^2 by s`。"
     ],
     "exercise": "-- 練習 13：奇数の和は平方数\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nrec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nsorry\n",
-    "answer": "rec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nFix n\n  induction n\n    Case zero\n      odd_sum(0)\n        = 0     by odd_sum.zero\n        = 0^2   by ring\n    Case succ k, IH : odd_sum(k) = k^2\n      s : S(k) = k + 1 by ring\n      odd_sum(S(k))\n        = odd_sum(k + 1)          by s\n        = odd_sum(k) + 2k + 1     by odd_sum.succ(k)\n        = k^2 + 2k + 1            by IH\n        = (k + 1)^2               by ring\n        = S(k)^2                  by s\n"
+    "answer": "rec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nFix n\n  induction n\n    Case zero\n      odd_sum(0)\n        = 0     by odd_sum.zero\n        = 0^2   by ring\n    Case succ k, IH : odd_sum(k) = k^2\n      s : S(k) = k + 1 by ring\n      odd_sum(S(k))\n        = odd_sum(k + 1)          by s\n        = odd_sum(k) + 2k + 1     by odd_sum.succ(k)\n        = k^2 + 2k + 1            by IH\n        = (k + 1)^2               by ring\n        = S(k)^2                  by s\n",
+    "uses": [
+      "induction n",
+      "by IH"
+    ]
   },
   {
     "title": "14. エディタの使い方",
