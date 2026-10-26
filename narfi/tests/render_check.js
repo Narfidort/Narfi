@@ -42,11 +42,12 @@ const server = http.createServer((req, res) => {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new" });
   let bad = 0, total = 0;
   const dir = path.join(__dirname, "render");
-  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".narfi")).sort()) {
+  // 従来の描画（kx=0）と、KaTeX で描く構造ノード（kx=1）の両方を測る
+  for (const kx of [0, 1]) for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".narfi")).sort()) {
     const page = await browser.newPage();
     await page.setViewport({ width: 1500, height: 1400, deviceScaleFactor: 2 });
     page.on("pageerror", (e) => { console.log("pageerror", e.message); bad++; });
-    await page.goto(`http://localhost:${port}/`, { waitUntil: "networkidle0" });
+    await page.goto(`http://localhost:${port}/?kx=${kx}`, { waitUntil: "networkidle0" });
     const src = fs.readFileSync(path.join(dir, f), "utf8");
     await page.evaluate((s) => { loadSourceIntoDoc(s); refreshAfterEdit(); }, src);
     await new Promise((r) => setTimeout(r, 1200));
@@ -57,6 +58,7 @@ const server = http.createServer((req, res) => {
         const lr = line.getBoundingClientRect();
         let top = Infinity, bottom = -Infinity, who = "";
         line.querySelectorAll(".mc-content *").forEach((e) => {
+          if (e.closest(".katex")) return;   // KaTeX の内部は、外側の枠（.mc-kx）が高さを確保している
           const r = e.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) return;
           if (r.top < top) { top = r.top; who = e.className; }
@@ -68,6 +70,7 @@ const server = http.createServer((req, res) => {
         // 文字の絵そのものが、その要素の枠より高くないか（大きな ∫ ∑ など。枠だけ測ると見逃す）
         const cv = document.createElement("canvas").getContext("2d");
         line.querySelectorAll(".mc-content *").forEach((e) => {
+          if (e.closest(".katex")) return;
           const t = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim();
           if (!t) return;
           const cs = getComputedStyle(e), r = e.getBoundingClientRect();
@@ -81,9 +84,9 @@ const server = http.createServer((req, res) => {
       return out;
     });
     total++;
-    for (const o of found) { bad++; console.log(`NG ${f} 行 ${o.line}: 枠から ${o.over}px はみ出す（${o.who}）`); }
+    for (const o of found) { bad++; console.log(`NG ${f} (kx=${kx}) 行 ${o.line}: 枠から ${o.over}px はみ出す（${o.who}）`); }
     const el = await page.$("#editorRoot, .mc-doc, #editor");
-    await page.screenshot({ path: path.join(outDir, f.replace(/\.narfi$/, ".png")) });
+    await page.screenshot({ path: path.join(outDir, f.replace(/\.narfi$/, `.kx${kx}.png`)) });
     await page.close();
   }
   await browser.close();

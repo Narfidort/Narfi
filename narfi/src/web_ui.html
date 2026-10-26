@@ -617,6 +617,14 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-size: 0.85em;
   line-height: 1.15;
 }
+/* KaTeX で描く構造ノード（kxNodeHtml）。カーソル・選択は kxOverlay が重ねる */
+.mc-kx { position: relative; display: inline-block; margin: 0 2px; vertical-align: middle; line-height: normal; }
+.mc-kx .katex { font-size: 1em; text-rendering: auto; }
+.mc-kx .katex-html { white-space: nowrap; }
+.mc-kx .mop .op-symbol { color: var(--math-sym); }
+.mc-kx-caret { position: absolute; width: 0; border-left: 1.8px solid var(--caret); margin-left: -0.9px; pointer-events: none; animation: mc-blink 1.05s steps(1) infinite; }
+.mc-kx .mc-sel-kx { background: rgba(82, 139, 255, 0.32); border-radius: 2px; }
+.mc-kx [data-slot-seq] { cursor: text; }
 /* Big Operator Node (sum, prod, int, lim) */
 .mc-bigop {
   display: inline-flex;
@@ -2164,46 +2172,8 @@ function escHtml(str) {
 }
 
 // Render a slice of items [startIdx, endIdx) inside `seq` with syntax highlighting and caret
-function renderItemsSliceHtml(seq, startIdx, endIdx) {
-  const isFocusedSeq = (cursor.seqId === seq.id);
-  const items = seq.items;
-  let html = "";
-
-  // Check if whole rootSeq is a comment or heading
-  if (seq.slotName === "root" && startIdx === 0) {
-    let rawPrefix = "";
-    for (let k = 0; k < Math.min(4, items.length); k++) {
-      if (items[k].kind === "char") rawPrefix += items[k].ch;
-    }
-    // 訳名の注釈 @name ja "…"：@name・ロケール・訳名をそれぞれの色で（数式にしない）
-    if (rawPrefix.startsWith("@")) {
-      let field = 0, prevSpace = false;
-      for (let i = startIdx; i < endIdx; i++) {
-        const it = items[i];
-        const sp = it.kind === "char" && it.ch === " ";
-        if (sp && !prevSpace && field < 2) field++;
-        prevSpace = sp;
-        const cls = field === 0 ? "mc-kw-decl" : field === 1 ? "mc-annot-loc" : "mc-annot-str";
-        if (isFocusedSeq && cursor.offset === i) html += `<span class="mc-caret"></span>`;
-        html += renderSingleItemHtml(seq, it, i, cls);
-      }
-      if (isFocusedSeq && cursor.offset === endIdx) html += `<span class="mc-caret"></span>`;
-      return html;
-    }
-    if (rawPrefix.startsWith("//") || rawPrefix.startsWith("--") || rawPrefix.startsWith("#")) {
-      const cls = rawPrefix.startsWith("#") ? "mc-heading" : "mc-comment";
-      html += `<span class="${cls}">`;
-      for (let i = startIdx; i < endIdx; i++) {
-        if (isFocusedSeq && cursor.offset === i) html += `<span class="mc-caret"></span>`;
-        html += renderSingleItemHtml(seq, items[i], i, "comment");
-      }
-      if (isFocusedSeq && cursor.offset === endIdx) html += `<span class="mc-caret"></span>`;
-      html += `</span>`;
-      return html;
-    }
-  }
-
-  // Pre-classify char tokens into words / numbers / backslash-drafts for syntax highlighting
+// 文字の並びを、単語・数・\ の下書きに分けて、色や字体の種類（mc-var など）を付ける
+function computeCharClasses(items) {
   const charClasses = new Array(items.length).fill("");
   let i = 0;
   while (i < items.length) {
@@ -2248,6 +2218,49 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
     }
     i++;
   }
+  return charClasses;
+}
+
+function renderItemsSliceHtml(seq, startIdx, endIdx) {
+  const isFocusedSeq = (cursor.seqId === seq.id);
+  const items = seq.items;
+  let html = "";
+
+  // Check if whole rootSeq is a comment or heading
+  if (seq.slotName === "root" && startIdx === 0) {
+    let rawPrefix = "";
+    for (let k = 0; k < Math.min(4, items.length); k++) {
+      if (items[k].kind === "char") rawPrefix += items[k].ch;
+    }
+    // 訳名の注釈 @name ja "…"：@name・ロケール・訳名をそれぞれの色で（数式にしない）
+    if (rawPrefix.startsWith("@")) {
+      let field = 0, prevSpace = false;
+      for (let i = startIdx; i < endIdx; i++) {
+        const it = items[i];
+        const sp = it.kind === "char" && it.ch === " ";
+        if (sp && !prevSpace && field < 2) field++;
+        prevSpace = sp;
+        const cls = field === 0 ? "mc-kw-decl" : field === 1 ? "mc-annot-loc" : "mc-annot-str";
+        if (isFocusedSeq && cursor.offset === i) html += `<span class="mc-caret"></span>`;
+        html += renderSingleItemHtml(seq, it, i, cls);
+      }
+      if (isFocusedSeq && cursor.offset === endIdx) html += `<span class="mc-caret"></span>`;
+      return html;
+    }
+    if (rawPrefix.startsWith("//") || rawPrefix.startsWith("--") || rawPrefix.startsWith("#")) {
+      const cls = rawPrefix.startsWith("#") ? "mc-heading" : "mc-comment";
+      html += `<span class="${cls}">`;
+      for (let i = startIdx; i < endIdx; i++) {
+        if (isFocusedSeq && cursor.offset === i) html += `<span class="mc-caret"></span>`;
+        html += renderSingleItemHtml(seq, items[i], i, "comment");
+      }
+      if (isFocusedSeq && cursor.offset === endIdx) html += `<span class="mc-caret"></span>`;
+      html += `</span>`;
+      return html;
+    }
+  }
+
+  const charClasses = computeCharClasses(items);
 
   for (let idx = startIdx; idx < endIdx; idx++) {
     if (isFocusedSeq && cursor.offset === idx) {
@@ -2263,7 +2276,190 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
   return html;
 }
 
+// ================================================================
+// KaTeX で描く構造ノード（分数・∑∫∏・√・絶対値・括弧・二項係数）
+//   木の部分木 1 つを LaTeX にし、各項目と入力欄に \htmlData で data-seq / data-idx / data-slot-seq を付けて KaTeX に描かせる。
+//   組版（上下限の位置・記号の大きさ・間隔）は LaTeX のとおりになる。クリックの対応づけは今までと同じ属性で行い、
+//   カーソルと選択は、描いたあとの要素の位置を測って重ねる（kxOverlay）。
+//   切り替え：?kx=1（使う）・?kx=0（使わない）。選んだ値は localStorage "narfi.kx" に残る。
+// ================================================================
+const KX_ON = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get("kx");
+    if (q !== null) localStorage.setItem("narfi.kx", q);
+    return localStorage.getItem("narfi.kx") === "1";
+  } catch (_) { return false; }
+})();
+const KX_REL = new Set("=<>≤≥≠≈≡∈∉⊂⊆⊃⊇∼≅∝⊢⊨⇒⇔⇐↔→↦←⟶⟹⟺∣:⊥∥".split(""));
+const KX_BIN = new Set("+-−±×·*∪∩∧∨⊕⊗∘∖".split(""));
+const KX_OPEN = new Set("([⟨⌊⌈".split(""));
+const KX_CLOSE = new Set(")]⟩⌋⌉".split(""));
+const KX_DELIM = { "⌊": "\\lfloor", "⌋": "\\rfloor", "⌈": "\\lceil", "⌉": "\\rceil", "{": "\\{", "}": "\\}", "⟨": "\\langle", "⟩": "\\rangle", "‖": "\\Vert" };
+const KX_ESC = { "#": "\\#", "%": "\\%", "&": "\\&", "$": "\\$", "_": "\\_", "\\": "\\backslash ", "^": "\\textasciicircum ", "~": "\\sim ", "{": "\\{", "}": "\\}", "|": "\\vert ", "\"": "''", "*": "\\cdot ", "-": "-", "'": "{}^{\\prime}" };
+const KX_TOP = new Set(["frac", "binom", "bigop", "sqrt", "abs", "delim"]);
+const kxMemo = new Map();
+
+// 部分木が、全部 KaTeX で描ける種類だけでできているか
+function kxSupported(it) {
+  if (it.kind === "char" || it.kind === "sym") return true;
+  if (!KX_TOP.has(it.kind) && it.kind !== "sub" && it.kind !== "sup") return false;
+  const slots = it.kind === "frac" || it.kind === "binom" ? [it.num, it.den]
+    : it.kind === "bigop" ? [it.sub, it.sup, it.body] : [it.body];
+  return slots.every((sq) => sq.items.every(kxSupported));
+}
+
+// 項目の種類：ord / bin / rel / open / close / punct / space
+function kxType(it) {
+  if (it.kind === "sym") {
+    if (it.ascii === "*") return "bin";
+    return KX_REL.has(it.display) ? "rel" : KX_BIN.has(it.display) ? "bin" : "ord";
+  }
+  if (it.kind !== "char") return "ord";
+  const c = it.ch;
+  if (c === " ") return "space";
+  if (c === "," || c === ";") return "punct";
+  if (KX_REL.has(c)) return "rel";
+  if (KX_BIN.has(c)) return "bin";
+  if (KX_OPEN.has(c)) return "open";
+  if (KX_CLOSE.has(c)) return "close";
+  return "ord";
+}
+
+function kxChar(c, cls) {
+  if (/[A-Za-z]/.test(c)) return cls === "mc-ident-fn" ? `\\mathrm{${c}}` : c;
+  if (/[0-9]/.test(c)) return `\\htmlClass{mc-num}{${c}}`;
+  if (KX_ESC[c]) return KX_ESC[c];
+  if (/[　-鿿＀-￯]/.test(c)) return `\\text{${c}}`;
+  return c;
+}
+
+// 並び 1 本（入力欄の中身）の LaTeX
+function kxSeq(seq) {
+  const items = seq.items;
+  if (!items.length) return `\\htmlData{slot-seq=${seq.id}}{\\square}`;
+  const types = items.map(kxType);
+  const cls = computeCharClasses(items);
+  // 2 項演算子は、前が無い・前が演算子・関係・開き括弧・読点のとき、または後ろが無い・関係・閉じ括弧・読点のときは、符号として扱う
+  const real = types.map((t, i) => (t === "space" ? null : t));
+  const neighbor = (i, d) => { for (let j = i + d; j >= 0 && j < items.length; j += d) if (real[j]) return real[j]; return null; };
+  const out = [];   // {tok, sup, sub}（添字が付いたか）
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const at = `\\htmlData{seq=${seq.id},idx=${i}}`;
+    if (it.kind === "sup" || it.kind === "sub") {
+      const key = it.kind;
+      let last = out[out.length - 1];
+      if (!last) { last = { tok: "{}" }; out.push(last); }
+      else if (last[key]) { last.tok = `{${last.tok}}`; last.sup = last.sub = false; }
+      last[key] = true;
+      last.tok += `${key === "sup" ? "^" : "_"}{${at}{${kxSeq(it.body)}}}`;
+      continue;
+    }
+    let t = types[i], tok;
+    if (it.kind === "char") {
+      if (t === "space") {
+        const p = neighbor(i, -1), n = neighbor(i, 1);
+        const tight = !p || !n || ["rel", "bin", "punct", "open"].includes(p) || ["rel", "bin", "punct", "close"].includes(n);
+        tok = `${at}{${tight ? "\\mkern0mu" : "\\,"}}`;
+      } else {
+        tok = `${at}{${kxChar(it.ch, cls[i])}}`;
+      }
+    } else if (it.kind === "sym") {
+      const shown = it.cls === "bb" && BB_LATIN[it.display] ? `\\mathbb{${BB_LATIN[it.display]}}` : it.ascii === "*" ? "\\cdot " : it.display;
+      tok = `${at}{${shown}}`;
+    } else {
+      tok = `${at}{${kxNode(it)}}`;
+      t = "ord";
+    }
+    if (t === "bin") {
+      const p = neighbor(i, -1), n = neighbor(i, 1);
+      if (!p || ["bin", "rel", "open", "punct"].includes(p) || !n || ["rel", "close", "punct"].includes(n)) t = "ord";
+    }
+    const cmd = { rel: "\\mathrel", bin: "\\mathbin", open: "\\mathopen", close: "\\mathclose", punct: "\\mathpunct" }[t];
+    out.push({ tok: cmd ? `${cmd}{${tok}}` : tok });
+  }
+  return `\\htmlData{slot-seq=${seq.id}}{${out.map((o) => o.tok).join("")}}`;
+}
+
+// 構造ノード 1 つの LaTeX
+function kxNode(it) {
+  if (it.kind === "frac") return `\\frac{${kxSeq(it.num)}}{${kxSeq(it.den)}}`;
+  if (it.kind === "binom") return `\\binom{${kxSeq(it.num)}}{${kxSeq(it.den)}}`;
+  if (it.kind === "sqrt") return `\\sqrt{${kxSeq(it.body)}}`;
+  if (it.kind === "abs") return `\\left|${kxSeq(it.body)}\\right|`;
+  if (it.kind === "delim") return `\\left${KX_DELIM[it.leftCh] || it.leftCh}${kxSeq(it.body)}\\right${KX_DELIM[it.rightCh] || it.rightCh}`;
+  if (it.kind === "bigop") {
+    const cmd = { sum: "\\sum", prod: "\\prod", int: "\\int" }[it.fnName] || it.sym;
+    const ltForm = it.fnName === "sum" && it.sup.items.length === 0 && cursor.seqId !== it.sup.id && it.sub.items.some((x) => x.kind === "char" && x.ch === "<");
+    const sc = `_{${kxSeq(it.sub)}}` + (ltForm ? "" : `^{${kxSeq(it.sup)}}`);
+    return `${cmd}${sc}\\mkern3mu ${kxSeq(it.body)}`;
+  }
+  return "";
+}
+
+// 最上位の構造ノード 1 つを KaTeX で描いた HTML（描けない種類を含むときは null）
+function kxNodeHtml(seq, it, idx) {
+  if (!KX_ON || !window.katex || !KX_TOP.has(it.kind) || isCommentLine(seq) || !kxSupported(it)) return null;
+  const tex = `\\displaystyle ${kxNode(it)}`;
+  let cached = kxMemo.get(tex);
+  if (!cached) {
+    let html;
+    try {
+      html = window.katex.renderToString(tex, { displayMode: false, throwOnError: true, strict: "ignore", trust: (c) => c.command === "\\htmlData" || c.command === "\\htmlClass" });
+    } catch (_) { return null; }
+    // 上下の高さを、数式の軸（文字の中ほど）について対称にして、行の中ほどにそろえる
+    let pad = "";
+    const m = html.match(/class="strut bottom" style="height:([\d.]+)em;(?:vertical-align:(-?[\d.]+)em;)?/);
+    if (m) {
+      const H = parseFloat(m[1]), D = m[2] ? -parseFloat(m[2]) : 0;
+      const up = H - D - 0.25, down = D + 0.25;
+      const pt = Math.max(0, down - up), pb = Math.max(0, up - down);
+      if (pt || pb) pad = ` style="padding:${pt.toFixed(3)}em 0 ${pb.toFixed(3)}em"`;
+    }
+    cached = { html, pad };
+    if (kxMemo.size > 1500) kxMemo.clear();
+    kxMemo.set(tex, cached);
+  }
+  return `<span class="mc-kx"${cached.pad} data-seq="${seq.id}" data-idx="${idx}">${cached.html}</span>`;
+}
+
+// カーソルと選択を、KaTeX の描いた要素の上に重ねる（描き直しのあとに呼ぶ）
+function kxOverlay() {
+  if (!KX_ON) return;
+  for (const el of editorSurface.querySelectorAll(".mc-kx-caret")) el.remove();
+  for (const el of editorSurface.querySelectorAll(".mc-sel-kx")) el.classList.remove("mc-sel-kx");
+  for (const [seqId, [a, b]] of selHL) {
+    for (let k = a; k < b; k++) for (const el of editorSurface.querySelectorAll(`.mc-kx [data-seq="${seqId}"][data-idx="${k}"]`)) el.classList.add("mc-sel-kx");
+  }
+  const seq = seqMap.get(cursor.seqId);
+  if (!seq) return;
+  const q = (sel) => editorSurface.querySelector(`.mc-kx ${sel}`);
+  let host = q(`[data-slot-seq="${seq.id}"]`) ? q(`[data-slot-seq="${seq.id}"]`).closest(".mc-kx") : null;
+  if (!host) return;
+  let x, y0, y1;
+  const hr = host.getBoundingClientRect();
+  const slot = q(`[data-slot-seq="${seq.id}"]`);
+  const n = seq.items.length;
+  if (n === 0) {
+    const r = slot.getBoundingClientRect();
+    x = r.left + r.width / 2; y0 = r.top; y1 = r.bottom;
+  } else {
+    const at = cursor.offset < n ? q(`[data-seq="${seq.id}"][data-idx="${cursor.offset}"]`) : q(`[data-seq="${seq.id}"][data-idx="${n - 1}"]`);
+    if (!at) return;
+    const r = at.getBoundingClientRect();
+    x = cursor.offset < n ? r.left : r.right;
+    const k = r.height > 30 ? 1.2 * parseFloat(getComputedStyle(at).fontSize) : r.height;
+    y0 = r.top + (r.height - k) / 2; y1 = y0 + k;
+  }
+  const c = document.createElement("span");
+  c.className = "mc-kx-caret";
+  c.style.cssText = `left:${(x - hr.left).toFixed(1)}px;top:${(y0 - hr.top).toFixed(1)}px;height:${(y1 - y0).toFixed(1)}px`;
+  host.appendChild(c);
+}
+
 function renderSingleItemHtml(seq, it, idx, charCls) {
+  const kx = kxNodeHtml(seq, it, idx);
+  if (kx !== null) return kx;
   if (it.kind === "char") {
     // 積の * は、教科書のように記号なしに近い形で（消したり選んだりできるよう、薄い点として残す）
     if (it.ch === "*" && !isCommentLine(seq)) {
@@ -3146,6 +3342,7 @@ function renderEditor() {
   }
   domKeys = keys;
   applyFindClasses();
+  kxOverlay();
   document.getElementById("curLineLabel").textContent = `Ln ${cursor.lineIdx + 1}`;
   document.getElementById("rawAsciiArea").value = texts.join("\n");
   updateAutocomplete();
