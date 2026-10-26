@@ -55,3 +55,11 @@ sorry
 thm r.nest :
   ⊢ [[sum(0, n, 1/k), vec(x)], [int(0, 1, x dx), sqrt(1/2)]] = 0
 sorry
+
+thm r.line :
+  ⊢ 1/2 (f(k) + f(k+1)) - int(k, k+1, f(x) dx) = int(0, 1, (t - 1/2) f'(t+k) dt)
+sorry
+
+thm r.line2 :
+  ⊢ [b_2(t) f'(t+k)]_0^1 - int(0, 1, b_2(t) f''(t+k) dt) = 0
+sorry

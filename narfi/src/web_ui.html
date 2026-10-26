@@ -618,7 +618,9 @@ html:not(.web) [data-only="web"] { display: none !important; }
   line-height: 1.15;
 }
 /* KaTeX で描く構造ノード（kxNodeHtml）。カーソル・選択は kxOverlay が重ねる */
-.mc-kx { position: relative; display: inline-block; margin: 0 2px; vertical-align: middle; line-height: normal; }
+/* 行の中を通常のインライン配置にして、数式の基準線を文字にそろえる */
+.mc-content.kxflow { display: block; white-space: nowrap; line-height: 1.65; }
+.mc-kx { position: relative; display: inline-block; vertical-align: baseline; line-height: normal; padding: 1px 0; }
 .mc-kx .katex { font-size: 1em; text-rendering: auto; }
 .mc-kx .katex-html { white-space: nowrap; }
 .mc-kx .mop .op-symbol { color: var(--math-sym); }
@@ -2266,6 +2268,18 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
     if (isFocusedSeq && cursor.offset === idx) {
       html += `<span class="mc-caret"></span>`;
     }
+    // 数式の連なり（キーワードでない項目が続く範囲。前後の空白は含めない）は、まとめて KaTeX で描く
+    if (KX_ON && !isCommentLine(seq) && !KX_TEXT_CLS.has(charClasses[idx]) && !isSpaceItem(items[idx])) {
+      let e = idx + 1;
+      while (e < endIdx && !KX_TEXT_CLS.has(charClasses[e])) e++;
+      while (e > idx + 1 && isSpaceItem(items[e - 1])) e--;
+      const run = kxRunHtml(seq, idx, e, charClasses);
+      if (run !== null) {
+        html += run;
+        idx = e - 1;
+        continue;
+      }
+    }
     const hl = selHL.get(seq.id);
     const one = renderSingleItemHtml(seq, items[idx], idx, charClasses[idx]);
     html += (hl && idx >= hl[0] && idx < hl[1]) ? `<span class="mc-sel">${one}</span>` : one;
@@ -2333,7 +2347,7 @@ function kxType(it) {
 
 function kxChar(c, cls) {
   if (/[A-Za-z]/.test(c)) return cls === "mc-ident-fn" ? `\\mathrm{${c}}` : c;
-  if (/[0-9]/.test(c)) return `\\htmlClass{mc-num}{${c}}`;
+  if (/[0-9]/.test(c)) return cls === "mc-ident-fn" ? `\\mathrm{${c}}` : cls === "mc-num" || !cls ? `\\htmlClass{mc-num}{${c}}` : c;
   if (KX_ESC[c]) return KX_ESC[c];
   if (/[　-鿿＀-￯]/.test(c)) return `\\text{${c}}`;
   return c;
@@ -2341,15 +2355,19 @@ function kxChar(c, cls) {
 
 // 並び 1 本（入力欄の中身）の LaTeX
 function kxSeq(seq) {
+  if (!seq.items.length) return `\\htmlData{slot-seq=${seq.id}}{\\square}`;
+  return `\\htmlData{slot-seq=${seq.id}}{${kxItems(seq, 0, seq.items.length, computeCharClasses(seq.items))}}`;
+}
+
+// 並びの a 番目から b 番目の手前までの LaTeX（行の中の数式の連なりにも使う）。cls は computeCharClasses の結果
+function kxItems(seq, a, b, cls) {
   const items = seq.items;
-  if (!items.length) return `\\htmlData{slot-seq=${seq.id}}{\\square}`;
   const types = items.map(kxType);
-  const cls = computeCharClasses(items);
   // 2 項演算子は、前が無い・前が演算子・関係・開き括弧・読点のとき、または後ろが無い・関係・閉じ括弧・読点のときは、符号として扱う
   const real = types.map((t, i) => (t === "space" ? null : t));
-  const neighbor = (i, d) => { for (let j = i + d; j >= 0 && j < items.length; j += d) if (real[j]) return real[j]; return null; };
+  const neighbor = (i, d) => { for (let j = i + d; j >= a && j < b; j += d) if (real[j]) return real[j]; return null; };
   const out = [];   // {tok, sup, sub}（添字が付いたか）
-  for (let i = 0; i < items.length; i++) {
+  for (let i = a; i < b; i++) {
     const it = items[i];
     const at = `\\htmlData{seq=${seq.id},idx=${i}}`;
     if (it.kind === "sup" || it.kind === "sub") {
@@ -2384,7 +2402,7 @@ function kxSeq(seq) {
     const cmd = { rel: "\\mathrel", bin: "\\mathbin", open: "\\mathopen", close: "\\mathclose", punct: "\\mathpunct" }[t];
     out.push({ tok: cmd ? `${cmd}{${tok}}` : tok });
   }
-  return `\\htmlData{slot-seq=${seq.id}}{${out.map((o) => o.tok).join("")}}`;
+  return out.map((o) => o.tok).join("");
 }
 
 // 構造ノード 1 つの LaTeX
@@ -2417,33 +2435,27 @@ function kxNode(it) {
   return "";
 }
 
-// 最上位の構造ノード 1 つを KaTeX で描いた HTML（描けない種類を含むときは null）
-function kxNodeHtml(seq, it, idx) {
-  if (!KX_ON || !window.katex || !KX_TOP.has(it.kind) || isCommentLine(seq) || !kxSupported(it)) return null;
-  const tex = `\\displaystyle ${kxNode(it)}`;
-  let cached = kxMemo.get(tex);
-  if (!cached) {
-    let html;
+// 行の中の数式の連なり（seq の a〜b 番目）を KaTeX で描いた HTML。描けないときは null（従来の描画にする）
+function kxRunHtml(seq, a, b, cls) {
+  if (!KX_ON || !window.katex) return null;
+  for (let i = a; i < b; i++) if (!kxSupported(seq.items[i])) return null;
+  const tex = `\\displaystyle ${kxItems(seq, a, b, cls)}`;
+  let html = kxMemo.get(tex);
+  if (html === undefined) {
     try {
       html = window.katex.renderToString(tex, { displayMode: false, throwOnError: true, strict: "ignore", trust: (c) => c.command === "\\htmlData" || c.command === "\\htmlClass" });
-    } catch (_) { return null; }
-    // 上下の高さを、数式の軸（文字の中ほど）について対称にして、行の中ほどにそろえる
-    let pad = "";
-    const m = html.match(/class="strut bottom" style="height:([\d.]+)em;(?:vertical-align:(-?[\d.]+)em;)?/);
-    if (m) {
-      const H = parseFloat(m[1]), D = m[2] ? -parseFloat(m[2]) : 0;
-      const up = H - D - 0.25, down = D + 0.25;
-      const pt = Math.max(0, down - up), pb = Math.max(0, up - down);
-      if (pt || pb) pad = ` style="padding:${pt.toFixed(3)}em 0 ${pb.toFixed(3)}em"`;
-    }
-    cached = { html, pad };
+    } catch (_) { html = null; }
     if (kxMemo.size > 1500) kxMemo.clear();
-    kxMemo.set(tex, cached);
+    kxMemo.set(tex, html);
   }
-  return `<span class="mc-kx"${cached.pad} data-seq="${seq.id}" data-idx="${idx}">${cached.html}</span>`;
+  return html === null ? null : `<span class="mc-kx" data-run-a="${a}" data-run-b="${b}">${html}</span>`;
 }
 
-// カーソルと選択を、KaTeX の描いた要素の上に重ねる（描き直しのあとに呼ぶ）
+// 数式にしない文字（キーワード・下書きの \コマンド）
+const KX_TEXT_CLS = new Set(["mc-kw-decl", "mc-kw-step", "mc-kw-just", "mc-cmd-draft"]);
+
+// カーソルと選択を、KaTeX の描いた要素の上に重ねる（描き直しのあとに呼ぶ）。
+// 数式の連なりの端（a 番目の前・b 番目の後）のカーソルは、従来どおり行の流れの中に置くので、ここでは描かない
 function kxOverlay() {
   if (!KX_ON) return;
   for (const el of editorSurface.querySelectorAll(".mc-kx-caret")) el.remove();
@@ -2454,23 +2466,34 @@ function kxOverlay() {
   const seq = seqMap.get(cursor.seqId);
   if (!seq) return;
   const q = (sel) => editorSurface.querySelector(`.mc-kx ${sel}`);
-  let host = q(`[data-slot-seq="${seq.id}"]`) ? q(`[data-slot-seq="${seq.id}"]`).closest(".mc-kx") : null;
-  if (!host) return;
-  let x, y0, y1;
-  const hr = host.getBoundingClientRect();
+  const n = seq.items.length, k = cursor.offset;
   const slot = q(`[data-slot-seq="${seq.id}"]`);
-  const n = seq.items.length;
+  let host, x, y0, y1;
   if (n === 0) {
+    if (!slot) return;
+    host = slot.closest(".mc-kx");
     const r = slot.getBoundingClientRect();
     x = r.left + r.width / 2; y0 = r.top; y1 = r.bottom;
   } else {
-    const at = cursor.offset < n ? q(`[data-seq="${seq.id}"][data-idx="${cursor.offset}"]`) : q(`[data-seq="${seq.id}"][data-idx="${n - 1}"]`);
-    if (!at) return;
-    const r = at.getBoundingClientRect();
-    x = cursor.offset < n ? r.left : r.right;
-    const k = r.height > 30 ? 1.2 * parseFloat(getComputedStyle(at).fontSize) : r.height;
-    y0 = r.top + (r.height - k) / 2; y1 = y0 + k;
+    const el = k < n ? q(`[data-seq="${seq.id}"][data-idx="${k}"]`) : null;
+    const prev = !el && k > 0 ? q(`[data-seq="${seq.id}"][data-idx="${k - 1}"]`) : null;
+    const ref = el || prev;
+    if (!ref) return;
+    host = ref.closest(".mc-kx");
+    if (!(slot && slot.contains(ref))) {
+      // 行の直接の項目：連なりの端は行の流れの中のカーソルが担当
+      if (k <= Number(host.dataset.runA) || k >= Number(host.dataset.runB)) return;
+    }
+    const r = ref.getBoundingClientRect();
+    x = el ? r.left : r.right;
+    const fs = parseFloat(getComputedStyle(ref).fontSize);
+    if (r.height < 6 || r.height > 30) {
+      const pr = (r.height < 6 ? ref.parentElement : ref).getBoundingClientRect();
+      const h = 1.2 * fs;
+      y0 = pr.top + (pr.height - h) / 2; y1 = y0 + h;
+    } else { y0 = r.top; y1 = r.bottom; }
   }
+  const hr = host.getBoundingClientRect();
   const c = document.createElement("span");
   c.className = "mc-kx-caret";
   c.style.cssText = `left:${(x - hr.left).toFixed(1)}px;top:${(y0 - hr.top).toFixed(1)}px;height:${(y1 - y0).toFixed(1)}px`;
@@ -2478,8 +2501,6 @@ function kxOverlay() {
 }
 
 function renderSingleItemHtml(seq, it, idx, charCls) {
-  const kx = kxNodeHtml(seq, it, idx);
-  if (kx !== null) return kx;
   if (it.kind === "char") {
     // 積の * は、教科書のように記号なしに近い形で（消したり選んだりできるよう、薄い点として残す）
     if (it.ch === "*" && !isCommentLine(seq)) {
@@ -3393,7 +3414,7 @@ function editorLineHtml(i, marks) {
   return `<div class="${cls.join(' ')}" data-line-idx="${i}">` +
     `<div class="mc-gutter">${lineNo}</div>` +
     `<div class="mc-indent-guides">${guides}</div>` +
-    `<div class="mc-content" data-line-idx="${i}">${fenceLines.has(i) && i !== cursor.lineIdx ? renderFenceLineHtml(ln, i) : renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
+    `<div class="mc-content${KX_ON ? " kxflow" : ""}" data-line-idx="${i}">${fenceLines.has(i) && i !== cursor.lineIdx ? renderFenceLineHtml(ln, i) : renderRootSeqWithLens(ln.rootSeq, lineNo)}</div>` +
     `</div>`;
 }
 
@@ -3436,7 +3457,7 @@ function hitTestPos(target, clientX) {
     const idx = Number(itemEl.getAttribute("data-idx"));
     const seq = seqMap.get(seqId);
     const it = seq && seq.items[idx];
-    if (it && (it.kind === "char" || it.kind === "sym")) {
+    if (it && (it.kind === "char" || it.kind === "sym" || itemEl.closest(".mc-kx"))) {
       const rect = itemEl.getBoundingClientRect();
       return { seqId, offset: (clientX - rect.left) > (rect.width / 2) ? idx + 1 : idx };
     }
@@ -4264,7 +4285,7 @@ function updateAutocomplete() {
 }
 
 function renderAcPopup() {
-  const caretEl = editorSurface.querySelector(".mc-caret");
+  const caretEl = editorSurface.querySelector(".mc-caret, .mc-kx-caret");
   if (caretEl) {
     const rect = caretEl.getBoundingClientRect();
     acPopup.style.left = `${Math.max(12, rect.left)}px`;
