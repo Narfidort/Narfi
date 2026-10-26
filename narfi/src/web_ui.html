@@ -644,6 +644,32 @@ html:not(.web) [data-only="web"] { display: none !important; }
 .mc-bigop-sub {
   font-size: 0.68em;
 }
+/* ∫：LaTeX の表示と同じく、記号は縦に長く、上限は右上・下限は右下（記号の足の右）に置く。中身は記号の中ほどにそろえる */
+.mc-bigop.int { align-items: center; margin: 0 3px 0 4px; }
+.mc-bigop.int .mc-bigop-stack {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas: "sym sup" "sym sub";
+  align-items: stretch;
+  justify-items: start;
+  column-gap: 0;
+  line-height: 1;
+  margin-right: 3px;
+}
+.mc-bigop.int .mc-bigop-sym {
+  grid-area: sym;
+  align-self: center;
+  font-family: "KaTeX_Size2", "KaTeX_Size1", "KaTeX_Main", serif;
+  font-size: 1.45em;
+  line-height: 1;
+  transform: skewX(0deg);
+}
+.mc-bigop.int .mc-bigop-sup { grid-area: sup; align-self: start; margin-left: 0.55em; }
+.mc-bigop.int .mc-bigop-sub { grid-area: sub; align-self: end; margin-left: 0.1em; }
+/* 添字の空欄は小さく（本文用の大きさのままだと記号に重なる） */
+.mc-bigop-sup > .mc-slot, .mc-bigop-sub > .mc-slot { min-width: 9px; min-height: 12px; padding: 0 1px; }
+.mc-bigop.int .mc-bigop-sup, .mc-bigop.int .mc-bigop-sub { font-size: 0.7em; }
 /* Accent Node (vec, hat, bar, tilde) */
 /* ``` の中の Markdown（エディタ） */
 .mc-md { font-family: -apple-system, "Hiragino Sans", sans-serif; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
@@ -2342,7 +2368,7 @@ function renderSingleItemHtml(seq, it, idx, charCls) {
   }
   if (it.kind === "bigop") {
     const ltForm = it.fnName === "sum" && it.sup.items.length === 0 && cursor.seqId !== it.sup.id && it.sub.items.some((x) => x.kind === "char" && x.ch === "<");
-    return `<span class="mc-bigop${ltForm ? " lt" : ""}" data-seq="${seq.id}" data-idx="${idx}">` +
+    return `<span class="mc-bigop${ltForm ? " lt" : ""}${it.fnName === "int" ? " int" : ""}" data-seq="${seq.id}" data-idx="${idx}">` +
       `<span class="mc-bigop-stack">` +
         `<span class="mc-bigop-sup">${renderSlotSeqHtml(it.sup)}</span>` +
         `<span class="mc-bigop-sym">${escHtml(it.sym)}</span>` +
