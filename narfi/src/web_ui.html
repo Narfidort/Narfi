@@ -2281,13 +2281,13 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
 //   木の部分木 1 つを LaTeX にし、各項目と入力欄に \htmlData で data-seq / data-idx / data-slot-seq を付けて KaTeX に描かせる。
 //   組版（上下限の位置・記号の大きさ・間隔）は LaTeX のとおりになる。クリックの対応づけは今までと同じ属性で行い、
 //   カーソルと選択は、描いたあとの要素の位置を測って重ねる（kxOverlay）。
-//   切り替え：?kx=1（使う）・?kx=0（使わない）。選んだ値は localStorage "narfi.kx" に残る。
+//   切り替え：?kx=0（使わない）・?kx=1（使う。既定）。選んだ値は localStorage "narfi.kx" に残る。
 // ================================================================
 const KX_ON = (() => {
   try {
     const q = new URLSearchParams(location.search).get("kx");
     if (q !== null) localStorage.setItem("narfi.kx", q);
-    return localStorage.getItem("narfi.kx") === "1";
+    return localStorage.getItem("narfi.kx") !== "0";
   } catch (_) { return false; }
 })();
 const KX_REL = new Set("=<>≤≥≠≈≡∈∉⊂⊆⊃⊇∼≅∝⊢⊨⇒⇔⇐↔→↦←⟶⟹⟺∣:⊥∥".split(""));
@@ -2296,16 +2296,22 @@ const KX_OPEN = new Set("([⟨⌊⌈".split(""));
 const KX_CLOSE = new Set(")]⟩⌋⌉".split(""));
 const KX_DELIM = { "⌊": "\\lfloor", "⌋": "\\rfloor", "⌈": "\\lceil", "⌉": "\\rceil", "{": "\\{", "}": "\\}", "⟨": "\\langle", "⟩": "\\rangle", "‖": "\\Vert" };
 const KX_ESC = { "#": "\\#", "%": "\\%", "&": "\\&", "$": "\\$", "_": "\\_", "\\": "\\backslash ", "^": "\\textasciicircum ", "~": "\\sim ", "{": "\\{", "}": "\\}", "|": "\\vert ", "\"": "''", "*": "\\cdot ", "-": "-", "'": "{}^{\\prime}" };
-const KX_TOP = new Set(["frac", "binom", "bigop", "sqrt", "abs", "delim"]);
+const KX_TOP = new Set(["frac", "binom", "bigop", "sqrt", "abs", "delim", "matrix", "accent", "oplim"]);
 const kxMemo = new Map();
+
+// ノードの入力欄（並び）の一覧
+function kxSlots(it) {
+  if (it.kind === "frac" || it.kind === "binom") return [it.num, it.den];
+  if (it.kind === "bigop") return [it.sub, it.sup, it.body];
+  if (it.kind === "matrix") return matrixCells(it);
+  return [it.body];
+}
 
 // 部分木が、全部 KaTeX で描ける種類だけでできているか
 function kxSupported(it) {
   if (it.kind === "char" || it.kind === "sym") return true;
   if (!KX_TOP.has(it.kind) && it.kind !== "sub" && it.kind !== "sup") return false;
-  const slots = it.kind === "frac" || it.kind === "binom" ? [it.num, it.den]
-    : it.kind === "bigop" ? [it.sub, it.sup, it.body] : [it.body];
-  return slots.every((sq) => sq.items.every(kxSupported));
+  return kxSlots(it).every((sq) => sq.items.every(kxSupported));
 }
 
 // 項目の種類：ord / bin / rel / open / close / punct / space
@@ -2393,6 +2399,20 @@ function kxNode(it) {
     const ltForm = it.fnName === "sum" && it.sup.items.length === 0 && cursor.seqId !== it.sup.id && it.sub.items.some((x) => x.kind === "char" && x.ch === "<");
     const sc = `_{${kxSeq(it.sub)}}` + (ltForm ? "" : `^{${kxSeq(it.sup)}}`);
     return `${cmd}${sc}\\mkern3mu ${kxSeq(it.body)}`;
+  }
+  if (it.kind === "matrix") {
+    const rows = [];
+    for (let r = 0; r < it.rows; r++) rows.push(Array.from({ length: it.cols }, (_, c) => kxSeq(it["c" + (r * it.cols + c)])).join("&"));
+    return `\\begin{pmatrix}${rows.join("\\\\")}\\end{pmatrix}`;
+  }
+  if (it.kind === "accent") {
+    const cmd = { vec: "\\vec", hat: "\\hat", bar: "\\overline", tilde: "\\tilde" }[it.fnName] || "\\hat";
+    return `${cmd}{${kxSeq(it.body)}}`;
+  }
+  if (it.kind === "oplim") {
+    const name = (OPLIM_NAMES[it.fnName] || it.fnName).replace(/ /g, "\\,");
+    const hide = it.body.items.length === 0 && cursor.seqId !== it.body.id;
+    return `\\mathop{\\mathrm{${name}}}\\limits${hide ? "" : `_{${kxSeq(it.body)}}`}`;
   }
   return "";
 }

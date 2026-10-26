@@ -35,3 +35,23 @@ sorry
 thm r.binom :
   ⊢ binom(n, k) + binom(n, 1/2) = 0
 sorry
+
+thm r.matrix :
+  ⊢ [[1, 2], [3, 1/2]] = [[1, 2], [3, 1/2]]
+sorry
+
+thm r.accent :
+  ⊢ vec(x) = hat(y) + bar(z) + tilde(1/2)
+sorry
+
+thm r.lim :
+  ⊢ \lim_{n → ∞} 1/n = 0
+sorry
+
+thm r.limsup :
+  ⊢ \limsup_{n → ∞} (1/n + 1/2) = \max_{x ∈ A} 1/x
+sorry
+
+thm r.nest :
+  ⊢ [[sum(0, n, 1/k), vec(x)], [int(0, 1, x dx), sqrt(1/2)]] = 0
+sorry

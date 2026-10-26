@@ -45,7 +45,7 @@ const server = http.createServer((req, res) => {
   // 従来の描画（kx=0）と、KaTeX で描く構造ノード（kx=1）の両方を測る
   for (const kx of [0, 1]) for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".narfi")).sort()) {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1500, height: 1400, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 1500, height: 2300, deviceScaleFactor: 2 });
     page.on("pageerror", (e) => { console.log("pageerror", e.message); bad++; });
     await page.goto(`http://localhost:${port}/?kx=${kx}`, { waitUntil: "networkidle0" });
     const src = fs.readFileSync(path.join(dir, f), "utf8");
