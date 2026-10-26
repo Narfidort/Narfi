@@ -661,9 +661,8 @@ html:not(.web) [data-only="web"] { display: none !important; }
   grid-area: sym;
   align-self: center;
   font-family: "KaTeX_Size2", "KaTeX_Size1", "KaTeX_Main", serif;
-  font-size: 1.45em;
-  line-height: 1;
-  transform: skewX(0deg);
+  font-size: 1.2em;
+  line-height: 2.25;  /* Size2 の ∫ の絵は高さ約 2.2em。枠をそれに合わせて、行の高さが足りるようにする（tests/render_check.js が測る） */
 }
 .mc-bigop.int .mc-bigop-sup { grid-area: sup; align-self: start; margin-left: 0.55em; }
 .mc-bigop.int .mc-bigop-sub { grid-area: sub; align-self: end; margin-left: 0.1em; }
