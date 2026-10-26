@@ -243,3 +243,76 @@ fn migrate_legacy() {
     let after = run(&[f.to_str().unwrap()]);
     assert!(!after.contains("構文エラー") && after.contains("3 個の定理をすべて検証しました"), "{after}");
 }
+
+/// 読み込みの使い回し（module.rs）：使い回した結果が、毎回読み直した結果と完全に同じ（JSON の全体を比べる）
+#[test]
+fn import_cache_gives_identical_results() {
+    // 検査は深く再帰する。テストのスレッドの既定のスタック（2MB）では極端に遅くなるので、大きくして走らせる
+    std::thread::Builder::new().stack_size(256 << 20).spawn(import_cache_body).unwrap().join().unwrap();
+}
+
+fn import_cache_body() {
+    use std::path::Path;
+    let mut files: Vec<String> = Vec::new();
+    for dir in ["lib", "examples", "tests"] {
+        let mut stack = vec![std::path::PathBuf::from(dir)];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    if !p.ends_with("cyclic") {
+                        stack.push(p);
+                    }
+                } else if p.extension().is_some_and(|x| x == "narfi") {
+                    files.push(p.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+    files.sort();
+    let check = |src: &str, f: &str| narfi::api::check_json_in(src, Some(3), "ja", &|s| narfi::module::load_and_check(s, Some(Path::new(f))));
+    for f in &files {
+        let src = std::fs::read_to_string(f).unwrap();
+        narfi::module::set_cache_enabled(false);
+        let fresh = check(&src, f);
+        narfi::module::set_cache_enabled(true);
+        let first = check(&src, f);
+        let second = check(&src, f);
+        // 本体だけを書き換えた（冒頭の import は同じ）ときも同じ
+        let edited = format!("{src}\n-- edit\n");
+        narfi::module::set_cache_enabled(false);
+        let fresh_e = check(&edited, f);
+        narfi::module::set_cache_enabled(true);
+        let cached_e = check(&edited, f);
+        assert_eq!(fresh, first, "{f}: 使い回しの 1 回目が違う");
+        assert_eq!(fresh, second, "{f}: 使い回しの 2 回目が違う");
+        assert_eq!(fresh_e, cached_e, "{f}: 本体を変えたときに違う");
+    }
+}
+
+/// 読み込みの使い回し：import したファイルを書き換えたら、使い回さずに読み直す
+#[test]
+fn import_cache_notices_changed_library() {
+    std::thread::Builder::new().stack_size(256 << 20).spawn(|| {
+        use std::path::Path;
+        let dir = std::env::temp_dir().join(format!("narfi-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lib = dir.join("mylib.narfi");
+        let main = dir.join("main.narfi");
+        std::fs::write(&lib, "thm one_pos :\n  |- 1 > 0\n\ndecide\n").unwrap();
+        let src = "import mylib\n\nthm use_it :\n  |- 1 > 0\n\none_pos\n";
+        std::fs::write(&main, src).unwrap();
+        let check = || narfi::api::check_json_in(src, Some(1), "ja", &|s| narfi::module::load_and_check(s, Some(Path::new(&main))));
+        narfi::module::set_cache_enabled(true);
+        let a = check();
+        assert!(a.contains("\"status\":\"ok\""), "{a}");
+        // ライブラリの定理の名前を変える：main の one_pos は見つからなくなるはず
+        std::fs::write(&lib, "thm one_pos2 :\n  |- 1 > 0\n\ndecide\n").unwrap();
+        let b = check();
+        assert!(b.contains("\"status\":\"error\""), "ライブラリの変更が反映されない:\n{b}");
+        // 元に戻せば、また通る
+        std::fs::write(&lib, "thm one_pos :\n  |- 1 > 0\n\ndecide\n").unwrap();
+        let c = check();
+        assert_eq!(a, c);
+    }).unwrap().join().unwrap();
+}

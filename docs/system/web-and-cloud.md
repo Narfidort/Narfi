@@ -7,7 +7,7 @@
 - AI の中継 `/api/ai_chat`（curl で送る。キーはコマンドの引数に出さず、設定を標準入力から渡す）。
 
 ## Web 版（https://narfi.pages.dev）
-- `scripts/build-site.sh` が `site/` を作る：`index.html`（エディタ）・`narfi.wasm`（検査器）・`narfi-web.js`（`src/web_static.js`）・`tutorial.js`・`course.js`・KaTeX。
+- `scripts/build-site.sh` が `site/` を作る：`index.html`（エディタ）・`narfi.wasm`（検査器）・`narfi-web.js`（`src/web_static.js`）・`narfi-worker.js`（`src/web_worker.js`。検査器を別スレッドで動かす）・`tutorial.js`・`course.js`・KaTeX。
 - `narfi-web.js` が `fetch('/api/…')` を横取りして、WebAssembly とブラウザの保存領域（localStorage）で処理する。
 
 ## クラウド保存

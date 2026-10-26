@@ -4374,16 +4374,29 @@ function renderInlineMarkdownMath(md) {
   return out;
 }
 
+// 検査は 1 つずつ：検査中に編集されたら、終わってから最新の本文でもう 1 度だけ検査する（途中の版は飛ばす）。
+// 検査の間に別のファイルに切り替えたら、届いた結果は捨てる
+let checkBusy = false, checkAgain = false;
 async function runCheckApi() {
+  if (checkBusy) { checkAgain = true; return; }
+  checkBusy = true;
+  try { await runCheckOnce(); } finally {
+    checkBusy = false;
+    if (checkAgain) { checkAgain = false; runCheckApi(); }
+  }
+}
+async function runCheckOnce() {
   const src = serializeDocToAscii();
   const cursor_line = cursor.lineIdx + 1;
+  const path = currentFilePath;
   try {
     const resp = await fetch("/api/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src, cursor_line, path: currentFilePath, locale: prefLang })
+      body: JSON.stringify({ src, cursor_line, path, locale: prefLang })
     });
     const data = await resp.json();
+    if (path !== currentFilePath) return;
     // 検査した本文（行番号の対応づけに使う：結果が届くまでに編集されたとき、印や ∴ を正しい行に出す）
     data.srcLines = src.split("\n").map((l) => l.trim());
     lastCheckData = data;

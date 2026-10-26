@@ -21,7 +21,7 @@ use std::collections::{BTreeSet, HashSet};
 
 // ================================================================ 環境
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Env {
     pub kernel: KEnv,
     /// 検証に失敗した定理（使おうとしたときに分かりやすく伝えるため）

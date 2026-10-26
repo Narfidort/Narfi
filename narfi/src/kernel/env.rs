@@ -84,7 +84,7 @@ impl Deps {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KEnv {
     pub defs: HashMap<String, KDef>,
     pub thms: HashMap<String, Schema>,

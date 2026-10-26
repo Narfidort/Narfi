@@ -265,7 +265,7 @@ pub fn lam_eta(x: &str, sort: &str, t: &Term) -> Term {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SyntaxTable {
     pub notations: Vec<Notation>,
     /// def で定義した述語の名前 → 引数の数
@@ -304,6 +304,16 @@ pub fn display_name_lines(name: &str) -> String {
 
 thread_local! {
     static SYNTAX: RefCell<SyntaxTable> = RefCell::new(SyntaxTable::default());
+}
+
+/// 記法の表の写し（読み込みの使い回し用：module.rs）
+pub fn syntax_snapshot() -> SyntaxTable {
+    with_syntax(|t| t.clone())
+}
+
+/// 記法の表を写しに戻す
+pub fn syntax_restore(t: SyntaxTable) {
+    SYNTAX.with(|s| *s.borrow_mut() = t);
 }
 
 pub fn reset_syntax() {

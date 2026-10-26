@@ -23,7 +23,7 @@
 | `syntax.rs` | 項 `Term`・論理式 `Formula`、代入（hereditary substitution）、表示（Unicode・LaTeX）、notation の表 |
 | `types.rs` | 型 `Ty` の読み書き |
 | `parser.rs` | 字句解析・構文解析、ロケールの読みの正規化、版（edition）・訳名（@name）、`rec` の展開、数列の添字、宣言ごとの回復（`Item::Broken`）、古い書き方の警告 |
-| `module.rs` | prelude と import の読み込み（ディスク・メモリ）、循環 import の検出 |
+| `module.rs` | prelude と import の読み込み（ディスク・メモリ）、循環 import の検出。prelude と、ファイル冒頭の import までを読んだ状態を覚えておき、読んだファイルの中身が変わっていなければ使い回す（編集のたびに読み直さない） |
 | `sorts.rs` | 型（ソート）の推論 |
 | `elab/`（`mod.rs`・`stmt.rs`・`just.rs`・`unify.rs`） | 推敲器。文ごとの検査と証明項の組み立て、根拠の解釈と探索、単一化（高階のパターン単一化を含む）、各行の文脈・goal・次の一手の記録（`StepTrace`） |
 | `derivation.rs` | 証明木（表示用）：kernel に検算させながら部分証明の結論を記録して、Gentzen 式の木にする |
@@ -37,6 +37,7 @@
 | `prelude.narfi` | 核の公理（等号・ペアノ・外延性・選択・再帰定理）と最初の定理 |
 | `web_ui.html` | エディタ（[editor.md](editor.md)） |
 | `web_static.js` | Web 版：`/api/…` をブラウザの中で処理する（WebAssembly と保存領域・クラウド同期） |
+| `web_worker.js` | Web 版：検査器を Web Worker（別スレッド）で動かす。検査中も画面が止まらない（使えないときは画面と同じスレッドで動かす） |
 | `tutorial.js`・`course.js` | Learn タブのチュートリアルとコース |
 
 ## 標準ライブラリ（`narfi/lib/`）

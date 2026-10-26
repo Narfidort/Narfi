@@ -28,17 +28,61 @@
 
   // ---------------------------------------------------------------- WebAssembly
 
+  // 検査器（narfi.wasm）は、使えれば Web Worker（別スレッド）で動かす。検査中も画面が止まらない。
+  // 使えなければ、画面と同じスレッドで動かす。どちらでも callAsync(req) で呼ぶ（届いた順に処理される）
   let wasm = null;
   let wasmTag = null;
+  let worker = null;
+  let nextId = 1;
+  const waiting = new Map();
+  function sendAllFiles(post) {
+    const fs = loadFs();
+    for (const [path, src] of Object.entries(fs)) post({ op: "put_file", path, src });
+  }
   async function instantiate() {
+    const head = await realFetch("/narfi.wasm", { method: "HEAD" }).catch(() => null);
+    wasmTag = head && head.headers.get("etag");
+    if (typeof Worker !== "undefined" && (await startWorker())) return;
+    await instantiateMain();
+  }
+  // Worker を起こし、検査器の用意ができるまで待つ。だめなら false（画面と同じスレッドで動かす）
+  function startWorker() {
+    return new Promise((done) => {
+      let w;
+      try { w = new Worker("/narfi-worker.js"); } catch (_) { return done(false); }
+      w.onmessage = (e) => {
+        const { id, res, error } = e.data;
+        if (id === -1) {
+          if (error) { w.terminate(); return done(false); }
+          worker = w;
+          sendAllFiles((req) => w.postMessage({ id: 0, req }));
+          return done(true);
+        }
+        const p = waiting.get(id);
+        waiting.delete(id);
+        if (!p) return;
+        if (error) p.reject(new Error(error)); else p.resolve(res);
+      };
+      w.onerror = (e) => {
+        e.preventDefault && e.preventDefault();
+        if (!worker) { w.terminate(); return done(false); }
+        // 動いている途中で Worker ごと落ちた：画面と同じスレッドに切り替え、待っている要求をやり直す
+        worker = null;
+        w.terminate();
+        const pending = [...waiting.values()];
+        waiting.clear();
+        ready = instantiateMain();
+        for (const p of pending) ready.then(() => p.resolve(callMain(p.req))).catch(p.reject);
+      };
+    });
+  }
+  async function instantiateMain() {
     const resp = await realFetch("/narfi.wasm");
-    wasmTag = resp.headers.get("etag");
     const bytes = await resp.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(bytes, {});
     wasm = instance.exports;
     // 保存領域のファイルを検査器に知らせる（import できるように）
-    const fs = loadFs();
-    for (const [path, src] of Object.entries(fs)) call({ op: "put_file", path, src });
+    sendAllFiles(callMain);
   }
 
   // 新しい版が出たら知らせる（開いたままのタブは古い検査器のままなので）
@@ -60,7 +104,8 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
   setInterval(checkUpdate, 10 * 60 * 1000);
 
-  function call(req) {
+  // 画面と同じスレッドで呼ぶ（Worker が使えないとき）
+  function callMain(req) {
     const b = enc.encode(JSON.stringify(req));
     const p = wasm.narfi_alloc(b.length);
     new Uint8Array(wasm.memory.buffer, p, b.length).set(b);
@@ -69,11 +114,28 @@
       n = wasm.narfi_call(p, b.length);
     } catch (e) {
       // 検査器の中で止まった（桁あふれなど）。作り直して、この要求はエラーとして返す
-      ready = instantiate();
+      ready = instantiateMain();
       throw e;
     }
     wasm.narfi_free(p, b.length);
     return JSON.parse(dec.decode(new Uint8Array(wasm.memory.buffer, wasm.narfi_out_ptr(), n)));
+  }
+
+  // 検査器を呼ぶ（Worker なら別スレッドで、届いた順に）
+  async function callAsync(req) {
+    await ready;
+    if (!worker) return callMain(req);
+    const id = nextId++;
+    return new Promise((resolve, reject) => {
+      waiting.set(id, { resolve, reject, req });
+      worker.postMessage({ id, req });
+    });
+  }
+
+  // 返事の要らない要求（ファイルの登録・削除）。順番は保たれる
+  function callNoWait(req) {
+    if (worker) worker.postMessage({ id: 0, req });
+    else ready.then(() => (worker ? worker.postMessage({ id: 0, req }) : callMain(req)));
   }
 
   const realFetch = window.fetch.bind(window);
@@ -205,7 +267,7 @@
     const fs = loadFs();
     delete fs[path];
     saveFs(fs);
-    call({ op: "remove_file", path });
+    callNoWait({ op: "remove_file", path });
   }
 
   function scheduleSync(ms) {
@@ -226,7 +288,7 @@
     const fs = loadFs();
     fs[path] = src;
     saveFs(fs);
-    call({ op: "put_file", path, src });
+    callNoWait({ op: "put_file", path, src });
   }
 
   async function push(m, fs, path) {
@@ -483,9 +545,9 @@
 
   // ---------------------------------------------------------------- /api/… の処理
 
-  function workspace() {
+  async function workspace() {
     const fs = loadFs();
-    const std = call({ op: "stdlib_list" }).files || [];
+    const std = (await callAsync({ op: "stdlib_list" })).files || [];
     return {
       ok: true,
       web: true,
@@ -580,7 +642,7 @@
     const fs = loadFs();
     fs[path] = src;
     saveFs(fs);
-    call({ op: "put_file", path, src });
+    callNoWait({ op: "put_file", path, src });
     cloudNoteLocalChange(path);
   }
 
@@ -589,20 +651,20 @@
     const body = bodyOf(opts);
     switch (path) {
       case "/api/check":
-        return json(call({ op: "check", src: body.src || "", path: body.path && !body.path.startsWith("lib:") ? body.path : "", cursor_line: body.cursor_line || 0, locale: body.locale || "ja" }));
+        return json(await callAsync({ op: "check", src: body.src || "", path: body.path && !body.path.startsWith("lib:") ? body.path : "", cursor_line: body.cursor_line || 0, locale: body.locale || "ja" }));
       case "/api/ai_chat": {
         // AI への要求は Pages Functions の中継（functions/cloud/ai.js）へ。キーは保存されない
         const r = await realFetch("/cloud/ai", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "X-Narfi-Cloud": "1", "Content-Type": "application/json" }, body: JSON.stringify(body) });
         return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json" } });
       }
       case "/api/convert":
-        return json(call({ op: "convert", src: body.src || "", mode: body.mode || "" }));
+        return json(await callAsync({ op: "convert", src: body.src || "", mode: body.mode || "" }));
       case "/api/workspace":
-        return json(workspace());
+        return json(await workspace());
       case "/api/file": {
         const p = query.get("path") || "";
         if (p.startsWith("lib:std/")) {
-          const r = call({ op: "stdlib_get", path: p.slice("lib:std/".length) });
+          const r = await callAsync({ op: "stdlib_get", path: p.slice("lib:std/".length) });
           return json(r.ok ? { ok: true, path: p, src: r.src } : { ok: false, error: "ない" });
         }
         const fs = loadFs();
@@ -650,7 +712,7 @@
           const rel = (f.webkitRelativePath || f.name).split("/").slice(1).join("/") || f.name;
           storeFile(rel, await f.text());
         }
-        return json(workspace());
+        return json(await workspace());
       }
       case "/api/reveal": {
         const fs = loadFs();
