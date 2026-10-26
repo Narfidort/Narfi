@@ -2494,9 +2494,8 @@ fn expand_rec(text: &[String], line: usize) -> PResult<String> {
     p.expect_sym(":")?;
     let res = p.ty()?;
     p.expect_end()?;
-    if res.contains('→') {
-        return err(format!("rec の値の型 {res} が関数の型（いまは数・命題などの型だけ）"));
-    }
+    // 値の型は何でもよい（関数の型も）。式の中では括弧で囲んで、ℕ → ℝ → ℝ と読まれないようにする
+    let res_p = if res.contains('→') { format!("({res})") } else { res.clone() };
     if text.len() != 3 {
         return err("rec の下には、0 のときと n + 1 のときの 2 つの等式を字下げして書く".into());
     }
@@ -2558,8 +2557,8 @@ fn expand_rec(text: &[String], line: usize) -> PResult<String> {
     }
     let g_lam = g0.subst(&m, &Term::Var(kv.clone()));
     let g_set = g_lam.subst(&yv, &Term::App(fv.clone(), vec![Term::Var(kv.clone())]));
-    let set = format!("{{{fv} : ℕ → {res} | {fv}(0) = {base} ∧ ∀{kv}:ℕ. {fv}(S({kv})) = {g_set}}}");
-    let lam = format!("(({kv}, {yv}) : ℕ × {res} ↦ {g_lam})");
+    let set = format!("{{{fv} : ℕ → {res_p} | {fv}(0) = {base} ∧ ∀{kv}:ℕ. {fv}(S({kv})) = {g_set}}}");
+    let lam = format!("(({kv}, {yv}) : ℕ × {res_p} ↦ {g_lam})");
     let rn = &params[r].0;
     let ps: Vec<String> = params.iter().map(|(x, t)| format!("{x} : {t}")).collect();
     let others: Vec<&(String, String)> = params.iter().enumerate().filter(|(j, _)| *j != r).map(|(_, p)| p).collect();

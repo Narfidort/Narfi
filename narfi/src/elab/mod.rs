@@ -421,7 +421,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn term_sort(&self, ctx: &Ctx, t: &Term) -> Option<String> {
+    pub(super) fn term_sort(&self, ctx: &Ctx, t: &Term) -> Option<String> {
         let vs = self.var_sorts(ctx);
         crate::sorts::term_sort(&self.env.kernel, &vs, &self.zonk_t(t))
     }

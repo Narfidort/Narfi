@@ -1,0 +1,20 @@
+-- const で宣言した述語記号（型 … → Prop）は、命題の中で述語として使える
+
+const P : ℕ → Prop
+const Sm : (ℝ → ℝ) → Prop
+const D : (ℝ → ℝ) → (ℝ → ℝ)
+
+axiom P.zero : ⊢ P(0)
+axiom P.step : n : ℕ, h : P(n) ⊢ P(n + 1)
+axiom Sm.D : f : ℝ → ℝ, h : Sm(f) ⊢ Sm(D(f))
+
+thm P.one :
+  ⊢ P(0 + 1)
+
+P.step(P.zero)
+
+thm Sm.DD :
+  f : ℝ → ℝ, h : Sm(f)
+  ⊢ D(D(f)) ∈ Sm
+
+Sm.D(Sm.D(h))

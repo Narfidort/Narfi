@@ -1,0 +1,41 @@
+-- 関数の外延性 funext と η 変換（(x ↦ F(x)) は F と同じ）
+
+const D : (ℝ → ℝ) → (ℝ → ℝ)
+const I : (ℝ → ℝ) × ℝ × ℝ → ℝ
+
+rec Dn(f : ℝ → ℝ, j : ℕ) : ℝ → ℝ
+  Dn(f, 0) = f
+  Dn(f, j + 1) = D(Dn(f, j))
+
+-- 各点で等しい関数は等しい（型は使う所から決まる）
+thm fn.ext :
+  f : ℝ → ℝ, g : ℝ → ℝ, h : ∀x:ℝ. f(x) = g(x)
+  ⊢ f = g
+
+funext(h)
+
+thm fn.ext.lam :
+  f : ℝ → ℝ, g : ℝ → ℝ, h : ∀x:ℝ. f(x) = g(x)
+  ⊢ (t : ℝ ↦ f(t)) = (t : ℝ ↦ g(t))
+
+funext(h)
+
+-- 値が関数の定義（rec）の適用でも、η が効く
+thm fn.ext.rec :
+  f : ℝ → ℝ, g : ℝ → ℝ, m : ℕ, h : ∀x:ℝ. Dn(f, m)(x) = g(x)
+  ⊢ Dn(f, m) = g
+
+funext(h)
+
+-- η：積分の被積分関数 (t ↦ g(t)) は g と同じ
+thm eta.int :
+  g : ℝ → ℝ
+  ⊢ I((t : ℝ ↦ g(t)), 0, 1) = I(g, 0, 1)
+
+refl
+
+thm eta.int.rec :
+  g : ℝ → ℝ, m : ℕ
+  ⊢ I((t : ℝ ↦ Dn(g, m)(t)), 0, 1) = I(Dn(g, m), 0, 1)
+
+refl

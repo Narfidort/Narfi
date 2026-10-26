@@ -414,7 +414,8 @@ impl<'a> KCtx<'a> {
                     }
                     return Ok(());
                 }
-                let Some(s) = self.var_sort(p) else {
+                // 文脈の変数のほか、const で宣言した述語記号（型 … → Prop）も使える
+                let Some(s) = self.var_sort(p).or_else(|| self.env.consts.get(p).cloned()) else {
                     return kerr(format!("述語 `{p}` が文脈にない"));
                 };
                 match parse_ty(&s)? {

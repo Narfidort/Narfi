@@ -24,3 +24,22 @@ fact(1)
   = (0 + 1) * fact(0)   by fact.succ(0)
   = 1                   by fact.zero
 
+
+-- 値が関数の rec（j 回微分した関数）：値の型は何でもよい
+const D : (ℝ → ℝ) → (ℝ → ℝ)
+
+rec Dn(f : ℝ → ℝ, j : ℕ) : ℝ → ℝ
+  Dn(f, 0) = f
+  Dn(f, j + 1) = D(Dn(f, j))
+
+thm Dn.step :
+  f : ℝ → ℝ, j : ℕ
+  ⊢ Dn(f, j + 1) = D(Dn(f, j))
+
+Dn.succ(f, j)
+
+thm Dn.base :
+  f : ℝ → ℝ
+  ⊢ Dn(f, 0) = f
+
+Dn.zero(f)

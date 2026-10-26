@@ -665,9 +665,44 @@ impl Term {
         }
     }
 
-    /// 束縛変数の名前を位置で決まる名前に付け替えたもの（α 同値なら同じになる）
+    /// η 縮約（先頭だけ）：(x ↦ F(x)) を F にする（F が x を含まないとき）。
+    /// `named` が偽のときは、F が式（`@(F, x)`）の場合だけ縮約する（名前 f の適用 f(x) は、組み込みの関数と区別できないので縮約しない）
+    pub fn eta_top(&self, named: bool) -> Term {
+        if let Term::Lam(ps, b) = self {
+            let is_params = |args: &[Term]| args.len() == ps.len() && args.iter().zip(ps).all(|(a, (p, _))| matches!(a, Term::Var(v) if v == p));
+            match &**b {
+                // @(F, a1, …, x1, …, xn) で、末尾の n 個が束縛変数そのもの：(x1, …, xn ↦ …) を縮めて @(F, a1, …) （a1… がなければ F）にする
+                Term::App(f, args) if f == "@" && args.len() > ps.len() && is_params(&args[args.len() - ps.len()..]) => {
+                    let head: Vec<Term> = args[..args.len() - ps.len()].to_vec();
+                    let mut vs = BTreeSet::new();
+                    for h in &head {
+                        h.vars(&mut vs);
+                    }
+                    if !ps.iter().any(|(p, _)| vs.contains(p)) {
+                        return if head.len() == 1 { head[0].clone() } else { Term::App("@".to_string(), head) };
+                    }
+                }
+                Term::App(f, args) if named && f != "@" && is_params(args) && !ps.iter().any(|(p, _)| p == f) => {
+                    return Term::Var(f.clone());
+                }
+                _ => {}
+            }
+        }
+        self.clone()
+    }
+
+    /// 束縛変数の名前を位置で決まる名前に付け替えたもの（α 同値なら同じになる。η 縮約も済ませる）
     pub fn canonical(&self) -> Term {
-        self.canon_in(&mut 0)
+        self.eta_all().canon_in(&mut 0)
+    }
+
+    /// η 縮約を中まで（束縛変数の名前を付け替える前に済ませる。付け替えの番号が縮約の前後でずれないように）
+    pub fn eta_all(&self) -> Term {
+        match self {
+            Term::App(f, args) => Term::App(f.clone(), args.iter().map(|a| a.eta_all()).collect()),
+            Term::Lam(ps, b) => Term::Lam(ps.clone(), Box::new(b.eta_all())).eta_top(true),
+            _ => self.clone(),
+        }
     }
 
     fn canon_in(&self, k: &mut usize) -> Term {

@@ -328,8 +328,11 @@ impl<'a> Infer<'a> {
                             ns.push(self.term(a)?);
                         }
                         let res = self.hole(false, Some(format!("{f}(…)")));
-                        self.unify(&fty, &IT::Fun(ns, Box::new(res.clone())))
-                            .map_err(|e| format!("`{f}` の適用：{e}"))?;
+                        let curried = ns.len() > 1 && matches!(&fty, IT::Fun(ps, r) if ps.len() == 1 && matches!(**r, IT::Fun(..)));
+                        self.unify(&fty, &IT::Fun(ns, Box::new(res.clone()))).map_err(|e| {
+                            let hint = if curried { "。複数の引数をまとめて渡す関数の型は A × B → C と書く（A → B → C は 1 つずつ渡す形で、f(a)(b) と書く）" } else { "" };
+                            format!("`{f}` の適用：{e}{hint}")
+                        })?;
                         Ok(res)
                     }
                 }

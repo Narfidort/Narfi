@@ -120,7 +120,7 @@ fn rule_names() {
 #[test]
 fn primitive_recursion() {
     let out = run(&["tests/rec.narfi"]);
-    for n in ["sum.zero", "sum.succ", "fact.zero", "fact.succ", "sum2", "fact1"] {
+    for n in ["sum.zero", "sum.succ", "fact.zero", "fact.succ", "sum2", "fact1", "Dn.zero", "Dn.succ", "Dn.step", "Dn.base"] {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
     let dir = std::env::temp_dir().join(format!("narfi-rec-{}", std::process::id()));
@@ -136,6 +136,26 @@ fn primitive_recursion() {
         let out = run(&[f.to_str().unwrap()]);
         assert!(out.contains("構文エラー") && out.contains(msg), "{src}\n{out}");
     }
+}
+
+/// const で宣言した述語記号（… → Prop）は、命題の中で述語として使える（`f ∈ Sm` の書き方も）
+#[test]
+fn const_predicates() {
+    let out = run(&["tests/const_pred.narfi"]);
+    for n in ["P.one", "Sm.DD"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+    assert!(!out.contains("✗"), "{out}");
+}
+
+/// funext（型は使う所から決まる）と η 変換（(x ↦ F(x)) は F と同じ）
+#[test]
+fn funext_and_eta() {
+    let out = run(&["tests/funext.narfi"]);
+    for n in ["fn.ext", "fn.ext.lam", "fn.ext.rec", "eta.int", "eta.int.rec"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+    assert!(!out.contains("✗"), "{out}");
 }
 
 /// 行列（関数を値にする定義・β・Σ）：2×2 のケイリー・ハミルトンなどがすべて通る

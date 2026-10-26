@@ -346,8 +346,20 @@ impl<'a> Checker<'a> {
         let ok = self.uf(&a, &b);
         if !ok {
             self.restore(save);
+            return false;
         }
-        ok
+        // 型が決まっていない関数の穴（funext の f など）が、型の分かる項に決まったら、その項の型に合わせる
+        for i in 0..self.fn_metas.len() {
+            let Some(t) = self.fn_metas[i].0.clone() else { continue };
+            let sort = self.zonk_sort(&self.fn_metas[i].1);
+            if !sort.contains("?σ") {
+                continue;
+            }
+            if let Some(ts) = self.term_sort(ctx, &t) {
+                self.unify_sort(&sort, &ts);
+            }
+        }
+        true
     }
 
     fn fresh_var(&mut self) -> Term {
@@ -405,7 +417,16 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn ut(&mut self, a: &Term, b: &Term) -> bool {
-        let (a, b) = (self.zonk_t(a), self.zonk_t(b));
+        // η：(x ↦ F(x)) と F は同じ（関数の変数 f と (x ↦ f(x)) も）
+        let (a, b) = (self.zonk_t(a).eta_top(false), self.zonk_t(b).eta_top(false));
+        let eta_var = |l: &Term, v: &Term| match (l, v) {
+            (Term::Lam(ps, body), Term::Var(f)) => matches!(&**body, Term::App(g, args) if g == f && args.len() == ps.len()
+                && args.iter().zip(ps).all(|(x, (p, _))| matches!(x, Term::Var(y) if y == p)) && !ps.iter().any(|(p, _)| p == f)),
+            _ => false,
+        };
+        if eta_var(&a, &b) || eta_var(&b, &a) {
+            return true;
+        }
         match (&a, &b) {
             (Term::Meta(m), Term::Meta(n)) if m == n => true,
             (Term::Meta(m), t) | (t, Term::Meta(m)) => {

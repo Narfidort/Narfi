@@ -286,7 +286,7 @@ fn main() -> ExitCode {
 }
 
 fn print_report(path: &str, r: &Report) {
-    if r.is_axiom {
+    if r.is_axiom && r.err.is_none() {
         println!("  公理  {}", r.name);
         return;
     }
