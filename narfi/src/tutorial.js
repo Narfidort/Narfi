@@ -781,7 +781,7 @@ window.NARFI_TUTORIAL = [
         "p": "**値の定義**は `def f(x : Real) : Real := 式`（`:=` は「〜と定める」。値を返すもの）。性質の定義は `:⇔`、値の定義は `:=` と使い分ける。"
       },
       {
-        "p": "**記法**：定義の下に字下げして `notation 型紙` と書くと、教科書の書き方で使える（例：`notation a_n -> alpha (n -> \\infty)`。次のレッスン）。"
+        "p": "**記法**：定義の下に字下げして `notation 型紙` と書くと、教科書の書き方で使える（例：`notation a_n -> alpha (n -> \\infty)`。レッスン 13）。"
       },
       {
         "type": [
@@ -815,7 +815,121 @@ window.NARFI_TUTORIAL = [
     ]
   },
   {
-    "title": "12. 数列の極限",
+    "title": "12. ∀∃ と ∃∀（量化子の順番）",
+    "blocks": [
+      {
+        "p": "**ねらい**：「すべての」と「ある」が重なった命題を書く・使う。**順番を入れ替えると意味が変わる**。ε-δ・ε-N 論法でつまずく所の多くは、ここにある。"
+      },
+      {
+        "paper": [
+          "**∀x∃y 型**（どの $x$ にも、それに合う $y$ がある）：「どの実数 $x$ にも、$x$ より大きい実数 $y$ がある」は**正しい**。$x$ を見てから $y = x + 1$ と選べばよい。",
+          "**∃y∀x 型**（1 つの $y$ が、どの $x$ にも通用する）：「どの実数 $x$ よりも大きい実数 $y$ がある」は**正しくない**。そういう $y$ があったとすると、$x = y + 1$ とおいて $y > y + 1$ となり矛盾。"
+        ]
+      },
+      {
+        "p": "違いは、**選ぶときに相手がもう決まっているかどうか**（$y$ を選ぶとき、$x$ はもう決まっているか）。$\\forall x\\ \\exists y$ では $x$ が先なので、$y$ は $x$ を使って選んでよい（$y$ は $x$ に依存する）。$\\exists y\\ \\forall x$ では $y$ を先に 1 つ決め、そのあとどんな $x$ が来ても成り立たないといけない。"
+      },
+      {
+        "p": "Narfi では、**書く順番がそのまま量化子の順番**になる。goal の先頭から順に、∀ なら `Fix`、∃ なら `choose` を書く。"
+      },
+      {
+        "code": "thm bigger :\n  |- forall x:Real. exists y:Real. y > x\n\nFix x\n  choose x + 1\n  linarith\n\nthm no_biggest :\n  |- not (exists y:Real. forall x:Real. y > x)\n\nassume h : exists y:Real. forall x:Real. y > x\n  Obtain y | hy by h\n  k : y > y + 1 by hy(y + 1)\n  linarith"
+      },
+      {
+        "steps": [
+          [
+            "Fix x",
+            "∀x：まず $x$ を任意にとる"
+          ],
+          [
+            "choose x + 1",
+            "∃y：$y$ として $x + 1$ を挙げる。$x$ はもう決まっているので、使ってよい"
+          ],
+          [
+            "Obtain y | hy by h",
+            "「1 つの $y$ がどの $x$ にも通用する」から、その $y$ を取り出す"
+          ],
+          [
+            "k : y > y + 1 by hy(y + 1)",
+            "$hy$ はどの $x$ にも使えるので、$x = y + 1$ を入れる（$y$ を取り出したあとなので、$y$ を使った値を入れてよい）"
+          ],
+          [
+            "linarith",
+            "$y > y + 1$ は矛盾。`not` を示すには、矛盾を出せばよい"
+          ]
+        ]
+      },
+      {
+        "h": "使う側：仮定が ∀∃ か ∃∀ か"
+      },
+      {
+        "p": "仮定 $h : \\forall x\\ \\exists y.\\ P$ は、**先に x を渡してから** $y$ を取り出す：`Obtain y | hy by h(x)`。取り出した $y$ はその $x$ 用のもの（$x$ を変えれば $y$ も変わりうる）。依存を `Obtain y(x) | hy by h(x)` と書いておくと、検査器が確かめる。"
+      },
+      {
+        "p": "仮定 $h : \\exists y\\ \\forall x.\\ P$ は、**先に** $y$ を 1 つ取り出す：`Obtain y | hy by h`。その $y$ はどの $x$ にも使える（`hy(x)`）。だから $\\exists y\\ \\forall x$ から $\\forall x\\ \\exists y$ は出る（逆は出ない。上の例が反例）。"
+      },
+      {
+        "code": "thm ex_all_to_all_ex :\n  f : Real -> Real, h : exists M:Real. forall x:Real. f(x) <= M\n  |- forall x:Real. exists M:Real. f(x) <= M\n\nObtain M | hM by h\nFix x\n  choose M\n  hM(x)"
+      },
+      {
+        "h": "ε-N 論法では"
+      },
+      {
+        "p": "$a_n \\to \\alpha$ は「$\\forall \\varepsilon > 0\\ \\exists N\\ \\forall n \\ge N.\\ |a_n - \\alpha| < \\varepsilon$」。$N$ は $\\varepsilon$ のあとなので **ε ごとに選んでよい**（$\\varepsilon$ が小さいほど $N$ は大きくなるのがふつう）。$n$ は $N$ のあとなので、$N$ を $n$ を使って選んではいけない。順番を入れ替えた「$\\exists N\\ \\forall \\varepsilon > 0\\ \\forall n \\ge N$」は、「ある番号から先はずっと $a_n = \\alpha$」というずっと強い（ふつうは成り立たない）主張になる。"
+      },
+      {
+        "p": "証明では `Obtain N(eps) | hN by …` と書くと、$N$ が $\\varepsilon$ にだけ依ることを検査器が確かめる（次の 2 つのレッスンで使う）。"
+      },
+      {
+        "type": [
+          [
+            "forall x:Real. exists y:Real. …",
+            "∀x∃y（$y$ は $x$ ごと）"
+          ],
+          [
+            "exists y:Real. forall x:Real. …",
+            "∃y∀x（1 つの $y$ がすべての $x$ に）"
+          ],
+          [
+            "Obtain y(x) | hy by h(x)",
+            "$y$ が $x$ に依ることを書いて取り出す"
+          ]
+        ]
+      },
+      {
+        "pitfalls": [
+          [
+            "「Fix できない：goal … は ∀ の形ではない」",
+            "goal が ∃ で始まっている。∃y∀x なら、先に `choose`（$y$ を決める）、それから `Fix x`"
+          ],
+          [
+            "「`x` は文脈にない」（choose の行で）",
+            "∃y∀x で、まだとっていない $x$ を使って $y$ を選ぼうとした。$y$ は $x$ によらない値で選ぶ"
+          ],
+          [
+            "「依存関係の宣言が合わない」",
+            "`Obtain N(eps)` と書いたのに、$n$ をとったあと（`Fix n` の中）で取り出している。取り出す行を `Fix n` より前に置く"
+          ]
+        ]
+      }
+    ],
+    "file": "learn/12-量化子の順番.narfi",
+    "task": "(1) どの実数 $x$ にも、$x + y = 0$ となる $y$ がある（∀∃ を**作る**）。(2) ある実数 $m$ があって、どの $x$ でも $x^2 + 1 > m$（∃∀ を**作る**）。(3) どの $x$ にも $f(x)$ より大きい $y$ があるなら、どの $x$ にも $f(x) + 1$ より大きい $y$ がある（∀∃ を**使う**）。",
+    "hints": [
+      "(1) goal は ∀x から始まる：`Fix x`。次は ∃y：$x$ を使って $y$ を選んでよい（$x + y = 0$ になる $y$ は？）。最後は `ring`。",
+      "(2) goal は ∃m から始まる：先に `choose`。$m$ は $x$ を使わずに選ぶ（$x^2 + 1$ はいつも 1 以上）。`choose 0` のあと `Fix x`、`h : x^2 >= 0 by sq_nonneg`、`linarith`。",
+      "(3) `Fix x` のあと、仮定に $x$ を渡して取り出す：`Obtain y(x) | hy by h(x)`。$y + 1$ を挙げて（`choose y + 1`）、`linarith`。"
+    ],
+    "exercise": "-- 練習 12：∀∃ と ∃∀ を作る・使う\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\naxiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm neg_inverse :\n  |- forall x:Real. exists y:Real. x + y = 0\n\nsorry\n\nthm lower_bound :\n  |- exists m:Real. forall x:Real. x^2 + 1 > m\n\nsorry\n\nthm above_shift :\n  f : Real -> Real, h : forall x:Real. exists y:Real. y > f(x)\n  |- forall x:Real. exists y:Real. y > f(x) + 1\n\nsorry\n",
+    "answer": "axiom sq_nonneg : x : Real |- x^2 >= 0\n\nthm neg_inverse :\n  |- forall x:Real. exists y:Real. x + y = 0\n\nFix x\n  choose -x\n  ring\n\nthm lower_bound :\n  |- exists m:Real. forall x:Real. x^2 + 1 > m\n\nchoose 0\nFix x\n  h : x^2 >= 0 by sq_nonneg\n  linarith\n\nthm above_shift :\n  f : Real -> Real, h : forall x:Real. exists y:Real. y > f(x)\n  |- forall x:Real. exists y:Real. y > f(x) + 1\n\nFix x\n  Obtain y(x) | hy by h(x)\n  choose y + 1\n  linarith\n",
+    "uses": [
+      "Fix x\n  choose -x",
+      "choose 0\nFix x",
+      "Obtain y(x) | hy by h(x)"
+    ]
+  },
+  {
+    "title": "13. 数列の極限",
     "blocks": [
       {
         "p": "**ねらい**：数列 $a_n$ が $\\alpha$ に収束する（$\\varepsilon$-$N$ 論法）を定義し、使う。数列は $a : \\mathbb{N} \\to \\mathbb{R}$ と宣言すると $a_n$ と書ける。"
@@ -880,14 +994,14 @@ window.NARFI_TUTORIAL = [
         ]
       }
     ],
-    "file": "learn/12-極限.narfi",
+    "file": "learn/13-極限.narfi",
     "task": "$a_n \\to \\alpha$ ならば、ある番号 $N$ から先は $a_n < \\alpha + 1$ であることを示す（収束する数列は、いずれ上から抑えられる）。",
     "hints": [
       "定義の $\\varepsilon$ に 1 を入れる。$1 > 0$ の根拠を `one : 1 > 0 by decide` と書き留め、`Obtain N | hN by h(1, one)`。",
       "`choose N` のあと `Fix n | h_n : n >= N`。`k : abs(a_n - alpha) < 1 by hN(n, h_n)`。",
       "絶対値をはずすのに `abs_lt` を使う：`l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)`。あとは `linarith`。"
     ],
-    "exercise": "-- 練習 12：いずれ上から抑えられる\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\nsorry\n",
+    "exercise": "-- 練習 13：いずれ上から抑えられる\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\nsorry\n",
     "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom abs_lt : x : Real, e : Real, h : abs(x) < e |- -e < x and x < e\n\nthm eventually_below :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- exists N:Nat. forall n:Nat>=N. a_n < alpha + 1\n\none : 1 > 0 by decide\nObtain N | hN by h(1, one)\nchoose N\nFix n | h_n : n >= N\n  k : abs(a_n - alpha) < 1 by hN(n, h_n)\n  l : -1 < a_n - alpha and a_n - alpha < 1 by abs_lt(k)\n  linarith\n",
     "uses": [
       "Obtain N | hN by h",
@@ -897,7 +1011,122 @@ window.NARFI_TUTORIAL = [
     ]
   },
   {
-    "title": "13. 数学的帰納法",
+    "title": "14. 極限の証明を自分で書く（実践）",
+    "blocks": [
+      {
+        "p": "**ねらい**：ε-N の証明を、最初から自分で書く。収束の証明は**型が決まっている**ので、型どおりに書けば半分は終わる。残りは「仮定に何を入れるか」を下書きで決めること。"
+      },
+      {
+        "h": "証明の型"
+      },
+      {
+        "keys": [
+          [
+            "Fix eps | h_{eps} : eps > 0",
+            "∀ε>0：示したい収束の $\\varepsilon$ をとる"
+          ],
+          [
+            "Obtain N(eps) | hN by h(○, 根拠)",
+            "仮定の収束に、$\\varepsilon$ から作った ○（$\\varepsilon$ そのもの、$\\varepsilon/2$ など）を入れて $N$ を取り出す。$N$ は $\\varepsilon$ ごと（レッスン 12）"
+          ],
+          [
+            "choose N",
+            "∃N：$N$ を挙げる（いくつかの $N$ をまとめるなら $\\max\\{N_1, N_2\\}$）"
+          ],
+          [
+            "Fix n | h_n : n >= N",
+            "∀n≥N：$n$ をとる"
+          ],
+          [
+            "abs(…) の連鎖",
+            "$|… - …| < \\varepsilon$ を、等式・不等式の連鎖で示す（紙の証明の最後の 1 行）"
+          ]
+        ]
+      },
+      {
+        "p": "いちばん簡単な例：$a_n \\to \\alpha$ なら $a_n + c \\to \\alpha + c$。○ は $\\varepsilon$ そのもので足りる（$|(a_n + c) - (\\alpha + c)| = |a_n - \\alpha|$ なので）。"
+      },
+      {
+        "code": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\nthm lim_add_const :\n  a : Nat -> Real, alpha : Real, c : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_n + c -> alpha + c (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N(eps) | hN by h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    abs(a_n + c - (alpha + c))\n      = abs(a_n - alpha)   by ring\n      < eps                by hN(n, h_n)"
+      },
+      {
+        "h": "下書き：○ と N を逆算する"
+      },
+      {
+        "p": "○ に何を入れるかは、最後の連鎖から**逆に**決める。和 $a_n + b_n \\to \\alpha + \\beta$ なら、三角不等式で $|(a_n + b_n) - (\\alpha + \\beta)| \\le |a_n - \\alpha| + |b_n - \\beta|$。これを $\\varepsilon$ 未満にしたいので、それぞれを $\\varepsilon/2$ 未満にすればよい → ○ は $\\varepsilon/2$。$N$ は $N_1$（$a$ 用）と $N_2$（$b$ 用）の両方より先、つまり $\\max\\{N_1, N_2\\}$。"
+      },
+      {
+        "paper": [
+          "**定理**　$a_n \\to \\alpha$、$b_n \\to \\beta$ ならば $a_n + b_n \\to \\alpha + \\beta$。",
+          "**証明**　$\\varepsilon > 0$ をとる。$n \\ge N_1$ で $|a_n - \\alpha| < \\varepsilon/2$、$n \\ge N_2$ で $|b_n - \\beta| < \\varepsilon/2$ となる $N_1, N_2$ をとり、$N = \\max\\{N_1, N_2\\}$ とおく。$n \\ge N$ なら $|(a_n + b_n) - (\\alpha + \\beta)| \\le |a_n - \\alpha| + |b_n - \\beta| < \\varepsilon/2 + \\varepsilon/2 = \\varepsilon$。$\\blacksquare$"
+        ]
+      },
+      {
+        "p": "教科書の証明は、下書きを消して清書したもの。「$\\varepsilon/2$ とおく」が天下りに見えるのは、逆算の跡が消えているから。練習では、Goal タブで $\\varepsilon$ と示すべきものを見ながら、紙に逆算を書いてから始めるとよい。"
+      },
+      {
+        "p": "使う道具（この練習では公理として置く）：三角不等式 `triangle`（$|x + y| \\le |x| + |y|$）と、`ge_max_left(h_n)`（$n \\ge \\max\\{N_1, N_2\\}$ から $n \\ge N_1$）・`ge_max_right(h_n)`。"
+      },
+      {
+        "h": "定理を使って定理を示す"
+      },
+      {
+        "p": "一度示した定理は、ほかの証明の根拠に使える。$a_n \\to \\alpha$ なら $a_n + a_n \\to \\alpha + \\alpha$ は、和の定理に $h$ を 2 回渡すだけ：`lim_add(h, h)`。ε をとり直す必要はない。"
+      },
+      {
+        "type": [
+          [
+            "N_1, N_2",
+            "添字つきの名前 $N_1, N_2$"
+          ],
+          [
+            "max{N_1, N_2}",
+            "$\\max\\{N_1, N_2\\}$"
+          ],
+          [
+            "eps/2",
+            "$\\varepsilon/2$"
+          ]
+        ]
+      },
+      {
+        "pitfalls": [
+          [
+            "「linarith では … を示せない」（連鎖の最後）",
+            "○ の選び方が合っていない（$\\varepsilon/2$ を 2 つ足すと $\\varepsilon$。$\\varepsilon$ を 2 つ足すと $2\\varepsilon$ で多すぎる）。下書きをやり直す"
+          ],
+          [
+            "hN_1(n, h_n) で「… が合わない」",
+            "$hN_1$ に渡すのは「$n \\ge N_1$」の根拠。$h_n$ は「$n \\ge \\max\\{N_1, N_2\\}$」なので、`ge_max_left(h_n)` にして渡す"
+          ],
+          [
+            "「依存関係の宣言が合わない」",
+            "`Obtain N_1(eps)` を `Fix n` の中に書いている。$N$ を取り出す行は、`choose` より前に置く"
+          ]
+        ]
+      }
+    ],
+    "file": "learn/14-極限の証明.narfi",
+    "task": "(1) $a_n \\to \\alpha$、$b_n \\to \\beta$ ならば $a_n + b_n \\to \\alpha + \\beta$ を、最初から書く。(2) $a_n \\to \\alpha$ ならば $a_n + a_n \\to \\alpha + \\alpha$（(1) を使う）。(3) さらに $a_n + b_n + c \\to \\alpha + \\beta + c$（(1) と上の lim_add_const を使う）。",
+    "hints": [
+      "(1) 型どおり：`Fix eps | h_{eps} : eps > 0`。下書きで ○ = $\\varepsilon/2$。まず `h_2 : eps/2 > 0 by linarith` と書き留める。",
+      "(1) `Obtain N_1(eps) | hN_1 by ha(eps/2, h_2)`、同じく $N_2$。`choose max{N_1, N_2}`、`Fix n | h_n : n >= max{N_1, N_2}`。",
+      "(1) `k_1 : abs(a_n - alpha) < eps/2 by hN_1(n, ge_max_left(h_n))`、同じく $k_2$。",
+      "(1) 連鎖：`abs(a_n + b_n - (alpha + beta))`、`= abs((a_n - alpha) + (b_n - beta)) by ring`、`<= abs(a_n - alpha) + abs(b_n - beta) by triangle`、`< eps/2 + eps/2 by k_1, k_2`、`= eps by ring`。",
+      "(2) `lim_add(h, h)` の 1 行。(3) 内側から：`lim_add(ha, hb)` が $a_n + b_n \\to \\alpha + \\beta$。それを lim_add_const に渡す。"
+    ],
+    "exercise": "-- 練習 14：極限の証明を書く\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\ndef is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom triangle : x : Real, y : Real |- abs(x + y) <= abs(x) + abs(y)\naxiom ge_max_left : n : Nat, h : n >= max{a, b} |- n >= a\naxiom ge_max_right : n : Nat, h : n >= max{a, b} |- n >= b\n\nthm lim_add_const :\n  a : Nat -> Real, alpha : Real, c : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_n + c -> alpha + c (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N(eps) | hN by h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    abs(a_n + c - (alpha + c))\n      = abs(a_n - alpha)   by ring\n      < eps                by hN(n, h_n)\n\nthm lim_add :\n  a : Nat -> Real, b : Nat -> Real, alpha : Real, beta : Real,\n  ha : a_n -> alpha (n -> \\infty), hb : b_n -> beta (n -> \\infty)\n  |- a_n + b_n -> alpha + beta (n -> \\infty)\n\nsorry\n\nthm lim_double :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_n + a_n -> alpha + alpha (n -> \\infty)\n\nsorry\n\nthm lim_add3 :\n  a : Nat -> Real, b : Nat -> Real, alpha : Real, beta : Real, c : Real,\n  ha : a_n -> alpha (n -> \\infty), hb : b_n -> beta (n -> \\infty)\n  |- a_n + b_n + c -> alpha + beta + c (n -> \\infty)\n\nsorry\n",
+    "answer": "def is_lim(a : Nat -> Real, alpha : Real) :<=> forall eps:Real>0. exists N:Nat. forall n:Nat>=N. abs(a_n - alpha) < eps\n  notation a_n -> alpha (n -> \\infty)\n\naxiom triangle : x : Real, y : Real |- abs(x + y) <= abs(x) + abs(y)\naxiom ge_max_left : n : Nat, h : n >= max{a, b} |- n >= a\naxiom ge_max_right : n : Nat, h : n >= max{a, b} |- n >= b\n\nthm lim_add_const :\n  a : Nat -> Real, alpha : Real, c : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_n + c -> alpha + c (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  Obtain N(eps) | hN by h(eps, h_{eps})\n  choose N\n  Fix n | h_n : n >= N\n    abs(a_n + c - (alpha + c))\n      = abs(a_n - alpha)   by ring\n      < eps                by hN(n, h_n)\n\nthm lim_add :\n  a : Nat -> Real, b : Nat -> Real, alpha : Real, beta : Real,\n  ha : a_n -> alpha (n -> \\infty), hb : b_n -> beta (n -> \\infty)\n  |- a_n + b_n -> alpha + beta (n -> \\infty)\n\nFix eps | h_{eps} : eps > 0\n  h_2 : eps/2 > 0 by linarith\n  Obtain N_1(eps) | hN_1 by ha(eps/2, h_2)\n  Obtain N_2(eps) | hN_2 by hb(eps/2, h_2)\n  choose max{N_1, N_2}\n  Fix n | h_n : n >= max{N_1, N_2}\n    k_1 : abs(a_n - alpha) < eps/2 by hN_1(n, ge_max_left(h_n))\n    k_2 : abs(b_n - beta) < eps/2 by hN_2(n, ge_max_right(h_n))\n    abs(a_n + b_n - (alpha + beta))\n      = abs((a_n - alpha) + (b_n - beta))     by ring\n      <= abs(a_n - alpha) + abs(b_n - beta)   by triangle\n      < eps/2 + eps/2                         by k_1, k_2\n      = eps                                   by ring\n\nthm lim_double :\n  a : Nat -> Real, alpha : Real, h : a_n -> alpha (n -> \\infty)\n  |- a_n + a_n -> alpha + alpha (n -> \\infty)\n\nlim_add(h, h)\n\nthm lim_add3 :\n  a : Nat -> Real, b : Nat -> Real, alpha : Real, beta : Real, c : Real,\n  ha : a_n -> alpha (n -> \\infty), hb : b_n -> beta (n -> \\infty)\n  |- a_n + b_n + c -> alpha + beta + c (n -> \\infty)\n\nlim_add_const(lim_add(ha, hb))\n",
+    "uses": [
+      "Obtain N_1(eps) | hN_1 by ha(eps/2, h_2)",
+      "choose max{N_1, N_2}",
+      "ge_max_left(h_n)",
+      "lim_add(h, h)",
+      "lim_add_const(lim_add(ha, hb))"
+    ]
+  },
+  {
+    "title": "15. 数学的帰納法",
     "blocks": [
       {
         "p": "**ねらい**：自然数 $n$ についての命題を、$n = 0$ のときと「$k$ で成り立てば $k + 1$ でも成り立つ」の 2 つで示す（`induction n`）。漸化式で定めた数列（`rec`）について示すときによく使う。"
@@ -954,14 +1183,14 @@ window.NARFI_TUTORIAL = [
         ]
       }
     ],
-    "file": "learn/13-帰納法.narfi",
+    "file": "learn/15-帰納法.narfi",
     "task": "$f(0) = 0$、$f(n+1) = f(n) + 2n + 1$ で定めた数列について、$f(n) = n^2$ を示す（$1 + 3 + 5 + \\dots + (2n-1) = n^2$）。",
     "hints": [
       "上の例と同じ形。`Fix n` のあと `induction n`。",
       "`Case zero` は `odd_sum(0) = 0 by odd_sum.zero`、`= 0^2 by ring` の連鎖。",
       "`Case succ k, IH : odd_sum(k) = k^2`。連鎖：`= odd_sum(k + 1) by s`、`= odd_sum(k) + 2k + 1 by odd_sum.succ(k)`、`= k^2 + 2k + 1 by IH`、`= (k + 1)^2 by ring`、`= S(k)^2 by s`。"
     ],
-    "exercise": "-- 練習 13：奇数の和は平方数\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nrec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nsorry\n",
+    "exercise": "-- 練習 15：奇数の和は平方数\n-- sorry を消して証明を書く。Goal タブに、使える仮定と示すべきものが出る。\n\nrec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nsorry\n",
     "answer": "rec odd_sum(n : Nat) : Nat\n  odd_sum(0) = 0\n  odd_sum(n + 1) = odd_sum(n) + 2n + 1\n\nthm odd_sum_sq :\n  |- forall n:Nat. odd_sum(n) = n^2\n\nFix n\n  induction n\n    Case zero\n      odd_sum(0)\n        = 0     by odd_sum.zero\n        = 0^2   by ring\n    Case succ k, IH : odd_sum(k) = k^2\n      s : S(k) = k + 1 by ring\n      odd_sum(S(k))\n        = odd_sum(k + 1)          by s\n        = odd_sum(k) + 2k + 1     by odd_sum.succ(k)\n        = k^2 + 2k + 1            by IH\n        = (k + 1)^2               by ring\n        = S(k)^2                  by s\n",
     "uses": [
       "induction n",
@@ -969,7 +1198,7 @@ window.NARFI_TUTORIAL = [
     ]
   },
   {
-    "title": "14. エディタの使い方",
+    "title": "16. エディタの使い方",
     "blocks": [
       {
         "keys": [
@@ -1066,6 +1295,14 @@ window.NARFI_TUTORIAL = [
             "`choose t`（範囲つきなら `choose t, 根拠`）"
           ],
           [
+            "forall x. exists y. P",
+            "`Fix x` のあと `choose t`（t は x を使ってよい）"
+          ],
+          [
+            "exists y. forall x. P",
+            "`choose t` のあと `Fix x`（t は x を使えない）"
+          ],
+          [
             "P and Q（かつ）",
             "`根拠1, 根拠2`"
           ],
@@ -1103,6 +1340,14 @@ window.NARFI_TUTORIAL = [
           [
             "h : exists x. P",
             "`Obtain x | hx by h`"
+          ],
+          [
+            "h : forall x. exists y. P",
+            "`Obtain y(x) | hy by h(x)`（y は x ごと）"
+          ],
+          [
+            "h : exists y. forall x. P",
+            "`Obtain y | hy by h` のあと、どの x にも `hy(x)`"
           ],
           [
             "h : P and Q",
