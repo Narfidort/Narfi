@@ -337,6 +337,13 @@ html:not(.web) [data-only="web"] { display: none !important; }
   width: 100vw;
   overflow: hidden;
 }
+/* 入力の受け口（iPad などの画面キーボード・日本語入力を受ける）。見えないが、カーソルの位置に置く（変換の候補がそこに出る） */
+.kbd-proxy {
+  position: fixed; left: 0; top: 0; width: 2px; height: 20px; padding: 0; border: 0; margin: 0;
+  opacity: 0; resize: none; overflow: hidden; z-index: 0; pointer-events: none;
+  font-size: 16px; /* 16px 未満だと iOS が拡大する */
+  color: transparent; background: transparent; caret-color: transparent;
+}
 .editor-surface {
   flex: 1;
   min-width: 280px;
@@ -1121,6 +1128,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
   </div>
   <!-- Left: Mathcha-style Inline Structured Editor -->
   <div id="editorSurface" class="editor-surface" tabindex="0"></div>
+  <textarea id="kbdProxy" class="kbd-proxy" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="エディタへの入力"></textarea>
   <div id="acPopup" class="ac-popup"></div>
   <div id="findBar" class="find-bar" style="display:none">
     <div class="find-row">
@@ -3232,6 +3240,70 @@ function undoDoc(delta) {
 // ================================================================
 
 const editorSurface = document.getElementById("editorSurface");
+
+// ---- 入力の受け口 ----
+// エディタは自前で描いているので、文字の入力は見えない textarea（kbdProxy）で受ける。
+// iPad などでは、入力できる要素にタップでフォーカスが入ったときだけ画面キーボードが出るため。
+// キー（矢印・Backspace・ショートカット）は keydown で、画面キーボードの文字・削除・改行は beforeinput で、日本語の変換は確定したときに受ける。
+// textarea にはいつも空白を 1 つ入れておく（空だと、画面キーボードの削除キーで何も起きない端末がある）。
+const kbdProxy = document.getElementById("kbdProxy");
+function resetKbdProxy() {
+  if (kbdProxy.value !== " ") kbdProxy.value = " ";
+  kbdProxy.setSelectionRange(1, 1);
+}
+function focusEditor() {
+  if (document.activeElement !== kbdProxy) kbdProxy.focus({ preventScroll: true });
+  resetKbdProxy();
+}
+// 受け口をカーソルの位置に動かす（変換の候補・画面キーボードの位置合わせのため）
+function placeKbdProxy() {
+  const c = editorSurface.querySelector(".mc-kx-caret, .mc-caret");
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  kbdProxy.style.left = `${Math.round(r.left)}px`;
+  kbdProxy.style.top = `${Math.round(r.top)}px`;
+}
+// 打った文字列を、キーで 1 文字ずつ打ったのと同じように入れる
+function typeText(str) {
+  for (const ch of str) {
+    if (ch === "\n") { onEditorKeydown(fakeKey("Enter")); continue; }
+    if (wrapSelection(ch)) continue;
+    deleteSelection();
+    insertCharAtCursor(ch);
+  }
+}
+function fakeKey(key) {
+  return { key, code: "", shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, isComposing: false, preventDefault() {}, stopPropagation() {} };
+}
+kbdProxy.addEventListener("beforeinput", (e) => {
+  // 変換中（日本語入力）は textarea に任せ、確定したとき（compositionend）に入れる
+  if (e.isComposing || e.inputType === "insertCompositionText") return;
+  const t = e.inputType;
+  if (t === "insertText" && e.data) { e.preventDefault(); typeText(e.data); }
+  else if (t === "insertReplacementText" && e.data) { e.preventDefault(); typeText(e.data); }
+  else if (t === "deleteContentBackward" || t === "deleteWordBackward") { e.preventDefault(); onEditorKeydown(fakeKey("Backspace")); }
+  else if (t === "deleteContentForward") { e.preventDefault(); onEditorKeydown(fakeKey("Delete")); }
+  else if (t === "insertLineBreak" || t === "insertParagraph") { e.preventDefault(); onEditorKeydown(fakeKey("Enter")); }
+  // 貼り付け（insertFromPaste）は paste のイベントで受ける
+});
+let composing = false;
+kbdProxy.addEventListener("compositionstart", () => { composing = true; });
+kbdProxy.addEventListener("compositionend", (e) => {
+  composing = false;
+  const text = (e.data || "").replace(/\s+$/, "");
+  resetKbdProxy();
+  if (text) typeText(text);
+});
+// 予定外の入力で textarea に文字が残ったら、それを入れて空に戻す
+kbdProxy.addEventListener("input", (e) => {
+  if (e.isComposing || composing) return;
+  const v = kbdProxy.value;
+  if (v !== " ") {
+    const extra = v.startsWith(" ") ? v.slice(1) : v;
+    resetKbdProxy();
+    if (extra) typeText(extra);
+  }
+});
 const acPopup = document.getElementById("acPopup");
 
 // 行ごとに描いた結果を覚えておき、変わった行だけ描き直す（長いファイルで、編集・検索・カーソル移動のたびに全体を描き直すと重い）。
@@ -3373,6 +3445,7 @@ function renderEditor() {
   domKeys = keys;
   applyFindClasses();
   kxOverlay();
+  placeKbdProxy();
   document.getElementById("curLineLabel").textContent = `Ln ${cursor.lineIdx + 1}`;
   document.getElementById("rawAsciiArea").value = texts.join("\n");
   updateAutocomplete();
@@ -3471,9 +3544,12 @@ function setCursorExtending(p) {
   try { setCursor(p.seqId, p.offset, p.lineIdx ?? null); } finally { extendingSel = false; }
 }
 
+// タップ（iPad など）：入力の受け口にフォーカスして、画面キーボードを出す（タップの操作の中で呼ぶ必要がある）
+editorSurface.addEventListener("touchend", () => focusEditor(), { passive: true });
+
 // Mouse click / shift+click / drag
 editorSurface.addEventListener("mousedown", (e) => {
-  editorSurface.focus();
+  focusEditor();
   // ダブル・トリプルクリックは、上の単語・行の選択に任せる
   if (e.button === 0 && e.detail >= 2) { e.preventDefault(); return; }
   const p = hitTestPos(e.target, e.clientX);
@@ -4310,7 +4386,11 @@ function confirmAc(idx) {
   applyCommandEntry(seq, acRange.startOffset, acRange.endOffset, acMatches[idx]);
 }
 
-editorSurface.addEventListener("keydown", (e) => {
+editorSurface.addEventListener("keydown", (e) => onEditorKeydown(e));
+kbdProxy.addEventListener("keydown", (e) => onEditorKeydown(e));
+function onEditorKeydown(e) {
+  // 日本語の変換中のキー（確定の Enter など）は、変換に任せる
+  if (e.isComposing || e.keyCode === 229) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     saveFile();
@@ -4521,7 +4601,7 @@ editorSurface.addEventListener("keydown", (e) => {
     deleteSelection();
     insertCharAtCursor(e.key);
   }
-});
+}
 
 // 範囲を選んだまま打ったとき、置き換えずに選んだものを使う（1 行の中の選択だけ）
 //   囲む：( [ { " で両側を囲む。< は ⟨ ⟩、| は絶対値
@@ -4609,7 +4689,7 @@ function wrapSelection(ch) {
 }
 
 // コピー・切り取り・貼り付け：選択範囲を ASCII のコードとして出し入れする
-function editorFocused() { return document.activeElement === editorSurface; }
+function editorFocused() { return document.activeElement === editorSurface || document.activeElement === kbdProxy; }
 document.addEventListener("copy", (e) => {
   if (!editorFocused()) return;
   const t = selectionText();
@@ -4934,7 +5014,7 @@ function showDerivation(decl, line) {
 function hideDerivation() {
   treeShown = null;
   document.getElementById("treeBack").hidden = true;
-  editorSurface.focus();
+  focusEditor();
 }
 
 function findTreeAt(n, line) {
@@ -5043,7 +5123,7 @@ function appendToLine(text) {
   seq.items.push(...ins);
   setCursor(seq.id, seq.items.length, cursor.lineIdx);
   onDocMutated();
-  editorSurface.focus();
+  focusEditor();
 }
 
 // 文書を書き換える（元に戻す の履歴は残す。onDocMutated で新しい状態が履歴に入る）
@@ -5078,7 +5158,7 @@ function insertHint(code) {
   const ln = docLines[Math.min(at, docLines.length - 1)];
   setCursor(ln.rootSeq.id, ln.rootSeq.items.length, Math.min(at, docLines.length - 1));
   onDocMutated();
-  editorSurface.focus();
+  focusEditor();
 }
 
 function jumpToLine(idx) {
@@ -5742,7 +5822,7 @@ function applyAiEdit() {
   aiPending = null;
   aiShow("");
   onDocMutated();
-  editorSurface.focus();
+  focusEditor();
 }
 
 // ================================================================
@@ -6205,7 +6285,7 @@ function uiModal({ title, note = "", value = null, okLabel = "OK", cancelLabel =
       cancel.removeEventListener("click", onCancel);
       back.removeEventListener("keydown", onKey, true);
       back.removeEventListener("mousedown", onBack);
-      if (typeof editorSurface !== "undefined") editorSurface.focus();
+      if (typeof focusEditor !== "undefined") focusEditor();
       resolve(v);
     };
     const onOk = () => done(value === null ? true : input.value);
@@ -6745,7 +6825,7 @@ function closeFind() {
   findState.open = false;
   findState.cur = -1;
   renderEditor();
-  editorSurface.focus();
+  focusEditor();
 }
 // 1 行のソースを置き換える（読み直して部品にする）
 function setLineText(i, text) {
@@ -6846,7 +6926,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     localStorage.setItem("narfi.learn.seen", "1");
     switchTab("learn", document.getElementById("learnTabBtn"));
   }
-  editorSurface.focus();
+  focusEditor();
 });
 </script>
 </body>
