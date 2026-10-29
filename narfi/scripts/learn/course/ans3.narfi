@@ -1,0 +1,91 @@
+-- コース 3：絶対値を作る
+--
+-- 第 2 章で残った abs.ge・abs.ge_neg・abs.cases を、絶対値を「定義」して証明する。
+-- |x| は組み込みの記号なので、ここでは ab(x) という名前で作る：
+--   ab(x) は「x ≥ 0 なら x、x < 0 なら -x」を満たす y（そういう y を 1 つ選ぶ：選択 some）
+-- そのために使うのは、順序の公理 lt_or_ge（x < 0 か x ≥ 0）だけ。
+-- （some は HOL の選択公理による。土台の公理なので、頼る公理の一覧には出ない）
+--
+-- 練習：ab.exists・ab.ge_neg・ab.cases を証明する。ab.triangle の頼る公理が lt_or_ge だけになる。
+
+axiom lt_or_ge : ∀x:ℝ. x < 0 ∨ x ≥ 0
+
+def isabs(x : ℝ, y : ℝ) :⇔ (x ≥ 0 ∧ y = x) ∨ (x < 0 ∧ y = -x)
+def ab(x : ℝ) : ℝ := some({y : ℝ | isabs(x, y)})
+
+thm ab.exists :
+  ⊢ ∀x:ℝ. ∃y:ℝ. isabs(x, y)
+
+Fix x
+  t : x < 0 ∨ x ≥ 0 by lt_or_ge(x)
+  cases t
+    Case left hn
+      choose -x
+      right
+      hn, refl
+    Case right hp
+      choose x
+      left
+      hp, refl
+
+thm ab.spec :
+  ⊢ ∀x:ℝ. isabs(x, ab(x))
+
+Fix x
+  choice({y : ℝ | isabs(x, y)}, ab.exists(x))
+
+thm ab.ge :
+  ⊢ ∀x:ℝ. ab(x) ≥ x
+
+Fix x
+  s : isabs(x, ab(x)) by ab.spec(x)
+  cases s
+    Case left a
+      k : ab(x) = x by a.right
+      linarith
+    Case right b
+      k : ab(x) = -x by b.right
+      n : x < 0 by b.left
+      linarith
+
+thm ab.ge_neg :
+  ⊢ ∀x:ℝ. ab(x) ≥ -x
+
+Fix x
+  s : isabs(x, ab(x)) by ab.spec(x)
+  cases s
+    Case left a
+      k : ab(x) = x by a.right
+      p : x ≥ 0 by a.left
+      linarith
+    Case right b
+      k : ab(x) = -x by b.right
+      linarith
+
+thm ab.cases :
+  ⊢ ∀x:ℝ. ab(x) = x ∨ ab(x) = -x
+
+Fix x
+  s : isabs(x, ab(x)) by ab.spec(x)
+  cases s
+    Case left a
+      left
+      a.right
+    Case right b
+      right
+      b.right
+
+thm ab.triangle :
+  ⊢ ∀x:ℝ. ∀y:ℝ. ab(x + y) ≤ ab(x) + ab(y)
+
+Fix x, y
+  c : ab(x + y) = x + y ∨ ab(x + y) = -(x + y) by ab.cases(x + y)
+  cases c
+    Case left h
+      p : ab(x) ≥ x by ab.ge(x)
+      q : ab(y) ≥ y by ab.ge(y)
+      linarith
+    Case right h
+      p : ab(x) ≥ -x by ab.ge_neg(x)
+      q : ab(y) ≥ -y by ab.ge_neg(y)
+      linarith

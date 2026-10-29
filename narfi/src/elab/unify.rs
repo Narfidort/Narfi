@@ -6,6 +6,7 @@
 //! - 関数・述語のメタ変数 `?Fn`：関数型・述語型のパラメータを持つ定理を使うとき。
 //!   中身は名前・λ・集合のどれでもよく、`?F(x) =?= x > 0` のように、穴が異なる変数に
 //!   適用されている形（Miller のパターン）なら `?F := {x | x > 0}` と一意に決まる。
+//!
 //! 最後に zonk（穴を中身で置き換える）してから kernel に渡す。
 
 use super::{CResult, Checker, Ctx};
@@ -85,12 +86,8 @@ impl<'a> Checker<'a> {
                     None => Term::App(f.clone(), a),
                 }
             }
-            Term::Lam(ps, b) => {
-                Term::Lam(ps.iter().map(|(p, s)| (p.clone(), self.zonk_sort(s))).collect(), Box::new(self.zonk_t(b)))
-            }
-            Term::Set(ps, phi) => {
-                Term::Set(ps.iter().map(|(p, s)| (p.clone(), self.zonk_sort(s))).collect(), Box::new(self.zonk_f(phi)))
-            }
+            Term::Lam(ps, b) => Term::Lam(ps.iter().map(|(p, s)| (p.clone(), self.zonk_sort(s))).collect(), Box::new(self.zonk_t(b))),
+            Term::Set(ps, phi) => Term::Set(ps.iter().map(|(p, s)| (p.clone(), self.zonk_sort(s))).collect(), Box::new(self.zonk_f(phi))),
             Term::Num(_) => t.clone(),
         }
     }
@@ -153,16 +150,14 @@ impl<'a> Checker<'a> {
             Proof::Thm { name, sorts, args } => Proof::Thm {
                 name: name.clone(),
                 sorts: sorts.iter().map(|s| zs(s)).collect::<CResult<_>>()?,
-                args: args.iter().map(|t| zt(t)).collect::<CResult<_>>()?,
+                args: args.iter().map(&zt).collect::<CResult<_>>()?,
             },
             Proof::ImpI { h, phi, body } => Proof::ImpI { h: h.clone(), phi: zf(phi)?, body: b(body)? },
             Proof::ImpE(p, q) => Proof::ImpE(b(p)?, b(q)?),
             Proof::AndI(p, q) => Proof::AndI(b(p)?, b(q)?),
             Proof::AndE { right, p } => Proof::AndE { right: *right, p: b(p)? },
             Proof::OrI { right, other, p } => Proof::OrI { right: *right, other: zf(other)?, p: b(p)? },
-            Proof::OrE { p, h1, q1, h2, q2 } => {
-                Proof::OrE { p: b(p)?, h1: h1.clone(), q1: b(q1)?, h2: h2.clone(), q2: b(q2)? }
-            }
+            Proof::OrE { p, h1, q1, h2, q2 } => Proof::OrE { p: b(p)?, h1: h1.clone(), q1: b(q1)?, h2: h2.clone(), q2: b(q2)? },
             Proof::AllI { x, sort, body } => Proof::AllI { x: x.clone(), sort: zs(sort)?, body: b(body)? },
             Proof::AllE(p, t) => Proof::AllE(b(p)?, zt(t)?),
             Proof::ExI { target, witness, p } => Proof::ExI { target: zf(target)?, witness: zt(witness)?, p: b(p)? },
@@ -173,14 +168,9 @@ impl<'a> Checker<'a> {
             Proof::Let { x, sort, t, body } => Proof::Let { x: x.clone(), sort: zs(sort)?, t: zt(t)?, body: b(body)? },
             Proof::Refl(t) => Proof::Refl(zt(t)?),
             Proof::Subst { eq, z, motive, p } => Proof::Subst { eq: b(eq)?, z: z.clone(), motive: zf(motive)?, p: b(p)? },
-            Proof::Ind { x, phi, base, k, ih, step } => Proof::Ind {
-                x: x.clone(),
-                phi: zf(phi)?,
-                base: b(base)?,
-                k: k.clone(),
-                ih: ih.clone(),
-                step: b(step)?,
-            },
+            Proof::Ind { x, phi, base, k, ih, step } => {
+                Proof::Ind { x: x.clone(), phi: zf(phi)?, base: b(base)?, k: k.clone(), ih: ih.clone(), step: b(step)? }
+            }
             Proof::Trans(p, q) => Proof::Trans(b(p)?, b(q)?),
             Proof::Antisymm(p, q) => Proof::Antisymm(b(p)?, b(q)?),
             Proof::NatNonneg(t) => Proof::NatNonneg(zt(t)?),
@@ -271,7 +261,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-
     /// A ∧ (B ∧ C) を [A, B, C] に。途中の定義も展開する。
     pub(super) fn split_and_w(&self, f: &Formula, n: usize) -> Option<Vec<Formula>> {
         let mut out = Vec::new();
@@ -305,10 +294,10 @@ impl<'a> Checker<'a> {
     fn unify_ty(&mut self, x: &Ty, y: &Ty) -> bool {
         match (x, y) {
             (Ty::Meta(m), t) | (t, Ty::Meta(m)) => {
-                if let Ty::Meta(n) = t {
-                    if n == m {
-                        return true;
-                    }
+                if let Ty::Meta(n) = t
+                    && n == m
+                {
+                    return true;
                 }
                 let Some(i) = Self::sort_meta_index(m) else { return false };
                 if let Some(b) = self.sort_metas[i].clone() {
@@ -392,9 +381,7 @@ impl<'a> Checker<'a> {
                     _ => false,
                 }
             }
-            (Imp(a1, b1), Imp(a2, b2)) | (And(a1, b1), And(a2, b2)) | (Or(a1, b1), Or(a2, b2)) => {
-                self.uf(a1, a2) && self.uf(b1, b2)
-            }
+            (Imp(a1, b1), Imp(a2, b2)) | (And(a1, b1), And(a2, b2)) | (Or(a1, b1), Or(a2, b2)) => self.uf(a1, a2) && self.uf(b1, b2),
             (Forall(x, t1, b1), Forall(y, t2, b2)) | (Exists(x, t1, b1), Exists(y, t2, b2)) => {
                 if !self.unify_sort(t1, t2) {
                     return false;
@@ -505,11 +492,12 @@ impl<'a> Checker<'a> {
         fn one(c: &Checker, t: &Term) -> Option<Term> {
             use crate::kernel::env::{DefBody, KDef};
             // 値が関数の定義を、さらに適用したもの：mmul(A, B, n)(i, j)
-            if let Term::App(at, xs) = t {
-                if at == "@" && !xs.is_empty() {
-                    let head = one(c, &xs[0])?;
-                    return Some(crate::syntax::apply_term(&head, &xs[1..]));
-                }
+            if let Term::App(at, xs) = t
+                && at == "@"
+                && !xs.is_empty()
+            {
+                let head = one(c, &xs[0])?;
+                return Some(crate::syntax::apply_term(&head, &xs[1..]));
             }
             let (f, args) = match t {
                 Term::App(f, args) => (f, args.clone()),
@@ -582,24 +570,25 @@ impl<'a> Checker<'a> {
     fn solve_app(&mut self, f: &str, xs: &[Term], u: &Term) -> bool {
         let i = Self::fn_meta_index(f).unwrap();
         // 1. 頭が同じ形なら名前を入れる：?F(a) =?= g(b) なら ?F := g, a =?= b
-        if let Term::App(g, ys) = u {
-            if ys.len() == xs.len() && !self.is_open_fn_meta(g) {
-                let save = self.save();
-                // 定義の名前は値として渡せないので、λ で包む（f ↦ (i ↦ f(i))）
-                let head = match self.env.kernel.defs.get(g) {
-                    Some(d) if d.params.len() == ys.len() => {
-                        let ps: Vec<(String, String)> = d.params.iter().enumerate().map(|(k, (_, t))| (format!("v{k}'"), t.clone())).collect();
-                        let args: Vec<Term> = ps.iter().map(|(p, _)| Term::Var(p.clone())).collect();
-                        self.curried_lam(i, ps, Term::App(g.clone(), args))
-                    }
-                    _ => Term::Var(g.clone()),
-                };
-                self.fn_metas[i].0 = Some(head);
-                if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
-                    return true;
+        if let Term::App(g, ys) = u
+            && ys.len() == xs.len()
+            && !self.is_open_fn_meta(g)
+        {
+            let save = self.save();
+            // 定義の名前は値として渡せないので、λ で包む（f ↦ (i ↦ f(i))）
+            let head = match self.env.kernel.defs.get(g) {
+                Some(d) if d.params.len() == ys.len() => {
+                    let ps: Vec<(String, String)> = d.params.iter().enumerate().map(|(k, (_, t))| (format!("v{k}'"), t.clone())).collect();
+                    let args: Vec<Term> = ps.iter().map(|(p, _)| Term::Var(p.clone())).collect();
+                    self.curried_lam(i, ps, Term::App(g.clone(), args))
                 }
-                self.restore(save);
+                _ => Term::Var(g.clone()),
+            };
+            self.fn_metas[i].0 = Some(head);
+            if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
+                return true;
             }
+            self.restore(save);
         }
         // 2. パターン：?F(x, y) =?= u なら ?F := ((x, y) ↦ u)
         let mut vs = BTreeSet::new();
@@ -648,15 +637,17 @@ impl<'a> Checker<'a> {
     /// ?P(xs) =?= φ を解く
     fn solve_pred(&mut self, p: &str, xs: &[Term], phi: &Formula) -> bool {
         let i = Self::fn_meta_index(p).unwrap();
-        if let Formula::Atom(q, ys) = phi {
-            if ys.len() == xs.len() && !self.is_open_fn_meta(q) && !["=", "<", "≤", ">", "≥"].contains(&q.as_str()) {
-                let save = self.save();
-                self.fn_metas[i].0 = Some(Term::Var(q.clone()));
-                if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
-                    return true;
-                }
-                self.restore(save);
+        if let Formula::Atom(q, ys) = phi
+            && ys.len() == xs.len()
+            && !self.is_open_fn_meta(q)
+            && !["=", "<", "≤", ">", "≥"].contains(&q.as_str())
+        {
+            let save = self.save();
+            self.fn_metas[i].0 = Some(Term::Var(q.clone()));
+            if xs.iter().zip(ys).all(|(x, y)| self.ut(x, y)) {
+                return true;
             }
+            self.restore(save);
         }
         let vs = phi.free_vars();
         if vs.contains(p) {

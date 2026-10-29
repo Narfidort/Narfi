@@ -3,10 +3,10 @@
 //! 各部分証明の結論は、kernel に検算させながら記録したもの（Checker::record）を使う。
 //! ここは表示のためだけのもので、検査の判断には関わらない（信じなくてよい部分）。
 
-use crate::kernel::env::KEnv;
 use crate::kernel::Statement;
 use crate::kernel::check::Checker;
 use crate::kernel::env::KCtx;
+use crate::kernel::env::KEnv;
 use crate::kernel::proof::Proof;
 use crate::syntax::{Formula, Term, not};
 use std::collections::HashMap;
@@ -83,11 +83,11 @@ impl Builder {
             }
             Proof::Hyp(h) => {
                 // have で入れた仮定なら、その証明の木を差し込む
-                if let Some((_, addr)) = self.cuts.iter().rev().find(|(x, _)| x == h) {
-                    if let Some(q) = cut_proofs.get(addr) {
-                        let q: &Proof = q;
-                        return self.build(q, cut_proofs);
-                    }
+                if let Some((_, addr)) = self.cuts.iter().rev().find(|(x, _)| x == h)
+                    && let Some(q) = cut_proofs.get(addr)
+                {
+                    let q: &Proof = q;
+                    return self.build(q, cut_proofs);
                 }
                 let discharged = self.open.iter().any(|(x, _)| x == h);
                 let mut n = leaf(c(self, p).to_latex(), "", h);
@@ -214,9 +214,22 @@ fn collect_cuts<'p>(p: &'p Proof, out: &mut HashMap<usize, &'p Proof>) {
             collect_cuts(q, out);
             collect_cuts(body, out);
         }
-        Line(_, q) | AndE { p: q, .. } | OrI { p: q, .. } | AllI { body: q, .. } | AllE(q, _) | ExI { p: q, .. }
-        | BotE(_, q) | Raa { body: q, .. } | ImpI { body: q, .. } | Let { body: q, .. } => collect_cuts(q, out),
-        ImpE(a, b) | AndI(a, b) | Trans(a, b) | Antisymm(a, b) | Subst { eq: a, p: b, .. } | ExE { p: a, body: b, .. }
+        Line(_, q)
+        | AndE { p: q, .. }
+        | OrI { p: q, .. }
+        | AllI { body: q, .. }
+        | AllE(q, _)
+        | ExI { p: q, .. }
+        | BotE(_, q)
+        | Raa { body: q, .. }
+        | ImpI { body: q, .. }
+        | Let { body: q, .. } => collect_cuts(q, out),
+        ImpE(a, b)
+        | AndI(a, b)
+        | Trans(a, b)
+        | Antisymm(a, b)
+        | Subst { eq: a, p: b, .. }
+        | ExE { p: a, body: b, .. }
         | Ind { base: a, step: b, .. } => {
             collect_cuts(a, out);
             collect_cuts(b, out);
@@ -257,8 +270,7 @@ fn js(s: &str) -> String {
 impl Node {
     pub fn to_json(&self) -> String {
         let ps: Vec<String> = self.premises.iter().map(|n| n.to_json()).collect();
-        let ds: Vec<String> =
-            self.discharges.iter().map(|(i, h, f)| format!("[{i},{},{}]", js(h), js(f))).collect();
+        let ds: Vec<String> = self.discharges.iter().map(|(i, h, f)| format!("[{i},{},{}]", js(h), js(f))).collect();
         format!(
             "{{\"r\":{},\"c\":{},\"h\":{},\"o\":{},\"l\":{},\"d\":[{}],\"p\":[{}]}}",
             js(&self.rule),

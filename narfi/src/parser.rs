@@ -2,9 +2,7 @@
 //!
 //! 行指向で読む。字下げでスコープ（ブロック）を作り、各行を再帰下降でパースする。
 
-use crate::syntax::{
-    Formula, NArg, NKind, Notation, RELS, TItem, Term, holds, not, with_syntax,
-};
+use crate::syntax::{Formula, NArg, NKind, Notation, RELS, TItem, Term, holds, not, with_syntax};
 use crate::types::Ty;
 use std::collections::BTreeSet;
 
@@ -55,12 +53,27 @@ pub enum Item {
     Decl(Decl),
     Def(Def),
     /// notation 宣言（読み込み時に記法の表へ登録済み）。src は元の行、warn は古い書き方の警告（文言・書き換え先）
-    Notation { src: String, line: usize, warn: Option<(String, String)> },
-    Import { path: String },
+    Notation {
+        src: String,
+        line: usize,
+        warn: Option<(String, String)>,
+    },
+    Import {
+        path: String,
+    },
     /// 定義のない記号 `const c : σ`（意味は公理や構造で与える）
-    Const { name: String, ty: String, line: usize },
+    Const {
+        name: String,
+        ty: String,
+        line: usize,
+    },
     /// 構文エラーで読めなかった宣言（ほかの宣言は読み続ける）
-    Broken { name: String, line: usize, msg: String, src: String },
+    Broken {
+        name: String,
+        line: usize,
+        msg: String,
+        src: String,
+    },
 }
 
 /// 1ファイル分。宣言を書かれた順に持つ。
@@ -243,9 +256,7 @@ fn is_ident_start(c: char) -> bool {
 }
 
 fn is_ident_cont(c: char) -> bool {
-    (c.is_alphanumeric() || c == '_' || c == '\'' || ('₀'..='₉').contains(&c))
-        && !is_type_char(c)
-        && !matches!(c, '²' | '³')
+    (c.is_alphanumeric() || c == '_' || c == '\'' || ('₀'..='₉').contains(&c)) && !is_type_char(c) && !matches!(c, '²' | '³')
 }
 
 fn greek_word_to_char(w: &str) -> Option<&'static str> {
@@ -454,8 +465,7 @@ pub fn expand_tex_macros(s: &str) -> String {
             if cs[i + 1] == '{' {
                 if let Some((inner, end_k)) = extract_braced(&cs, i + 1) {
                     let inner_trimmed = inner.trim();
-                    let all_digits =
-                        !inner_trimmed.is_empty() && inner_trimmed.chars().all(|c| c.is_ascii_digit());
+                    let all_digits = !inner_trimmed.is_empty() && inner_trimmed.chars().all(|c| c.is_ascii_digit());
                     if all_digits {
                         for ch in inner_trimmed.chars() {
                             let d = ch as u32 - '0' as u32;
@@ -488,13 +498,15 @@ pub fn expand_tex_macros(s: &str) -> String {
             }
         }
         // 上付き ^{...}
-        if cs[i] == '^' && i + 1 < cs.len() && cs[i + 1] == '{' {
-            if let Some((inner, end_k)) = extract_braced(&cs, i + 1) {
-                let inner_exp = expand_tex_macros(inner.trim());
-                out.push_str(&format!("^({inner_exp})"));
-                i = end_k;
-                continue;
-            }
+        if cs[i] == '^'
+            && i + 1 < cs.len()
+            && cs[i + 1] == '{'
+            && let Some((inner, end_k)) = extract_braced(&cs, i + 1)
+        {
+            let inner_exp = expand_tex_macros(inner.trim());
+            out.push_str(&format!("^({inner_exp})"));
+            i = end_k;
+            continue;
         }
         out.push(cs[i]);
         i += 1;
@@ -507,8 +519,7 @@ fn is_plain_name(s: &str) -> bool {
 }
 
 /// 数のあとに来ても積にしない語（2 by ring・1 and … など）
-const IMPLICIT_STOP: [&str; 14] =
-    ["by", "and", "or", "not", "iff", "in", "notin", "then", "because", "since", "with", "at", "to", "mod"];
+const IMPLICIT_STOP: [&str; 14] = ["by", "and", "or", "not", "iff", "in", "notin", "then", "because", "since", "with", "at", "to", "mod"];
 
 // ================================================================ 数列の添字：a_n は a(n)
 //
@@ -563,7 +574,13 @@ impl SubScope {
         if seqs.is_empty() {
             return None;
         }
-        let mut sc = SubScope { seqs: self.seqs.clone(), idx_fns: self.idx_fns.clone(), declared: self.declared.clone(), mats: self.mats.clone(), seq2s: self.seq2s.clone() };
+        let mut sc = SubScope {
+            seqs: self.seqs.clone(),
+            idx_fns: self.idx_fns.clone(),
+            declared: self.declared.clone(),
+            mats: self.mats.clone(),
+            seq2s: self.seq2s.clone(),
+        };
         for (x, t) in ps {
             if t.starts_with("ℕ →") {
                 sc.seqs.insert(x.clone());
@@ -581,11 +598,12 @@ impl SubScope {
         if self.seqs.is_empty() || self.declared.contains(x) {
             return None;
         }
-        if let Some((b, i)) = x.split_once('_') {
-            if self.seqs.contains(b) && !i.is_empty() {
-                let idx = if let Ok(n) = i.parse::<i64>() { Term::Num(n) } else { Term::Var(i.to_string()) };
-                return Some((b.to_string(), idx));
-            }
+        if let Some((b, i)) = x.split_once('_')
+            && self.seqs.contains(b)
+            && !i.is_empty()
+        {
+            let idx = if let Ok(n) = i.parse::<i64>() { Term::Num(n) } else { Term::Var(i.to_string()) };
+            return Some((b.to_string(), idx));
         }
         // a₁₂（a_{12}・a_12 は字句解析で a₁₂ になる）
         let digits: String = x.chars().rev().take_while(|c| ('₀'..='₉').contains(c)).collect();
@@ -798,11 +816,7 @@ fn tok_text(t: &Tok) -> String {
 
 fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
     let cs: Vec<char> = norm.chars().collect();
-    let nots = if with_notations {
-        symbolic_notations()
-    } else {
-        vec![]
-    };
+    let nots = if with_notations { symbolic_notations() } else { vec![] };
     let mut i = 0;
     let mut out = Vec::new();
     'outer: while i < cs.len() {
@@ -885,10 +899,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
                 i += 1;
             }
             let txt: String = cs[st..i].iter().collect();
-            let n = txt.parse().map_err(|_| ParseError {
-                line,
-                msg: format!("数が大きすぎる: {txt}"),
-            })?;
+            let n = txt.parse().map_err(|_| ParseError { line, msg: format!("数が大きすぎる: {txt}") })?;
             out.push(Tok::Num(n));
             continue;
         }
@@ -936,10 +947,9 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
         }
         let sym = match c {
             '*' => "·".to_string(),
-            '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨'
-            | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥' | '∈' | '∉' | '⊂' | '⊆' | '⊊'
-            | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−'
-            | '·' | '/' | '^' | '⇐' | '⇒' | '⇔' | '∴' | '×' | '{' | '}' | '↦' | '[' | ']' => {
+            '(' | ')' | ',' | ':' | '|' | '.' | '∀' | '∃' | '→' | '↔' | '∧' | '∨' | '¬' | '⊥' | '⊢' | '=' | '≠' | '<' | '≤' | '>' | '≥'
+            | '∈' | '∉' | '⊂' | '⊆' | '⊊' | '⊃' | '⊇' | '≡' | '≈' | '∼' | '≅' | '∣' | '∪' | '∩' | '\\' | '+' | '-' | '−' | '·' | '/'
+            | '^' | '⇐' | '⇒' | '⇔' | '∴' | '×' | '{' | '}' | '↦' | '[' | ']' => {
                 if c == '−' {
                     "-".to_string()
                 } else {
@@ -948,10 +958,7 @@ fn lex_raw(norm: &str, line: usize, with_notations: bool) -> PResult<Vec<Tok>> {
             }
             _ => {
                 return Err(ParseError {
-                    line,
-                    msg: format!(
-                        "読めない文字: '{c}'（新しい記号は notation で宣言してから使う）"
-                    ),
+                    line, msg: format!("読めない文字: '{c}'（新しい記号は notation で宣言してから使う）")
                 });
             }
         };
@@ -973,18 +980,10 @@ pub struct P {
 
 impl P {
     pub fn new(toks: Vec<Tok>, line: usize, tyenv: Vec<(String, String)>) -> P {
-        P {
-            toks,
-            pos: 0,
-            line,
-            tyenv,
-        }
+        P { toks, pos: 0, line, tyenv }
     }
     fn err<T>(&self, msg: impl Into<String>) -> PResult<T> {
-        Err(ParseError {
-            line: self.line,
-            msg: msg.into(),
-        })
+        Err(ParseError { line: self.line, msg: msg.into() })
     }
     fn peek(&self) -> Option<&Tok> {
         self.toks.get(self.pos)
@@ -1004,11 +1003,7 @@ impl P {
         }
     }
     fn expect_sym(&mut self, s: &str) -> PResult<()> {
-        if self.eat_sym(s) {
-            Ok(())
-        } else {
-            self.err(format!("'{}' が必要（{} の位置）", s, self.here()))
-        }
+        if self.eat_sym(s) { Ok(()) } else { self.err(format!("'{}' が必要（{} の位置）", s, self.here())) }
     }
     fn here(&self) -> String {
         match self.peek() {
@@ -1022,11 +1017,7 @@ impl P {
         self.pos >= self.toks.len()
     }
     fn expect_end(&self) -> PResult<()> {
-        if self.at_end() {
-            Ok(())
-        } else {
-            self.err(format!("余分なトークン: {}", self.here()))
-        }
+        if self.at_end() { Ok(()) } else { self.err(format!("余分なトークン: {}", self.here())) }
     }
     pub fn ident(&mut self) -> PResult<String> {
         match self.peek().cloned() {
@@ -1167,15 +1158,15 @@ impl P {
                         let tx = tok_text(&self.toks[j]);
                         if depth == 0 && j > start && tx == *l {
                             let mut sub = P::new(self.toks[start..j].to_vec(), self.line, self.tyenv.clone());
-                            if let Ok(t) = sub.term() {
-                                if sub.at_end() {
-                                    slots[*s] = Some(t);
-                                    self.pos = j;
-                                    if self.match_items(n, k + 1, slots, binders) {
-                                        return true;
-                                    }
-                                    slots[*s] = None;
+                            if let Ok(t) = sub.term()
+                                && sub.at_end()
+                            {
+                                slots[*s] = Some(t);
+                                self.pos = j;
+                                if self.match_items(n, k + 1, slots, binders) {
+                                    return true;
                                 }
+                                slots[*s] = None;
                             }
                         }
                         match tx.as_str() {
@@ -1303,11 +1294,7 @@ impl P {
             let all = self.is_sym("∀");
             self.pos += 1;
             let x = self.ident()?;
-            let mut ty = if self.eat_sym(":") {
-                Some(self.ty()?)
-            } else {
-                None
-            };
+            let mut ty = if self.eat_sym(":") { Some(self.ty()?) } else { None };
             let guard = match self.peek_rel() {
                 Some(r) if r != "=" && r != "≠" => {
                     self.pos += 1;
@@ -1315,12 +1302,7 @@ impl P {
                     if ty.is_none() {
                         // 範囲付き量化子 ∀n≥N の型は N の型から推論する
                         if let Term::Var(v) = &t {
-                            ty = self
-                                .tyenv
-                                .iter()
-                                .rev()
-                                .find(|(n, _)| n == v)
-                                .map(|(_, t)| t.clone());
+                            ty = self.tyenv.iter().rev().find(|(n, _)| n == v).map(|(_, t)| t.clone());
                         }
                     }
                     if r == "∈" {
@@ -1340,12 +1322,8 @@ impl P {
             return Ok(match (all, guard) {
                 (true, None) => Formula::Forall(x, ty, Box::new(body)),
                 (false, None) => Formula::Exists(x, ty, Box::new(body)),
-                (true, Some(g)) => {
-                    Formula::Forall(x, ty, Box::new(Formula::Imp(Box::new(g), Box::new(body))))
-                }
-                (false, Some(g)) => {
-                    Formula::Exists(x, ty, Box::new(Formula::And(Box::new(g), Box::new(body))))
-                }
+                (true, Some(g)) => Formula::Forall(x, ty, Box::new(Formula::Imp(Box::new(g), Box::new(body)))),
+                (false, Some(g)) => Formula::Exists(x, ty, Box::new(Formula::And(Box::new(g), Box::new(body)))),
             });
         }
         self.primary()
@@ -1358,14 +1336,13 @@ impl P {
             // 「(論理式)」か「(項) rel 項」かを、試してから決める
             let save = self.pos;
             self.pos += 1;
-            if let Ok(f) = self.formula() {
-                if self.eat_sym(")")
-                    && self.peek_rel().is_none()
-                    && !self.notation_continues()
-                    && !self.is_term_op()
-                {
-                    return Ok(f);
-                }
+            if let Ok(f) = self.formula()
+                && self.eat_sym(")")
+                && self.peek_rel().is_none()
+                && !self.notation_continues()
+                && !self.is_term_op()
+            {
+                return Ok(f);
             }
             self.pos = save;
         }
@@ -1390,11 +1367,7 @@ impl P {
                 "⊇" | "⊃" => return self.subset(&u, &t),
                 _ => {}
             }
-            return Ok(if r == "≠" {
-                not(Formula::Atom("=".into(), vec![t, u]))
-            } else {
-                Formula::Atom(r, vec![t, u])
-            });
+            return Ok(if r == "≠" { not(Formula::Atom("=".into(), vec![t, u])) } else { Formula::Atom(r, vec![t, u]) });
         }
         let (p, args) = match t {
             Term::App(p, args) if p == "@" => return Ok(Formula::Atom(p, args)),
@@ -1402,13 +1375,10 @@ impl P {
             Term::App(p, args) if p.chars().next().is_some_and(is_ident_start) => (p, args),
             _ => return self.err(format!("論理式が必要（{} の位置）", self.here())),
         };
-        if let Some(k) = with_syntax(|t| t.defs.get(&p).copied()) {
-            if k != args.len() {
-                return self.err(format!(
-                    "`{p}` は引数 {k} 個の定義だが、{} 個渡されている",
-                    args.len()
-                ));
-            }
+        if let Some(k) = with_syntax(|t| t.defs.get(&p).copied())
+            && k != args.len()
+        {
+            return self.err(format!("`{p}` は引数 {k} 個の定義だが、{} 個渡されている", args.len()));
         }
         Ok(Formula::Atom(p, args))
     }
@@ -1435,9 +1405,7 @@ impl P {
     }
 
     fn is_term_op(&self) -> bool {
-        ["+", "-", "·", "/", "^", "²", "³"]
-            .iter()
-            .any(|s| self.is_sym(s))
+        ["+", "-", "·", "/", "^", "²", "³"].iter().any(|s| self.is_sym(s))
     }
 
     // ------------------------------------------------ 項
@@ -1588,12 +1556,12 @@ impl P {
                 // λ：(x ↦ t)・(x : ℕ ↦ t)・((x, y) ↦ t)
                 let save = self.pos;
                 self.pos += 1;
-                if let Ok(ps) = self.binders() {
-                    if self.eat_sym("↦") {
-                        let body = self.term()?;
-                        self.expect_sym(")")?;
-                        return Ok(Term::Lam(ps, Box::new(body)));
-                    }
+                if let Ok(ps) = self.binders()
+                    && self.eat_sym("↦")
+                {
+                    let body = self.term()?;
+                    self.expect_sym(")")?;
+                    return Ok(Term::Lam(ps, Box::new(body)));
                 }
                 self.pos = save + 1;
                 let t = self.term()?;
@@ -1692,10 +1660,7 @@ pub fn strip_comment(s: &str) -> &str {
 }
 
 fn indent_of(s: &str) -> usize {
-    s.chars()
-        .take_while(|c| *c == ' ' || *c == '\t')
-        .map(|c| if c == '\t' { 4 } else { 1 })
-        .sum()
+    s.chars().take_while(|c| *c == ' ' || *c == '\t').map(|c| if c == '\t' { 4 } else { 1 }).sum()
 }
 
 fn decl_keyword(text: &str) -> String {
@@ -1708,10 +1673,7 @@ fn starts_decl(text: &str) -> bool {
     if text.starts_with("@name") || text.starts_with("edition ") {
         return true;
     }
-    matches!(
-        decl_keyword(text).as_str(),
-        "thm" | "axiom" | "def" | "rec" | "notation" | "import" | "typedef" | "const"
-    )
+    matches!(decl_keyword(text).as_str(), "thm" | "axiom" | "def" | "rec" | "notation" | "import" | "typedef" | "const")
 }
 
 fn is_axiom_decl(text: &str) -> bool {
@@ -1801,12 +1763,7 @@ fn parse_name_annotation(text: &str) -> Option<(String, String)> {
 }
 
 /// トップレベルの宣言を 1 つ読む（i は次の宣言の行へ進む）
-fn parse_item(
-    lines: &[Line],
-    i: &mut usize,
-    items: &mut Vec<Item>,
-    on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
-) -> PResult<()> {
+fn parse_item(lines: &[Line], i: &mut usize, items: &mut Vec<Item>, on_import: &mut dyn FnMut(&str, usize) -> PResult<()>) -> PResult<()> {
     let mut i_ = *i;
     let r = parse_item_at(lines, &mut i_, items, on_import);
     *i = i_.max(*i + 1).min(lines.len().max(*i + 1));
@@ -1822,8 +1779,7 @@ fn parse_item_at(
     let l = &lines[*i];
     if l.indent != 0 || !starts_decl(&l.text) {
         return Err(ParseError {
-            line: l.no,
-            msg: "トップレベルには thm・axiom・def・notation・import のどれかを書く".into(),
+            line: l.no, msg: "トップレベルには thm・axiom・def・notation・import のどれかを書く".into()
         });
     }
     match decl_keyword(&l.text).as_str() {
@@ -1858,11 +1814,7 @@ fn parse_item_at(
         "notation" => {
             let (n, warn) = parse_notation(&l.text, l.no)?;
             with_syntax(|t| t.notations.push(n));
-            items.push(Item::Notation {
-                src: l.text.clone(),
-                line: l.no,
-                warn,
-            });
+            items.push(Item::Notation { src: l.text.clone(), line: l.no, warn });
             *i += 1;
             return Ok(());
         }
@@ -1878,9 +1830,8 @@ fn parse_item_at(
             let generated = expand_rec(&text, no)?;
             // 行番号が rec の行に合うよう、前を空行で埋めて読む
             let padded = format!("{}{}", "\n".repeat(no.saturating_sub(1)), generated);
-            let sub = parse_module(&padded, &mut |_, line| {
-                Err(ParseError { line, msg: "rec の中では import は使えない".into() })
-            })?;
+            let sub =
+                parse_module(&padded, &mut |_, line| Err(ParseError { line, msg: "rec の中では import は使えない".into() }))?;
             let src = format!("{}\n{}", text[0], text[1..].iter().map(|t| format!("  {t}")).collect::<Vec<_>>().join("\n"));
             for it in sub.items {
                 match it {
@@ -1943,21 +1894,14 @@ fn parse_item_at(
         while !has_turnstile(&lines[*i].text) {
             *i += 1;
             if *i >= lines.len() || starts_decl(&lines[*i].text) && lines[*i].indent == 0 {
-                return Err(ParseError {
-                    line: l.no,
-                    msg: "thm の見出しに ⊢ がない".into(),
-                });
+                return Err(ParseError { line: l.no, msg: "thm の見出しに ⊢ がない".into() });
             }
             header.push(*i);
         }
     }
     *i += 1;
     let htext: Vec<&str> = header.iter().map(|&k| lines[k].text.as_str()).collect();
-    let mut decl = if is_typedef {
-        parse_typedef(&htext.join(" "), l.no)?
-    } else {
-        parse_header(&htext.join(" "), l.no, is_axiom)?
-    };
+    let mut decl = if is_typedef { parse_typedef(&htext.join(" "), l.no)? } else { parse_header(&htext.join(" "), l.no, is_axiom)? };
     if !is_axiom {
         let st = *i;
         while *i < lines.len() && !(lines[*i].indent == 0 && starts_decl(&lines[*i].text)) {
@@ -1980,10 +1924,7 @@ fn parse_item_at(
     Ok(())
 }
 
-pub fn parse_module(
-    src: &str,
-    on_import: &mut dyn FnMut(&str, usize) -> PResult<()>,
-) -> PResult<Module> {
+pub fn parse_module(src: &str, on_import: &mut dyn FnMut(&str, usize) -> PResult<()>) -> PResult<Module> {
     let mut lines: Vec<Line> = Vec::new();
     let mut in_fence = false;
     for (i, raw) in src.lines().enumerate() {
@@ -1997,11 +1938,7 @@ pub fn parse_module(
         }
         let s = strip_comment(raw);
         if !s.trim().is_empty() {
-            lines.push(Line {
-                no: i + 1,
-                indent: indent_of(s),
-                text: s.trim().to_string(),
-            });
+            lines.push(Line { no: i + 1, indent: indent_of(s), text: s.trim().to_string() });
         }
     }
 
@@ -2050,12 +1987,15 @@ pub fn parse_module(
             }
             // notation の行は「notation」と出す（型紙の最初の語は名前ではない）
             let name = if decl_keyword(&lines[start].text) == "notation" { Some("notation".to_string()) } else { None };
-            let name = name.or_else(|| lines[start]
-                .text
-                .split_whitespace()
-                .nth(1)
-                .map(|w| w.trim_end_matches([':', '(']).split('(').next().unwrap_or("").to_string())
-                .filter(|w| !w.is_empty()))
+            let name = name
+                .or_else(|| {
+                    lines[start]
+                        .text
+                        .split_whitespace()
+                        .nth(1)
+                        .map(|w| w.trim_end_matches([':', '(']).split('(').next().unwrap_or("").to_string())
+                        .filter(|w| !w.is_empty())
+                })
                 .unwrap_or_else(|| "（構文エラー）".into());
             i = start + 1;
             while i < lines.len() && !(lines[i].indent == 0 && starts_decl(&lines[i].text)) {
@@ -2087,10 +2027,10 @@ pub fn math_latex(s: &str) -> Option<String> {
     }
     let toks = lex(s, 0).ok()?;
     let mut p = P::new(toks.clone(), 0, vec![]);
-    if let Ok(f) = p.formula() {
-        if p.at_end() {
-            return Some(f.to_latex());
-        }
+    if let Ok(f) = p.formula()
+        && p.at_end()
+    {
+        return Some(f.to_latex());
     }
     let mut p = P::new(toks, 0, vec![]);
     let t = p.term().ok()?;
@@ -2104,11 +2044,11 @@ pub fn msg_latex(msg: &str) -> String {
         let body = line.trim_start();
         let indent = &line[..line.len() - body.len()];
         // 「help:」などの見出しのあとの式だけの行、または式だけの行
-        if !body.chars().any(|c| ('\u{3040}'..='\u{9fff}').contains(&c) || c == '`' || c == '「') {
-            if let Some(l) = math_latex(body) {
-                out.push(format!("{indent}${l}$"));
-                continue;
-            }
+        if !body.chars().any(|c| ('\u{3040}'..='\u{9fff}').contains(&c) || c == '`' || c == '「')
+            && let Some(l) = math_latex(body)
+        {
+            out.push(format!("{indent}${l}$"));
+            continue;
         }
         let mut res = String::new();
         let mut rest = body;
@@ -2139,12 +2079,7 @@ pub fn msg_latex(msg: &str) -> String {
 
 /// import を許さない読み込み（prelude 用）
 pub fn parse_standalone(src: &str) -> PResult<Module> {
-    parse_module(src, &mut |_, line| {
-        Err(ParseError {
-            line,
-            msg: "ここでは import は使えない".into(),
-        })
-    })
+    parse_module(src, &mut |_, line| Err(ParseError { line, msg: "ここでは import は使えない".into() }))
 }
 
 /// `import analysis.limits`
@@ -2249,7 +2184,9 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
     for a in rargs {
         let slot_of = |x: &str, slots: &mut Vec<String>| -> PResult<usize> {
             if slots.iter().any(|s| s == x) {
-                return Err(ParseError { line, msg: format!("notation の右辺で「{x}」が 2 回使われている（入る所はそれぞれ 1 回）") });
+                return Err(ParseError {
+                    line, msg: format!("notation の右辺で「{x}」が 2 回使われている（入る所はそれぞれ 1 回）")
+                });
             }
             slots.push(x.to_string());
             Ok(slots.len() - 1)
@@ -2266,11 +2203,7 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
                 let k = slot_of(x, &mut slots)?;
                 args.push(NArg::Lam(binders.len() - 1, sort.clone(), k));
             }
-            _ => {
-                return err(format!(
-                    "notation の右辺の引数は、名前か (n : ℕ ↦ 名前) にする（「{a}」）"
-                ))
-            }
+            _ => return err(format!("notation の右辺の引数は、名前か (n : ℕ ↦ 名前) にする（「{a}」）")),
         }
     }
     if let Some(b) = binders.iter().find(|b| slots.contains(b)) {
@@ -2289,7 +2222,9 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
     for chunk in spaced.split_whitespace() {
         match lex_raw(chunk, line, true) {
             Ok(ts) => toks.extend(ts),
-            Err(_) if !chunk.chars().any(|c| c.is_alphanumeric() || c == '_' || c == '(' || c == ')') => toks.push(Tok::Sym(chunk.to_string())),
+            Err(_) if !chunk.chars().any(|c| c.is_alphanumeric() || c == '_' || c == '(' || c == ')') => {
+                toks.push(Tok::Sym(chunk.to_string()))
+            }
             Err(e) => return Err(e),
         }
     }
@@ -2356,7 +2291,6 @@ fn parse_notation(text: &str, line: usize) -> PResult<(Notation, Option<(String,
     }
     Ok((n, warn))
 }
-
 
 /// `def is_lim(a : ℕ → ℝ, α : ℝ) := φ`（述語）/ `def sq(x : ℕ) : ℕ := x · x`（項）
 fn parse_def(text: &str, line: usize) -> PResult<Def> {
@@ -2431,9 +2365,7 @@ fn parse_def(text: &str, line: usize) -> PResult<Def> {
     }
     for v in fv {
         if !names.contains(&v) && !is_global(&v) {
-            return p.err(format!(
-                "定義の本体の `{v}` は引数でも定義済みの記号でもない（引数に加えるか、先に定義する）"
-            ));
+            return p.err(format!("定義の本体の `{v}` は引数でも定義済みの記号でもない（引数に加えるか、先に定義する）"));
         }
     }
     Ok(Def { name, line, params, body, term, src: text.to_string() })
@@ -2550,7 +2482,10 @@ fn expand_rec(text: &[String], line: usize) -> PResult<String> {
         x
     };
     let (fv, kv, yv) = (fresh("rec_F"), fresh("rec_k"), fresh("rec_y"));
-    let prev = Term::App(name.clone(), params.iter().enumerate().map(|(j, (x, _))| if j == r { Term::Var(m.clone()) } else { Term::Var(x.clone()) }).collect());
+    let prev = Term::App(
+        name.clone(),
+        params.iter().enumerate().map(|(j, (x, _))| if j == r { Term::Var(m.clone()) } else { Term::Var(x.clone()) }).collect(),
+    );
     let g0 = replace_app(&step, &prev, &Term::Var(yv.clone()));
     if contains_app(&g0, &name) {
         return err(format!("n + 1 のときの右辺では、{name} は 1 つ前の値 {prev} としてだけ使える（原始再帰）"));
@@ -2624,10 +2559,7 @@ fn register_def(d: &Def) -> PResult<()> {
             return err(format!("`{}` はすでに定義されている", d.name));
         }
         if t.def_preds.contains(&d.name) {
-            return err(format!(
-                "`{}` は前の定義の中で（未定義の述語として）使われているので、あとから定義できない",
-                d.name
-            ));
+            return err(format!("`{}` は前の定義の中で（未定義の述語として）使われているので、あとから定義できない", d.name));
         }
         t.defs.insert(d.name.clone(), d.params.len());
         if d.term.is_some() {
@@ -2741,24 +2673,15 @@ fn parse_header(text: &str, line: usize, is_axiom: bool) -> PResult<Decl> {
     let concl = p.formula()?;
     p.expect_end()?;
     // `axiom c : ℝ` は「命題 ℝ」の公理になってしまう。記号の宣言は const
-    if let Formula::Atom(t, args) = &concl {
-        if args.is_empty() && (TYPE_NAMES.contains(&t.as_str()) || with_syntax(|s| s.types.contains(t))) {
-            return Err(ParseError {
-                line,
-                msg: format!("「{t}」は型で、命題ではない。記号を宣言するなら `const {name} : {t}` と書く"),
-            });
-        }
+    if let Formula::Atom(t, args) = &concl
+        && args.is_empty()
+        && (TYPE_NAMES.contains(&t.as_str()) || with_syntax(|s| s.types.contains(t)))
+    {
+        return Err(ParseError {
+            line, msg: format!("「{t}」は型で、命題ではない。記号を宣言するなら `const {name} : {t}` と書く")
+        });
     }
-    Ok(Decl {
-        is_axiom,
-        name,
-        line,
-        ctx,
-        concl,
-        body: vec![],
-        typedef: None,
-        generated: false,
-    })
+    Ok(Decl { is_axiom, name, line, ctx, concl, body: vec![], typedef: None, generated: false })
 }
 
 /// 行末が「,」か括弧が閉じていない行は、次の行とつなげる
@@ -2771,11 +2694,7 @@ fn join_continuations(lines: &[Line]) -> Vec<Line> {
             last.text.push(' ');
             last.text.push_str(&l.text);
         } else {
-            out.push(Line {
-                no: l.no,
-                indent: l.indent,
-                text: l.text.clone(),
-            });
+            out.push(Line { no: l.no, indent: l.indent, text: l.text.clone() });
         }
         let t = &out.last().unwrap().text;
         let depth = t.matches('(').count() as i32 - t.matches(')').count() as i32;
@@ -2796,11 +2715,7 @@ fn build_tree(lines: &[Line]) -> Vec<Node> {
             } else {
                 vec![]
             };
-            out.push(Node {
-                no: l.no,
-                text: l.text.clone(),
-                children,
-            });
+            out.push(Node { no: l.no, text: l.text.clone(), children });
         }
         out
     }
@@ -2817,10 +2732,7 @@ fn no_children(n: &Node) -> PResult<()> {
     if n.children.is_empty() {
         Ok(())
     } else {
-        Err(ParseError {
-            line: n.children[0].no,
-            msg: "この行の下に字下げされたブロックは置けない".into(),
-        })
+        Err(ParseError { line: n.children[0].no, msg: "この行の下に字下げされたブロックは置けない".into() })
     }
 }
 
@@ -2840,11 +2752,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             let mut vars = Vec::new();
             loop {
                 let x = p.ident()?;
-                let t = if p.eat_sym(":") {
-                    Some(p.ty()?)
-                } else {
-                    None
-                };
+                let t = if p.eat_sym(":") { Some(p.ty()?) } else { None };
                 vars.push((x, t));
                 if !p.eat_sym(",") {
                     break;
@@ -2852,45 +2760,26 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             }
             let hyp = if p.eat_sym("|") {
                 let h = p.ident()?;
-                let f = if p.eat_sym(":") {
-                    Some(p.formula()?)
-                } else {
-                    None
-                };
+                let f = if p.eat_sym(":") { Some(p.formula()?) } else { None };
                 Some((h, f))
             } else {
                 None
             };
             p.expect_end()?;
-            StmtKind::Fix {
-                vars,
-                hyp,
-                body: block(&p)?,
-            }
+            StmtKind::Fix { vars, hyp, body: block(&p)? }
         }
         "assume" => {
             p.pos += 1;
             let name = p.ident()?;
-            let ty = if p.eat_sym(":") {
-                Some(p.formula()?)
-            } else {
-                None
-            };
+            let ty = if p.eat_sym(":") { Some(p.formula()?) } else { None };
             p.expect_end()?;
-            StmtKind::Assume {
-                name,
-                ty,
-                body: block(&p)?,
-            }
+            StmtKind::Assume { name, ty, body: block(&p)? }
         }
         "by_contra" => {
             p.pos += 1;
             let name = p.ident()?;
             p.expect_end()?;
-            StmtKind::ByContra {
-                name,
-                body: block(&p)?,
-            }
+            StmtKind::ByContra { name, body: block(&p)? }
         }
         "Obtain" => {
             p.pos += 1;
@@ -2914,7 +2803,8 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             if p.is_sym(",") || p.is_sym(":") {
                 return Err(ParseError {
                     line: n.no,
-                    msg: "Obtain は `Obtain x | h by 根拠` と書く（`Obtain x, h : 根拠` は古い書き方。`:` の右は命題、根拠は `by` の右）".into(),
+                    msg: "Obtain は `Obtain x | h by 根拠` と書く（`Obtain x, h : 根拠` は古い書き方。`:` の右は命題、根拠は `by` の右）"
+                        .into(),
                 });
             }
             let mut hyps = Vec::new();
@@ -2940,13 +2830,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             let just = p.just()?;
             p.expect_end()?;
             no_children(n)?;
-            StmtKind::Obtain {
-                var,
-                deps,
-                hyps,
-                stated,
-                just,
-            }
+            StmtKind::Obtain { var, deps, hyps, stated, just }
         }
         // ∨ の導入：goal が φ ∨ ψ のとき、左（右）を示す
         "left" | "right" if p.toks.len() == 1 => {
@@ -2976,11 +2860,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                 });
             }
             let choice = Choice::Term(p.term()?);
-            let just = if p.eat_sym(",") {
-                Some(p.just()?)
-            } else {
-                None
-            };
+            let just = if p.eat_sym(",") { Some(p.just()?) } else { None };
             p.expect_end()?;
             no_children(n)?;
             StmtKind::Choose { choice, just }
@@ -3009,10 +2889,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             for c in &n.children {
                 let mut q = P::new(lex(&c.text, c.no)?, c.no, tyenv.to_vec());
                 if !q.is_ident("Case") {
-                    return Err(ParseError {
-                        line: c.no,
-                        msg: "cases の下には Case left / Case right を書く".into(),
-                    });
+                    return Err(ParseError { line: c.no, msg: "cases の下には Case left / Case right を書く".into() });
                 }
                 q.pos += 1;
                 let side = q.ident()?;
@@ -3024,24 +2901,14 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                     "left" => left = Some((h, body)),
                     "right" => right = Some((h, body)),
                     _ => {
-                        return Err(ParseError {
-                            line: c.no,
-                            msg: "Case left か Case right".into(),
-                        });
+                        return Err(ParseError { line: c.no, msg: "Case left か Case right".into() });
                     }
                 }
             }
             match (left, right) {
-                (Some(l), Some(r)) => StmtKind::Cases {
-                    hyp,
-                    left: l,
-                    right: r,
-                },
+                (Some(l), Some(r)) => StmtKind::Cases { hyp, left: l, right: r },
                 _ => {
-                    return Err(ParseError {
-                        line: n.no,
-                        msg: "Case left と Case right の両方が必要".into(),
-                    });
+                    return Err(ParseError { line: n.no, msg: "Case left と Case right の両方が必要".into() });
                 }
             }
         }
@@ -3053,10 +2920,7 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             for c in &n.children {
                 let mut q = P::new(lex(&c.text, c.no)?, c.no, tyenv.to_vec());
                 if !q.is_ident("Case") {
-                    return Err(ParseError {
-                        line: c.no,
-                        msg: "induction の下には Case zero / Case succ を書く".into(),
-                    });
+                    return Err(ParseError { line: c.no, msg: "induction の下には Case zero / Case succ を書く".into() });
                 }
                 q.pos += 1;
                 let which = q.ident()?;
@@ -3072,36 +2936,21 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
                         q.expect_sym(",")?;
                         let ih = q.ident()?;
                         // `Case succ k, IH : φ` の末尾の「:」はあってもなくてもよい
-                        let f = if q.eat_sym(":") && !q.at_end() {
-                            Some(q.formula()?)
-                        } else {
-                            None
-                        };
+                        let f = if q.eat_sym(":") && !q.at_end() { Some(q.formula()?) } else { None };
                         q.eat_sym(":");
                         q.expect_end()?;
                         succ = Some((k, ih, f, body));
                         succ_line = c.no;
                     }
                     _ => {
-                        return Err(ParseError {
-                            line: c.no,
-                            msg: "Case zero か Case succ".into(),
-                        });
+                        return Err(ParseError { line: c.no, msg: "Case zero か Case succ".into() });
                     }
                 }
             }
             match (zero, succ) {
-                (Some(z), Some(s)) => StmtKind::Induction {
-                    var,
-                    zero: z,
-                    succ: s,
-                    succ_line,
-                },
+                (Some(z), Some(s)) => StmtKind::Induction { var, zero: z, succ: s, succ_line },
                 _ => {
-                    return Err(ParseError {
-                        line: n.no,
-                        msg: "Case zero と Case succ の両方が必要".into(),
-                    });
+                    return Err(ParseError { line: n.no, msg: "Case zero と Case succ の両方が必要".into() });
                 }
             }
         }
@@ -3183,22 +3032,14 @@ fn parse_stmt(n: &Node, tyenv: &[(String, String)]) -> PResult<Stmt> {
             }
         }
     };
-    Ok(Stmt {
-        line: n.no,
-        src: n.text.clone(),
-        kind,
-        warn,
-    })
+    Ok(Stmt { line: n.no, src: n.text.clone(), kind, warn })
 }
 
 fn chain_step(p: &mut P, line: usize) -> PResult<ChainStep> {
     let rel = match p.peek_rel() {
         Some(r) if r != "≠" && r != "∈" => r,
         _ => {
-            return Err(ParseError {
-                line,
-                msg: "連鎖の各行は = < ≤ > ≥ のどれかで始める".into(),
-            });
+            return Err(ParseError { line, msg: "連鎖の各行は = < ≤ > ≥ のどれかで始める".into() });
         }
     };
     p.pos += 1;
@@ -3211,10 +3052,5 @@ fn chain_step(p: &mut P, line: usize) -> PResult<ChainStep> {
         vec![]
     };
     p.expect_end()?;
-    Ok(ChainStep {
-        line,
-        rel,
-        term,
-        just,
-    })
+    Ok(ChainStep { line, rel, term, just })
 }

@@ -35,13 +35,11 @@ pub fn serve(port: u16, open_browser: bool, dir: Option<PathBuf>) -> std::io::Re
         let _ = Command::new("open").arg(&url).spawn();
     }
 
-    for stream in listener.incoming() {
-        if let Ok(stream) = stream {
-            // 検査は深く再帰する（長い証明の証明項）。既定の 2MB では足りない
-            let _ = std::thread::Builder::new().stack_size(256 << 20).spawn(move || {
-                let _ = handle_client(stream);
-            });
-        }
+    for stream in listener.incoming().flatten() {
+        // 検査は深く再帰する（長い証明の証明項）。既定の 2MB では足りない
+        let _ = std::thread::Builder::new().stack_size(256 << 20).spawn(move || {
+            let _ = handle_client(stream);
+        });
     }
     Ok(())
 }
@@ -58,23 +56,23 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             break;
         }
         data.extend_from_slice(&buf[..n]);
-        if header_end.is_none() {
-            if let Some(pos) = find_subsequence(&data, b"\r\n\r\n") {
-                header_end = Some(pos + 4);
-                let headers = String::from_utf8_lossy(&data[..pos]);
-                for line in headers.lines() {
-                    if let Some((k, v)) = line.split_once(':') {
-                        if k.trim().eq_ignore_ascii_case("content-length") {
-                            content_length = v.trim().parse().unwrap_or(0);
-                        }
-                    }
+        if header_end.is_none()
+            && let Some(pos) = find_subsequence(&data, b"\r\n\r\n")
+        {
+            header_end = Some(pos + 4);
+            let headers = String::from_utf8_lossy(&data[..pos]);
+            for line in headers.lines() {
+                if let Some((k, v)) = line.split_once(':')
+                    && k.trim().eq_ignore_ascii_case("content-length")
+                {
+                    content_length = v.trim().parse().unwrap_or(0);
                 }
             }
         }
-        if let Some(hend) = header_end {
-            if data.len() >= hend + content_length {
-                break;
-            }
+        if let Some(hend) = header_end
+            && data.len() >= hend + content_length
+        {
+            break;
         }
     }
 
@@ -87,8 +85,7 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
     let method = parts.next().unwrap_or("GET");
     let full_path = parts.next().unwrap_or("/");
     let (path, query) = full_path.split_once('?').unwrap_or((full_path, ""));
-    let body =
-        String::from_utf8_lossy(&data[hend..(hend + content_length).min(data.len())]).to_string();
+    let body = String::from_utf8_lossy(&data[hend..(hend + content_length).min(data.len())]).to_string();
 
     // ほかの Web サイトからこのサーバーを使わせない（ファイルの読み書きができるため）。
     // Host が自分自身であること（DNS リバインディング対策）、Origin があれば自分自身であること。
@@ -114,24 +111,15 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             );
             send_response(&mut stream, 200, "application/javascript; charset=utf-8", body.as_bytes())
         }
-        ("GET", "/course.js") => send_response(
-            &mut stream,
-            200,
-            "application/javascript; charset=utf-8",
-            include_str!("course.js").as_bytes(),
-        ),
-        ("GET", "/tutorial.js") => send_response(
-            &mut stream,
-            200,
-            "application/javascript; charset=utf-8",
-            include_str!("tutorial.js").as_bytes(),
-        ),
-        ("GET", "/narfi-web.js") => send_response(
-            &mut stream,
-            200,
-            "application/javascript; charset=utf-8",
-            include_str!("web_static.js").as_bytes(),
-        ),
+        ("GET", "/course.js") => {
+            send_response(&mut stream, 200, "application/javascript; charset=utf-8", include_str!("course.js").as_bytes())
+        }
+        ("GET", "/tutorial.js") => {
+            send_response(&mut stream, 200, "application/javascript; charset=utf-8", include_str!("tutorial.js").as_bytes())
+        }
+        ("GET", "/narfi-web.js") => {
+            send_response(&mut stream, 200, "application/javascript; charset=utf-8", include_str!("web_static.js").as_bytes())
+        }
         ("GET", p) if p.starts_with("/assets/katex/") => {
             let name = &p["/assets/katex/".len()..];
             match crate::assets::KATEX_FILES.iter().find(|(n, _)| *n == name) {
@@ -145,12 +133,7 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             let path = json_get_str(&body, "path").filter(|p| !p.is_empty());
             let locale = json_get_str(&body, "locale").unwrap_or_default();
             let res = api_check(&src, cursor_line, path.as_deref(), &locale);
-            send_response(
-                &mut stream,
-                200,
-                "application/json; charset=utf-8",
-                res.as_bytes(),
-            )
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
         }
         ("POST", "/api/convert") => {
             let src = json_get_str(&body, "src").unwrap_or_default();
@@ -171,56 +154,26 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
                 _ => src,
             };
             let res = format!("{{\"src\":{}}}", json_str(&converted));
-            send_response(
-                &mut stream,
-                200,
-                "application/json; charset=utf-8",
-                res.as_bytes(),
-            )
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
         }
         ("GET", "/api/files") => {
             let res = api_list_files();
-            send_response(
-                &mut stream,
-                200,
-                "application/json; charset=utf-8",
-                res.as_bytes(),
-            )
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
         }
         ("GET", "/api/file") => {
             let rel = query_param(query, "path").unwrap_or_default();
             match resolve_readable(&rel) {
                 Some(p) => match std::fs::read_to_string(&p) {
                     Ok(content) => {
-                        let res = format!(
-                            "{{\"ok\":true,\"path\":{},\"src\":{}}}",
-                            json_str(&rel),
-                            json_str(&content)
-                        );
-                        send_response(
-                            &mut stream,
-                            200,
-                            "application/json; charset=utf-8",
-                            res.as_bytes(),
-                        )
+                        let res = format!("{{\"ok\":true,\"path\":{},\"src\":{}}}", json_str(&rel), json_str(&content));
+                        send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
                     }
                     Err(e) => {
-                        let res =
-                            format!("{{\"ok\":false,\"error\":{}}}", json_str(&e.to_string()));
-                        send_response(
-                            &mut stream,
-                            400,
-                            "application/json; charset=utf-8",
-                            res.as_bytes(),
-                        )
+                        let res = format!("{{\"ok\":false,\"error\":{}}}", json_str(&e.to_string()));
+                        send_response(&mut stream, 400, "application/json; charset=utf-8", res.as_bytes())
                     }
                 },
-                None => send_response(
-                    &mut stream,
-                    400,
-                    "application/json; charset=utf-8",
-                    b"{\"ok\":false,\"error\":\"invalid path\"}",
-                ),
+                None => send_response(&mut stream, 400, "application/json; charset=utf-8", b"{\"ok\":false,\"error\":\"invalid path\"}"),
             }
         }
         ("POST", "/api/save") => {
@@ -230,30 +183,14 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
                 Some(p) => match p.parent().map(std::fs::create_dir_all).unwrap_or(Ok(())).and_then(|_| std::fs::write(&p, &src)) {
                     Ok(()) => {
                         let res = format!("{{\"ok\":true,\"path\":{}}}", json_str(&rel));
-                        send_response(
-                            &mut stream,
-                            200,
-                            "application/json; charset=utf-8",
-                            res.as_bytes(),
-                        )
+                        send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
                     }
                     Err(e) => {
-                        let res =
-                            format!("{{\"ok\":false,\"error\":{}}}", json_str(&e.to_string()));
-                        send_response(
-                            &mut stream,
-                            400,
-                            "application/json; charset=utf-8",
-                            res.as_bytes(),
-                        )
+                        let res = format!("{{\"ok\":false,\"error\":{}}}", json_str(&e.to_string()));
+                        send_response(&mut stream, 400, "application/json; charset=utf-8", res.as_bytes())
                     }
                 },
-                None => send_response(
-                    &mut stream,
-                    400,
-                    "application/json; charset=utf-8",
-                    b"{\"ok\":false,\"error\":\"invalid path\"}",
-                ),
+                None => send_response(&mut stream, 400, "application/json; charset=utf-8", b"{\"ok\":false,\"error\":\"invalid path\"}"),
             }
         }
         ("POST", "/api/create") => {
@@ -337,12 +274,7 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
         }
         ("GET", "/api/ai/providers") => {
             let res = api_detect_ai_providers();
-            send_response(
-                &mut stream,
-                200,
-                "application/json; charset=utf-8",
-                res.as_bytes(),
-            )
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
         }
         ("POST", "/api/ai_chat") => {
             let (status, res) = api_ai_chat(&body);
@@ -350,12 +282,7 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
         }
         ("POST", "/api/ai") => {
             let res = api_run_ai(&body);
-            send_response(
-                &mut stream,
-                200,
-                "application/json; charset=utf-8",
-                res.as_bytes(),
-            )
+            send_response(&mut stream, 200, "application/json; charset=utf-8", res.as_bytes())
         }
         _ => send_response(&mut stream, 404, "text/plain; charset=utf-8", b"Not Found"),
     }
@@ -365,12 +292,7 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-fn send_response(
-    stream: &mut TcpStream,
-    status: u16,
-    content_type: &str,
-    body: &[u8],
-) -> std::io::Result<()> {
+fn send_response(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u8]) -> std::io::Result<()> {
     let status_text = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -421,9 +343,8 @@ fn init_workspace(dir: Option<PathBuf>) {
         .and_then(|h| std::fs::read_to_string(h.join("workspace")).ok())
         .map(|s| PathBuf::from(s.trim()))
         .filter(|p| p.is_dir());
-    match dir.or(saved) {
-        Some(d) => set_workspace(d),
-        None => {}
+    if let Some(d) = dir.or(saved) {
+        set_workspace(d)
     }
 }
 
@@ -445,12 +366,11 @@ fn workspace_root() -> PathBuf {
 
 fn default_workspace() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    if cwd.ends_with("narfi") {
-        if let Some(parent) = cwd.parent() {
-            if parent.join("練習.narfi").exists() || parent.join("narfi").exists() {
-                return parent.to_path_buf();
-            }
-        }
+    if cwd.ends_with("narfi")
+        && let Some(parent) = cwd.parent()
+        && (parent.join("練習.narfi").exists() || parent.join("narfi").exists())
+    {
+        return parent.to_path_buf();
     }
     cwd
 }
@@ -597,11 +517,7 @@ fn api_workspace() -> String {
         ));
     }
     let s = std_lib_dir();
-    libs.push(format!(
-        "{{\"label\":\"std\",\"dir\":{},\"files\":{}}}",
-        json_str(&s.to_string_lossy()),
-        json_str_array(&list_narfi(&s))
-    ));
+    libs.push(format!("{{\"label\":\"std\",\"dir\":{},\"files\":{}}}", json_str(&s.to_string_lossy()), json_str_array(&list_narfi(&s))));
     let (files, dirs) = list_tree(&root);
     format!(
         "{{\"ok\":true,\"root\":{},\"name\":{},\"files\":{},\"dirs\":{},\"libs\":[{}],\"dialogs\":{}}}",
@@ -708,8 +624,7 @@ fn api_pdf(src: &str, path: &str) -> Result<Vec<u8>, String> {
     let (_, m, reports) = load_and_check(src, Some(&file)).map_err(|e| format!("{}行目：{}", e.line, e.msg))?;
     let owned = m.decls_for(&reports);
     let decls: Vec<&Decl> = owned.iter().collect();
-    let items: Vec<(&Decl, &[crate::elab::StepTrace])> =
-        decls.iter().zip(reports.iter()).map(|(d, r)| (*d, r.steps.as_slice())).collect();
+    let items: Vec<(&Decl, &[crate::elab::StepTrace])> = decls.iter().zip(reports.iter()).map(|(d, r)| (*d, r.steps.as_slice())).collect();
     let title = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let tex = prose::latex_document(&title, &items);
     let dir = std::env::temp_dir().join(format!("narfi-pdf-{}-{}", std::process::id(), PDF_SEQ.fetch_add(1, Ordering::SeqCst)));
@@ -757,11 +672,13 @@ fn collect_tree(root: &Path, dir: &Path, files: &mut Vec<String>, dirs: &mut Vec
         }
         if p.is_dir() {
             let sub = collect_tree(root, &p, files, dirs);
-            let sub_empty = std::fs::read_dir(&p).map(|mut d| d.all(|e| e.map(|e| e.file_name().to_string_lossy().starts_with('.')).unwrap_or(true))).unwrap_or(false);
-            if sub || sub_empty {
-                if let Ok(rel) = p.strip_prefix(root) {
-                    dirs.push(rel.to_string_lossy().to_string());
-                }
+            let sub_empty = std::fs::read_dir(&p)
+                .map(|mut d| d.all(|e| e.map(|e| e.file_name().to_string_lossy().starts_with('.')).unwrap_or(true)))
+                .unwrap_or(false);
+            if (sub || sub_empty)
+                && let Ok(rel) = p.strip_prefix(root)
+            {
+                dirs.push(rel.to_string_lossy().to_string());
             }
             has |= sub;
         } else if name.ends_with(".narfi") && name != "prelude.narfi" {
@@ -777,11 +694,7 @@ fn collect_tree(root: &Path, dir: &Path, files: &mut Vec<String>, dirs: &mut Vec
 // ================================================================ AI アシスト連携
 
 fn cmd_exists(bin: &str) -> bool {
-    Command::new("which")
-        .arg(bin)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    Command::new("which").arg(bin).output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 fn api_detect_ai_providers() -> String {
@@ -789,9 +702,7 @@ fn api_detect_ai_providers() -> String {
     let has_gemini = cmd_exists("gemini");
     let has_opencode = cmd_exists("opencode");
     let has_gh = cmd_exists("gh");
-    format!(
-        "{{\"claude_cli\":{has_claude},\"gemini_cli\":{has_gemini},\"opencode_cli\":{has_opencode},\"gh_cli\":{has_gh}}}"
-    )
+    format!("{{\"claude_cli\":{has_claude},\"gemini_cli\":{has_gemini},\"opencode_cli\":{has_opencode},\"gh_cli\":{has_gh}}}")
 }
 
 const NARFI_AI_SYSTEM_PROMPT: &str = r#"あなたは自然演繹ベースの証明記述言語「Narfi (v0.5)」の専門アシスタントです。
@@ -899,11 +810,7 @@ fn api_run_ai(body: &str) -> String {
         "claude_cli" => run_cli_ai("claude", &["-p", &full_prompt]),
         "gemini_cli" => run_cli_ai("gemini", &["-p", &full_prompt]),
         "openai_compat" | "opencode_go" => {
-            let base = if api_base.is_empty() {
-                "https://api.openai.com/v1/chat/completions"
-            } else {
-                api_base.as_str()
-            };
+            let base = if api_base.is_empty() { "https://api.openai.com/v1/chat/completions" } else { api_base.as_str() };
             let m = if model.is_empty() { "gpt-4o-mini" } else { model.as_str() };
             run_openai_compat_curl(base, &api_key, m, &full_prompt)
         }
@@ -919,24 +826,13 @@ fn api_run_ai(body: &str) -> String {
     };
 
     match result {
-        Ok(ans) => format!(
-            "{{\"ok\":true,\"provider\":{},\"reply\":{}}}",
-            json_str(chosen),
-            json_str(&ans)
-        ),
-        Err(e) => format!(
-            "{{\"ok\":false,\"provider\":{},\"error\":{}}}",
-            json_str(chosen),
-            json_str(&e)
-        ),
+        Ok(ans) => format!("{{\"ok\":true,\"provider\":{},\"reply\":{}}}", json_str(chosen), json_str(&ans)),
+        Err(e) => format!("{{\"ok\":false,\"provider\":{},\"error\":{}}}", json_str(chosen), json_str(&e)),
     }
 }
 
 fn run_cli_ai(bin: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(bin)
-        .args(args)
-        .output()
-        .map_err(|e| format!("{bin} の起動に失敗しました: {e}"))?;
+    let out = Command::new(bin).args(args).output().map_err(|e| format!("{bin} の起動に失敗しました: {e}"))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
@@ -946,20 +842,11 @@ fn run_cli_ai(bin: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
-fn run_openai_compat_curl(
-    url: &str,
-    key: &str,
-    model: &str,
-    prompt: &str,
-) -> Result<String, String> {
+fn run_openai_compat_curl(url: &str, key: &str, model: &str, prompt: &str) -> Result<String, String> {
     if key.is_empty() {
         return Err("API Key が入力されていません。右上の「AI設定」から設定してください。".into());
     }
-    let payload = format!(
-        "{{\"model\":{},\"messages\":[{{\"role\":\"user\",\"content\":{}}}]}}",
-        json_str(model),
-        json_str(prompt)
-    );
+    let payload = format!("{{\"model\":{},\"messages\":[{{\"role\":\"user\",\"content\":{}}}]}}", json_str(model), json_str(prompt));
     let out = Command::new("curl")
         .args([
             "-sS",
@@ -1010,51 +897,29 @@ fn run_anthropic_curl(key: &str, model: &str, prompt: &str) -> Result<String, St
         .output()
         .map_err(|e| format!("curl 実行エラー: {e}"))?;
     let resp = String::from_utf8_lossy(&out.stdout).to_string();
-    if let Some(text) = json_get_str(&resp, "text") {
-        Ok(text)
-    } else {
-        Err(format!("API応答の解析に失敗しました: {resp}"))
-    }
+    if let Some(text) = json_get_str(&resp, "text") { Ok(text) } else { Err(format!("API応答の解析に失敗しました: {resp}")) }
 }
 
 fn run_gemini_curl(key: &str, model: &str, prompt: &str) -> Result<String, String> {
     if key.is_empty() {
         return Err("Gemini API Key が入力されていません。".into());
     }
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-    );
-    let payload = format!(
-        "{{\"contents\":[{{\"parts\":[{{\"text\":{}}}]}}]}}",
-        json_str(prompt)
-    );
+    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}");
+    let payload = format!("{{\"contents\":[{{\"parts\":[{{\"text\":{}}}]}}]}}", json_str(prompt));
     let out = Command::new("curl")
-        .args([
-            "-sS",
-            "-X",
-            "POST",
-            &url,
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            &payload,
-        ])
+        .args(["-sS", "-X", "POST", &url, "-H", "Content-Type: application/json", "-d", &payload])
         .output()
         .map_err(|e| format!("curl 実行エラー: {e}"))?;
     let resp = String::from_utf8_lossy(&out.stdout).to_string();
-    if let Some(text) = json_get_str(&resp, "text") {
-        Ok(text)
-    } else {
-        Err(format!("API応答の解析に失敗しました: {resp}"))
-    }
+    if let Some(text) = json_get_str(&resp, "text") { Ok(text) } else { Err(format!("API応答の解析に失敗しました: {resp}")) }
 }
 
 fn query_param(query: &str, key: &str) -> Option<String> {
     for pair in query.split('&') {
-        if let Some((k, v)) = pair.split_once('=') {
-            if k == key {
-                return Some(url_decode(v));
-            }
+        if let Some((k, v)) = pair.split_once('=')
+            && k == key
+        {
+            return Some(url_decode(v));
         }
     }
     None
@@ -1069,12 +934,12 @@ fn url_decode(s: &str) -> String {
             bytes.push(b' ');
             i += 1;
         } else if bs[i] == b'%' && i + 2 < bs.len() {
-            if let Ok(hex) = std::str::from_utf8(&bs[i + 1..i + 3]) {
-                if let Ok(b) = u8::from_str_radix(hex, 16) {
-                    bytes.push(b);
-                    i += 3;
-                    continue;
-                }
+            if let Ok(hex) = std::str::from_utf8(&bs[i + 1..i + 3])
+                && let Ok(b) = u8::from_str_radix(hex, 16)
+            {
+                bytes.push(b);
+                i += 3;
+                continue;
             }
             bytes.push(bs[i]);
             i += 1;

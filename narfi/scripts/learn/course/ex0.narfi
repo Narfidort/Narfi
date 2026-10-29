@@ -1,0 +1,27 @@
+-- コース 0：限りなく近づく
+--
+-- 「数列 a_n が α に限りなく近づく」を ε-N で書き、和の極限を証明する。
+-- 上の 4 つの axiom は、まだ中身を問わない「ブラックボックス」。
+-- 定理 lim.add が頼っている公理は、右の Goal タブの一覧（または検査の結果）に出る。
+-- このコースの目標：章ごとに、この一覧を短く・弱くしていく。
+--
+-- 練習：最後の sorry を、不等式の連鎖で埋める。
+
+axiom triangle     : ∀x:ℝ. ∀y:ℝ. |x + y| ≤ |x| + |y|
+axiom pos_half     : x : ℝ, h : x > 0 ⊢ x/2 > 0
+axiom ge.max.left  : a : ℕ, b : ℕ, n : ℕ, h : n ≥ max{a, b} ⊢ n ≥ a
+axiom ge.max.right : a : ℕ, b : ℕ, n : ℕ, h : n ≥ max{a, b} ⊢ n ≥ b
+
+def is_lim(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε:ℝ>0. ∃N:ℕ. ∀n:ℕ≥N. |a_n - α| < ε
+
+thm lim.add :
+  a : ℕ → ℝ, b : ℕ → ℝ, α : ℝ, β : ℝ,
+  ha : is_lim(a, α), hb : is_lim(b, β)
+  ⊢ is_lim((n : ℕ ↦ a_n + b_n), α + β)
+
+Fix ε | hε : ε > 0
+  Obtain N_1 | h_1 by ha(ε/2, pos_half(hε))
+  Obtain N_2 | h_2 by hb(ε/2, pos_half(hε))
+  choose max{N_1, N_2}
+  Fix n | hn : n ≥ max{N_1, N_2}
+    sorry

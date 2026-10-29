@@ -186,10 +186,10 @@ impl<'a> KCtx<'a> {
                 if let Some(s) = self.env.consts.get(x) {
                     return Ok(TSort::Known(parse_ty(s)?));
                 }
-                if let Some(KDef { params, body: DefBody::Term(s, _) }) = self.env.defs.get(x) {
-                    if params.is_empty() {
-                        return Ok(TSort::Known(parse_ty(s)?));
-                    }
+                if let Some(KDef { params, body: DefBody::Term(s, _) }) = self.env.defs.get(x)
+                    && params.is_empty()
+                {
+                    return Ok(TSort::Known(parse_ty(s)?));
                 }
                 kerr(format!("変数 `{x}` が文脈にない"))
             }
@@ -378,12 +378,11 @@ impl<'a> KCtx<'a> {
                 }
             },
         };
-        if ORDER_RELS.contains(&r) {
-            if let Some(x) = &s {
-                if ty_rank(x).is_none() {
-                    return kerr(format!("`{r}` は数の型にしか使えない（{}）", x.show()));
-                }
-            }
+        if ORDER_RELS.contains(&r)
+            && let Some(x) = &s
+            && ty_rank(x).is_none()
+        {
+            return kerr(format!("`{r}` は数の型にしか使えない（{}）", x.show()));
         }
         Ok(s)
     }
@@ -480,8 +479,7 @@ impl<'a> KCtx<'a> {
                 }
                 match self.env.defs.get(f) {
                     Some(KDef { params, body: DefBody::Term(_, b) }) if params.len() == args.len() => {
-                        let subs: Vec<(String, Term)> =
-                            params.iter().map(|(p, _)| p.clone()).zip(args).collect();
+                        let subs: Vec<(String, Term)> = params.iter().map(|(p, _)| p.clone()).zip(args).collect();
                         self.unfold_terms(&b.subst_many(&subs))
                     }
                     _ => Term::App(f.clone(), args),
@@ -562,9 +560,7 @@ impl<'a> KCtx<'a> {
     fn alpha_eq(&mut self, a: &Formula, b: &Formula) -> bool {
         use Formula::*;
         match (a, b) {
-            (Atom(p, ts), Atom(q, us)) => {
-                p == q && ts.len() == us.len() && ts.iter().zip(us).all(|(t, u)| t.canonical() == u.canonical())
-            }
+            (Atom(p, ts), Atom(q, us)) => p == q && ts.len() == us.len() && ts.iter().zip(us).all(|(t, u)| t.canonical() == u.canonical()),
             (Imp(a1, b1), Imp(a2, b2)) | (And(a1, b1), And(a2, b2)) | (Or(a1, b1), Or(a2, b2)) => {
                 self.alpha_eq(a1, a2) && self.alpha_eq(b1, b2)
             }

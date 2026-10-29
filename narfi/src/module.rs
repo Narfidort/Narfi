@@ -3,6 +3,7 @@
 //! `import analysis.limits` は `analysis/limits.narfi` を次の順に探す。
 //!   1. import を書いたファイルと同じディレクトリ
 //!   2. ライブラリ（ディスクなら NARFI_PATH・~/.narfi/lib・同梱の lib/、ブラウザなら保存領域の lib/ と同梱の lib/）
+//!
 //! 読み込んだファイルはその場で検査され、定理・定義・notation が環境に入る。
 //!
 //! ファイルの置き場所は `FileSource` で差し替えられる（ディスク：`DiskSource`、ブラウザ：`MemSource`）。
@@ -41,12 +42,17 @@ pub struct DiskSource {
     search: Vec<PathBuf>,
 }
 
+impl Default for DiskSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DiskSource {
     /// NARFI_PATH・~/.narfi/lib・同梱の lib/ を探す
     pub fn new() -> DiskSource {
-        let mut search: Vec<PathBuf> = std::env::var("NARFI_PATH")
-            .map(|v| v.split(':').filter(|s| !s.is_empty()).map(PathBuf::from).collect())
-            .unwrap_or_default();
+        let mut search: Vec<PathBuf> =
+            std::env::var("NARFI_PATH").map(|v| v.split(':').filter(|s| !s.is_empty()).map(PathBuf::from).collect()).unwrap_or_default();
         if let Some(h) = std::env::var_os("HOME") {
             search.push(PathBuf::from(h).join(".narfi").join("lib"));
         }
@@ -58,12 +64,7 @@ impl DiskSource {
 impl FileSource for DiskSource {
     fn find(&self, name: &str, dir: Option<&str>) -> Option<(String, String)> {
         let rel = rel_path(name);
-        let path = dir
-            .map(PathBuf::from)
-            .into_iter()
-            .chain(self.search.iter().cloned())
-            .map(|d| d.join(&rel))
-            .find(|p| p.is_file())?;
+        let path = dir.map(PathBuf::from).into_iter().chain(self.search.iter().cloned()).map(|d| d.join(&rel)).find(|p| p.is_file())?;
         let path = path.canonicalize().unwrap_or(path);
         let src = std::fs::read_to_string(&path).ok()?;
         Some((path.to_string_lossy().into_owned(), src))
@@ -176,11 +177,11 @@ fn header_imports(src: &str) -> String {
 
 /// 記法の表を空にし、prelude を読み込んだ環境を作る（prelude は変わらないので、一度読んだものを写して使う）
 fn fresh_env() -> Env {
-    if CACHE_ON.with(|c| c.get()) {
-        if let Some((env, syn)) = PRELUDE_STATE.with(|p| p.borrow().clone()) {
-            syntax_restore(syn);
-            return env;
-        }
+    if CACHE_ON.with(|c| c.get())
+        && let Some((env, syn)) = PRELUDE_STATE.with(|p| p.borrow().clone())
+    {
+        syntax_restore(syn);
+        return env;
     }
     let env = fresh_env_uncached();
     PRELUDE_STATE.with(|p| *p.borrow_mut() = Some((env.clone(), syntax_snapshot())));
@@ -191,8 +192,7 @@ fn fresh_env_uncached() -> Env {
     reset_syntax();
     let mut env = Env::default();
     let prelude = parse_standalone(PRELUDE).expect("prelude のパースに失敗");
-    let reports =
-        check_module(&mut env, &prelude, false, true).unwrap_or_else(|e| panic!("prelude:{}: {}", e.line, e.msg));
+    let reports = check_module(&mut env, &prelude, false, true).unwrap_or_else(|e| panic!("prelude:{}: {}", e.line, e.msg));
     for r in reports {
         if let Some(e) = &r.err {
             panic!("prelude の定理 {} が通らない: {}", r.name, e.msg);
@@ -264,7 +264,13 @@ impl Loader {
         }
         match r {
             Ok(_) => {
-                let entry = PrefixCache { key: ck, trace: self.trace.clone(), env: env.clone(), syntax: syntax_snapshot(), loaded: self.loaded.clone() };
+                let entry = PrefixCache {
+                    key: ck,
+                    trace: self.trace.clone(),
+                    env: env.clone(),
+                    syntax: syntax_snapshot(),
+                    loaded: self.loaded.clone(),
+                };
                 PREFIXES.with(|p| {
                     let mut p = p.borrow_mut();
                     p.retain(|e| e.key != entry.key);
@@ -310,8 +316,7 @@ impl Loader {
         };
         self.trace.push((name.to_string(), dir.map(str::to_string), key.clone(), hash_str(&src)));
         if let Some(k) = self.stack.iter().position(|p| *p == key) {
-            let cycle: Vec<String> =
-                self.stack[k..].iter().chain(std::iter::once(&key)).map(|p| self.source.short(p)).collect();
+            let cycle: Vec<String> = self.stack[k..].iter().chain(std::iter::once(&key)).map(|p| self.source.short(p)).collect();
             return err(format!("循環 import: {}", cycle.join(" → ")));
         }
         if self.loaded.contains(&key) {
@@ -334,12 +339,7 @@ impl Loader {
         };
         if let Some(r) = reports.iter().find(|r| r.err.is_some()) {
             let e = r.err.as_ref().unwrap();
-            return err(format!(
-                "import {name}: {shown}:{} の定理 {} が通らない: {}",
-                e.line,
-                r.name,
-                e.msg.lines().next().unwrap_or("")
-            ));
+            return err(format!("import {name}: {shown}:{} の定理 {} が通らない: {}", e.line, r.name, e.msg.lines().next().unwrap_or("")));
         }
         self.loaded.insert(key);
         Ok(())

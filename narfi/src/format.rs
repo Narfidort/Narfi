@@ -113,12 +113,12 @@ fn align_chains(lines: &mut [String]) {
         }
         // 列は文字数で数える（ℝ・≤ なども 1 文字）
         let width = |s: &str| s.chars().count();
-        let col = (k..end).map(|j| width(&lines[j][..ind + by_pos(lines[j].trim_start()).unwrap()])).max().unwrap() + 2;
-        for j in k..end {
-            let p = ind + by_pos(lines[j].trim_start()).unwrap();
-            let (a, b) = lines[j].split_at(p);
+        let col = lines[k..end].iter().map(|l| width(&l[..ind + by_pos(l.trim_start()).unwrap()])).max().unwrap() + 2;
+        for l in &mut lines[k..end] {
+            let p = ind + by_pos(l.trim_start()).unwrap();
+            let (a, b) = l.split_at(p);
             let pad = col - width(a);
-            lines[j] = format!("{a}{}{b}", " ".repeat(pad));
+            *l = format!("{a}{}{b}", " ".repeat(pad));
         }
         k = end;
     }

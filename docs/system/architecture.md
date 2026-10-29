@@ -38,7 +38,7 @@
 | `web_ui.html` | エディタ（[editor.md](editor.md)） |
 | `web_static.js` | Web 版：`/api/…` をブラウザの中で処理する（WebAssembly と保存領域・クラウド同期） |
 | `web_worker.js` | Web 版：検査器を Web Worker（別スレッド）で動かす。検査中も画面が止まらない（使えないときは画面と同じスレッドで動かす） |
-| `tutorial.js`・`course.js` | Learn タブのチュートリアルとコース |
+| `tutorial.js`・`course.js` | Learn タブのチュートリアルとコース（`scripts/learn/tutorial.py`・`course.py` で作る。直接直さない） |
 
 ## 標準ライブラリ（`narfi/lib/`）
 

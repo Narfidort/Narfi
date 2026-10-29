@@ -1,0 +1,45 @@
+-- コース 4：ring を使わずに計算する
+--
+-- ここまでの証明は ring・linarith（自動の計算）に頼っていた。その中身は体と順序の公理。
+-- ここでは体の公理の一部を axiom として置き、ring を使わずに式を変形する。
+--   連鎖の各行 `= … by 根拠` の根拠は、その等式そのもの（F.add_comm(0, a) など）
+--   式の一部だけを書き換えるときは EQ2(等式, refl)
+--
+-- 例：F.mul_zero（a · 0 = 0）は、分配法則と簡約法則だけで示せる（下にある）。
+-- 練習：F.zero_add と F.distrib_right を証明する。
+
+axiom F.add_comm   : ∀a:ℝ. ∀b:ℝ. a + b = b + a
+axiom F.add_zero   : ∀a:ℝ. a + 0 = a
+axiom F.mul_comm   : ∀a:ℝ. ∀b:ℝ. a * b = b * a
+axiom F.distrib    : ∀a:ℝ. ∀b:ℝ. ∀c:ℝ. a * (b + c) = a * b + a * c
+axiom F.add_cancel : ∀a:ℝ. ∀b:ℝ. ∀c:ℝ. a + b = a + c ⇒ b = c
+
+thm F.zero_add :
+  a : ℝ
+  ⊢ 0 + a = a
+
+0 + a
+  = a + 0   by F.add_comm(0, a)
+  = a       by F.add_zero(a)
+
+thm F.distrib_right :
+  a : ℝ, b : ℝ, c : ℝ
+  ⊢ (a + b) * c = a * c + b * c
+
+(a + b) * c
+  = c * (a + b)       by F.mul_comm(a + b, c)
+  = c * a + c * b     by F.distrib(c, a, b)
+  = a * c + c * b     by EQ2(F.mul_comm(c, a), refl)
+  = a * c + b * c     by EQ2(F.mul_comm(c, b), refl)
+
+thm F.mul_zero :
+  a : ℝ
+  ⊢ a * 0 = 0
+
+e1 : a * (0 + 0) = a * 0 + a * 0 by F.distrib(a, 0, 0)
+e3 : a * (0 + 0) = a * 0 by EQ2(F.add_zero(0), refl)
+a * 0 + a * 0
+  = a * (0 + 0)   by eq.symm(e1)
+  = a * 0         by e3
+  = a * 0 + 0     by eq.symm(F.add_zero(a * 0))
+F.add_cancel(a * 0, a * 0, 0, this)

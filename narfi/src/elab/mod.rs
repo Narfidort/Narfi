@@ -12,8 +12,8 @@ mod just;
 mod stmt;
 mod unify;
 
-use crate::kernel::env::{DefBody, KEnv};
 use crate::kernel::Statement;
+use crate::kernel::env::{DefBody, KEnv};
 use crate::parser::{CtxItem, Decl, Def, Item, Module, ParseError};
 use crate::sorts::Infer;
 use crate::syntax::{Formula, Term, ident_to_latex};
@@ -114,11 +114,7 @@ impl Ctx {
                         VarKind::Obtained => " \\;(\\text{Obtain})",
                     };
                     let xl = ident_to_latex(x);
-                    Some(if t.starts_with('\'') {
-                        format!("{xl}{kind}")
-                    } else {
-                        format!("{xl} \\in {}{kind}", ident_to_latex(t))
-                    })
+                    Some(if t.starts_with('\'') { format!("{xl}{kind}") } else { format!("{xl} \\in {}{kind}", ident_to_latex(t)) })
                 }
                 Entry::Hyp(h, _) if h.ends_with(".def") => None,
                 Entry::Hyp(h, f) => Some(format!("{} : {}", ident_to_latex(h), f.to_latex())),
@@ -177,6 +173,9 @@ const RULES: [&str; 6] = ["and.intro", "and.left", "and.right", "imp.elim", "all
 
 // ================================================================ 検査器の状態
 
+/// 定理を使ったときの約束：（パラメータの名前と型、パラメータの型、引数の項）
+type Pending = (Vec<(String, String)>, String, Term);
+
 pub struct Checker<'a> {
     env: &'a Env,
     /// 項のメタ変数
@@ -187,7 +186,7 @@ pub struct Checker<'a> {
     fn_metas: Vec<(Option<Term>, String)>,
     /// 定理を使ったときの「パラメータの型 = 引数の項の型」という約束。
     /// 引数が穴のうちは型が分からないので、最後（穴が埋まったあと）に解く。
-    pending: Vec<(Vec<(String, String)>, String, Term)>,
+    pending: Vec<Pending>,
     fresh: u32,
     line: usize,
     snapshot: (Ctx, Option<Formula>),
@@ -331,11 +330,12 @@ impl<'a> Checker<'a> {
         let g = self.whnf(goal);
         // 仮定がそのまま goal なら、その名前で閉じられる
         for e in ctx.entries.iter().rev() {
-            if let Entry::Hyp(h, f) = e {
-                if !h.starts_with('#') && (f == goal || self.whnf(f) == g) {
-                    out.push((h.clone(), format!("仮定 {h} がそのまま goal")));
-                    break;
-                }
+            if let Entry::Hyp(h, f) = e
+                && !h.starts_with('#')
+                && (f == goal || self.whnf(f) == g)
+            {
+                out.push((h.clone(), format!("仮定 {h} がそのまま goal")));
+                break;
             }
         }
         let hname = |x: &str| format!("h{x}");
@@ -351,7 +351,7 @@ impl<'a> Checker<'a> {
                 out.push(("left".into(), "goal が ∨：左を示す".into()));
                 out.push(("right".into(), "goal が ∨：右を示す".into()));
             }
-            Formula::Exists(x, _, _) => out.push((format!("choose 項"), format!("goal が ∃：{x} として何をとるか"))),
+            Formula::Exists(x, _, _) => out.push(("choose 項".to_string(), format!("goal が ∃：{x} として何をとるか"))),
             Formula::Atom(r, _) if r == "=" => {
                 out.push(("ring".into(), "式の計算で等しい".into()));
                 out.push(("左辺\n  = …   by 根拠".into(), "等式の連鎖".into()));
@@ -538,10 +538,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
     };
     collect_warnings(&d.body, &mut report.warnings);
     if env.kernel.thms.contains_key(&d.name) || env.failed.contains(&d.name) {
-        report.err = Some(simple_err(
-            d.line,
-            format!("名前 `{}` はすでに使われている（組み込みの定理か、前に書いた定理）", d.name),
-        ));
+        report.err = Some(simple_err(d.line, format!("名前 `{}` はすでに使われている（組み込みの定理か、前に書いた定理）", d.name)));
         report.is_axiom = false;
         return report;
     }
@@ -589,9 +586,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
     let added = match &d.typedef {
         // typedef：空でないことの証明を渡して、型と定数を作る
         Some(td) => match &st.concl {
-            Formula::Exists(x, carrier, phi) if st.vars.is_empty() => {
-                env.kernel.add_typedef(&td.name, x, carrier, phi, &proof)
-            }
+            Formula::Exists(x, carrier, phi) if st.vars.is_empty() => env.kernel.add_typedef(&td.name, x, carrier, phi, &proof),
             _ => Err(crate::kernel::env::KError {
                 line: None,
                 msg: "typedef の集合に、束縛されていない変数がある（{x : σ | φ} の φ は x だけを使う）".into(),
@@ -612,10 +607,7 @@ fn check_decl(env: &mut Env, d: &Decl, trace: bool, core: bool) -> Report {
         }
         Err(e) => {
             env.failed.insert(d.name.clone());
-            report.err = Some(simple_err(
-                e.line.unwrap_or(d.line),
-                format!("kernel が証明を受け付けなかった：{}", e.msg),
-            ));
+            report.err = Some(simple_err(e.line.unwrap_or(d.line), format!("kernel が証明を受け付けなかった：{}", e.msg)));
         }
     }
     report

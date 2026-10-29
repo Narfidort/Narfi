@@ -617,7 +617,7 @@ html:not(.web) [data-only="web"] { display: none !important; }
   font-size: 0.85em;
   line-height: 1.15;
 }
-/* KaTeX で描く構造ノード（kxNodeHtml）。カーソル・選択は kxOverlay が重ねる */
+/* KaTeX で描く数式の連なり（kxRunHtml）。カーソル・選択は kxOverlay が重ねる */
 /* 行の中を通常のインライン配置にして、数式の基準線を文字にそろえる */
 .mc-content.kxflow { display: block; white-space: nowrap; line-height: 1.65; }
 .mc-kx { position: relative; display: inline-block; vertical-align: baseline; line-height: normal; padding: 1px 0; }
@@ -2291,8 +2291,8 @@ function renderItemsSliceHtml(seq, startIdx, endIdx) {
 }
 
 // ================================================================
-// KaTeX で描く構造ノード（分数・∑∫∏・√・絶対値・括弧・二項係数）
-//   木の部分木 1 つを LaTeX にし、各項目と入力欄に \htmlData で data-seq / data-idx / data-slot-seq を付けて KaTeX に描かせる。
+// KaTeX で描く数式（行の中の数式の連なり。分数・∑∫∏・√・絶対値・括弧・二項係数・行列・アクセント・\lim・添字を含む）
+//   連なり（キーワードで区切った範囲）を 1 つの LaTeX にし、各項目と入力欄に \htmlData で data-seq / data-idx / data-slot-seq を付けて KaTeX に描かせる。
 //   組版（上下限の位置・記号の大きさ・間隔）は LaTeX のとおりになる。クリックの対応づけは今までと同じ属性で行い、
 //   カーソルと選択は、描いたあとの要素の位置を測って重ねる（kxOverlay）。
 //   切り替え：?kx=0（使わない）・?kx=1（使う。既定）。選んだ値は localStorage "narfi.kx" に残る。
@@ -2653,17 +2653,6 @@ function findCharIndexInItems(items, ch, fromIdx = 0) {
       else if (items[i].ch === ")") parenDepth--;
       else if (parenDepth === 0 && items[i].ch === ch) return i;
     }
-  }
-  return -1;
-}
-
-function findSubstrIndexInItems(items, pat, fromIdx = 0) {
-  for (let i = fromIdx; i + pat.length <= items.length; i++) {
-    let ok = true;
-    for (let k = 0; k < pat.length; k++) {
-      if (items[i + k].kind !== "char" || items[i + k].ch !== pat[k]) { ok = false; break; }
-    }
-    if (ok) return i;
   }
   return -1;
 }
@@ -4865,10 +4854,6 @@ function derivationHtml(decl, curLine) {
     `<button class="tree-style${treeStyle === st ? " active" : ""}" onclick="setTreeStyle('${st}')">${st === "gentzen" ? "Gentzen" : "Fitch"}</button>`).join("");
   const body = treeStyle === "fitch" ? fitchHtml(node) : `<div class="pt-wrap">${gentzenHtml(node)}</div>`;
   return `<div class="tree-head"><span>${escHtml(decl.name)}：${whole ? "定理全体" : `${curLine} 行目の部分`}の証明木</span><span>${tabs}<button class="tree-style" onclick="hideDerivation()">閉じる</button></span></div>${body}`;
-}
-
-function hypLabel(h) {
-  return `<span class="pt-hyp">${escHtml(h)}</span>`;
 }
 
 function gentzenHtml(n) {

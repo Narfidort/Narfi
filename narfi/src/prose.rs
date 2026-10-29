@@ -35,20 +35,16 @@ fn just_to_latex(j: &Just) -> String {
         .join(",\\ ")
 }
 
-fn find_hyp_formula_latex(
-    steps: &[StepTrace],
-    after_line: usize,
-    hyp_name: &str,
-) -> Option<String> {
+fn find_hyp_formula_latex(steps: &[StepTrace], after_line: usize, hyp_name: &str) -> Option<String> {
     let prefix = format!("{hyp_name} : ");
     let prefix_l = format!("{} : ", ident_to_latex(hyp_name));
     for st in steps {
         if st.line >= after_line {
             for (raw, lat) in st.ctx.iter().zip(st.ctx_latex.iter()) {
-                if raw.starts_with(&prefix) {
-                    if let Some(rest) = lat.strip_prefix(&prefix_l) {
-                        return Some(rest.to_string());
-                    }
+                if raw.starts_with(&prefix)
+                    && let Some(rest) = lat.strip_prefix(&prefix_l)
+                {
+                    return Some(rest.to_string());
                 }
             }
         }
@@ -76,7 +72,22 @@ fn sort_decl_latex(t: &str) -> String {
 /// 長い数式を、括弧の外の ` + `・` - `・` = `・関係の記号の手前で折る（印刷・Prose で右にはみ出さないように）。
 /// 1 行がおよそ width 文字（LaTeX のソースの文字数）を超えたら、次の候補で折る
 pub fn break_math(s: &str, width: usize) -> Vec<String> {
-    const OPS: [&str; 14] = [" + ", " - ", " = ", " \\leq ", " \\geq ", " \\neq ", " < ", " > ", " \\cup ", " \\cap ", " \\setminus ", " \\wedge ", " \\vee ", " \\Rightarrow "];
+    const OPS: [&str; 14] = [
+        " + ",
+        " - ",
+        " = ",
+        " \\leq ",
+        " \\geq ",
+        " \\neq ",
+        " < ",
+        " > ",
+        " \\cup ",
+        " \\cap ",
+        " \\setminus ",
+        " \\wedge ",
+        " \\vee ",
+        " \\Rightarrow ",
+    ];
     let b = s.as_bytes();
     let mut depth = 0i32;
     let mut pieces: Vec<String> = Vec::new();
@@ -98,13 +109,14 @@ pub fn break_math(s: &str, width: usize) -> Vec<String> {
             b'}' => depth -= 1,
             _ => {}
         }
-        if depth == 0 && s[start..i].chars().count() >= width {
-            if let Some(op) = OPS.iter().find(|op| s[i..].starts_with(**op)) {
-                pieces.push(s[start..i].trim().to_string());
-                start = i + 1; // 先頭の空白は落とし、記号から次の行を始める
-                i += op.len();
-                continue;
-            }
+        if depth == 0
+            && s[start..i].chars().count() >= width
+            && let Some(op) = OPS.iter().find(|op| s[i..].starts_with(**op))
+        {
+            pieces.push(s[start..i].trim().to_string());
+            start = i + 1; // 先頭の空白は落とし、記号から次の行を始める
+            i += op.len();
+            continue;
         }
         i += s[i..].chars().next().map_or(1, |c| c.len_utf8());
     }
@@ -119,9 +131,9 @@ pub fn relax_long_inline(s: &str) -> String {
     while let Some(i) = rest.find('$') {
         out.push_str(&rest[..i]);
         let after = &rest[i..];
-        if after.starts_with("$$") {
+        if let Some(inner) = after.strip_prefix("$$") {
             // 別行の数式はそのまま
-            match after[2..].find("$$") {
+            match inner.find("$$") {
                 Some(j) => {
                     out.push_str(&after[..j + 4]);
                     rest = &after[j + 4..];
@@ -158,10 +170,7 @@ pub fn relax_long_inline(s: &str) -> String {
 /// aligned の行にする：最初の行はそのまま、続きの行は字下げして書く
 fn aligned_rows(first_prefix: &str, expr: &str, cont_prefix: &str, width: usize) -> Vec<String> {
     let ps = break_math(expr, width);
-    ps.iter()
-        .enumerate()
-        .map(|(k, p)| if k == 0 { format!("{first_prefix}{p}") } else { format!("{cont_prefix}{p}") })
-        .collect()
+    ps.iter().enumerate().map(|(k, p)| if k == 0 { format!("{first_prefix}{p}") } else { format!("{cont_prefix}{p}") }).collect()
 }
 
 pub fn decl_header_latex(d: &Decl) -> String {
@@ -172,9 +181,7 @@ fn decl_header_latex_in(d: &Decl) -> String {
     let mut parts = Vec::new();
     for c in &d.ctx {
         match c {
-            CtxItem::Var(x, t) => {
-                parts.push(format!("{} {}", ident_to_latex(x), sort_decl_latex(t)))
-            }
+            CtxItem::Var(x, t) => parts.push(format!("{} {}", ident_to_latex(x), sort_decl_latex(t))),
             CtxItem::Hyp(h, f) => parts.push(format!("{} : {}", ident_to_latex(h), f.to_latex())),
         }
     }
@@ -445,10 +452,7 @@ fn decl_to_latex_env_in(d: &Decl, steps: &[StepTrace]) -> String {
         let line = relax_long_inline(&b.text.replace("**", "").replace("$\\blacksquare$", ""));
         body.push_str(&format!("{indent}{line}\n\n"));
     }
-    format!(
-        "\\begin{{theorem}}[{title}]{statement}\n\\end{{theorem}}\n\\begin{{proof}}\n{}\\end{{proof}}\n",
-        body
-    )
+    format!("\\begin{{theorem}}[{title}]{statement}\n\\end{{theorem}}\n\\begin{{proof}}\n{}\\end{{proof}}\n", body)
 }
 
 /// def・notation・import はそのまま書き戻す。thm・axiom なら返す。
@@ -467,7 +471,7 @@ fn emit_non_decl<'m>(it: &'m Item, out: &mut String) -> Option<&'m Decl> {
                 out.push_str("  ");
             }
             out.push_str(src.trim_start())
-        },
+        }
         Item::Import { path, .. } => out.push_str(&format!("import {path}")),
         Item::Const { name, ty, .. } => out.push_str(&format!("const {name} : {ty}")),
         // 読めなかった宣言は、そのまま書き戻す
@@ -545,10 +549,7 @@ pub fn convert_source_to_locale(src: &str, locale: &str) -> String {
 }
 
 fn just_str(j: &Just) -> String {
-    j.iter()
-        .map(|t| t.to_string())
-        .collect::<Vec<_>>()
-        .join(", ")
+    j.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", ")
 }
 
 pub fn convert_source_to_standard_narfi(src: &str) -> String {
@@ -604,7 +605,7 @@ pub fn convert_source_to_standard_narfi(src: &str) -> String {
             out.push('\n');
         }
     }
-    to_ascii_code(&(out.trim_end().to_string())) + "\n"
+    to_ascii_code(out.trim_end()) + "\n"
 }
 
 fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
@@ -643,13 +644,7 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                 stmt_to_standard(c, indent + 1, out);
             }
         }
-        StmtKind::Obtain {
-            var,
-            deps,
-            hyps,
-            stated,
-            just,
-        } => {
+        StmtKind::Obtain { var, deps, hyps, stated, just } => {
             let v_str = match deps {
                 Some(ds) => format!("{var}({})", ds.join(", ")),
                 None => var.clone(),
@@ -689,9 +684,7 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
                 stmt_to_standard(c, indent + 2, out);
             }
         }
-        StmtKind::Induction {
-            var, zero, succ, ..
-        } => {
+        StmtKind::Induction { var, zero, succ, .. } => {
             out.push_str(&format!("{pad}induction {var}\n"));
             out.push_str(&format!("{pad}  Case zero\n"));
             for c in zero {
@@ -728,17 +721,11 @@ fn stmt_to_standard(s: &Stmt, indent: usize, out: &mut String) {
         StmtKind::Chain { start, steps } => {
             out.push_str(&format!("{pad}{start}\n"));
             for st in steps {
-                out.push_str(&format!(
-                    "{pad}  {} {}   by {}\n",
-                    st.rel,
-                    st.term,
-                    just_str(&st.just)
-                ));
+                out.push_str(&format!("{pad}  {} {}   by {}\n", st.rel, st.term, just_str(&st.just)));
             }
         }
     }
 }
-
 
 fn greek_to_ascii_name(c: char) -> Option<&'static str> {
     Some(match c {

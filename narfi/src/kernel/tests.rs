@@ -93,11 +93,7 @@ fn quantifier_swap() {
             p: b(hyp("h")),
             x: "a".into(),
             h: "ha".into(),
-            body: b(Proof::ExI {
-                target: f("∃x:ℕ. R(x, y)"),
-                witness: t("a"),
-                p: b(Proof::AllE(b(hyp("ha")), t("y"))),
-            }),
+            body: b(Proof::ExI { target: f("∃x:ℕ. R(x, y)"), witness: t("a"), p: b(Proof::AllE(b(hyp("ha")), t("y"))) }),
         }),
     };
     assert_eq!(thm(&[], &[("h", "∃x:ℕ. ∀y:ℕ. R(x, y)")], "∀y:ℕ. ∃x:ℕ. R(x, y)", ok), Ok(()));
@@ -184,14 +180,7 @@ fn transitivity_direction() {
 #[test]
 fn induction_step_must_match() {
     // ∀n. n = 0 を「基底 0 = 0、帰納段階で IH をそのまま使う」で示そうとする
-    let p = Proof::Ind {
-        x: "n".into(),
-        phi: f("n = 0"),
-        base: b(Proof::Refl(t("0"))),
-        k: "k".into(),
-        ih: "ih".into(),
-        step: b(hyp("ih")),
-    };
+    let p = Proof::Ind { x: "n".into(), phi: f("n = 0"), base: b(Proof::Refl(t("0"))), k: "k".into(), ih: "ih".into(), step: b(hyp("ih")) };
     rejected(thm(&[], &[], "∀n:ℕ. n = 0", p), "帰納段階");
     // 基底が違う
     let p = Proof::Ind {
@@ -379,12 +368,7 @@ fn typedef_axioms() {
 /// 数字だけの等式で、ℝ の式の中を書き換えられる（v2.5.8。以前は ℚ に決め打ちで拒否していた）
 #[test]
 fn subst_numeral_equation_into_real_context() {
-    let p = Proof::Subst {
-        eq: b(hyp("e")),
-        z: "z".into(),
-        motive: f("a · z = a · 0"),
-        p: b(Proof::Refl(t("a · 0"))),
-    };
+    let p = Proof::Subst { eq: b(hyp("e")), z: "z".into(), motive: f("a · z = a · 0"), p: b(Proof::Refl(t("a · 0"))) };
     // e : 0 = 0 + 0 で、a·0 = a·0 から a·(0 + 0) = a·0
     assert_eq!(thm(&[("a", "ℝ")], &[("e", "0 = 0 + 0")], "a · (0 + 0) = a · 0", p), Ok(()));
 }
@@ -392,12 +376,7 @@ fn subst_numeral_equation_into_real_context() {
 /// ℤ が要る等式（1 - 1 = 0）は、ℕ の式の中では使えない
 #[test]
 fn subst_numeral_equation_respects_rank() {
-    let p = Proof::Subst {
-        eq: b(hyp("e")),
-        z: "z".into(),
-        motive: f("S(z) = S(0)"),
-        p: b(Proof::Refl(t("S(0)"))),
-    };
+    let p = Proof::Subst { eq: b(hyp("e")), z: "z".into(), motive: f("S(z) = S(0)"), p: b(Proof::Refl(t("S(0)"))) };
     let r = thm(&[("n", "ℕ")], &[("e", "0 = 1 - 1")], "S(1 - 1) = S(0)", p);
     assert!(r.is_err(), "ℕ の中で 1 - 1 を使えてしまった");
 }

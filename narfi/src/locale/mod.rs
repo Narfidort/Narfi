@@ -116,12 +116,8 @@ fn parse_locale(name: &'static str, source: &'static str) -> Locale {
 impl Locale {
     /// 証明の文章の型紙 key に値を入れる（型紙がなければ日本語の表から）
     pub fn t(&self, key: &str, vals: &[(&str, &str)]) -> String {
-        let tpl = self
-            .prose
-            .get(key)
-            .or_else(|| locale("ja").and_then(|j| j.prose.get(key)))
-            .cloned()
-            .unwrap_or_else(|| format!("[{key}]"));
+        let tpl =
+            self.prose.get(key).or_else(|| locale("ja").and_then(|j| j.prose.get(key))).cloned().unwrap_or_else(|| format!("[{key}]"));
         // 言い回しの変化：「A || B || C」なら、同じ文書の中で使うたびに順に替える（よって → ゆえに → したがって）
         let variants: Vec<&str> = tpl.split(" || ").collect();
         let k = USES.with(|u| {
@@ -276,10 +272,10 @@ fn rewrite(rules: &[Rule], text: &str, from_std: bool) -> Option<String> {
         }
         let (src, dst) = if from_std { (&r.std, &r.loc) } else { (&r.loc, &r.std) };
         let mut caps = HashMap::new();
-        if match_parts(src, &t, &mut caps) {
-            if let Some(s) = render(dst, &caps) {
-                return Some(s);
-            }
+        if match_parts(src, &t, &mut caps)
+            && let Some(s) = render(dst, &caps)
+        {
+            return Some(s);
         }
     }
     None
@@ -347,7 +343,15 @@ mod tests {
     #[test]
     fn roundtrip_en() {
         let en = locale("en").unwrap();
-        for std in ["Fix ε | hε : ε > 0", "Fix x", "assume h : P", "Obtain N | hN by h(ε, hε)", "choose N", "k : x > 0 by linarith", "Q ∧ P by q, p"] {
+        for std in [
+            "Fix ε | hε : ε > 0",
+            "Fix x",
+            "assume h : P",
+            "Obtain N | hN by h(ε, hε)",
+            "choose N",
+            "k : x > 0 by linarith",
+            "Q ∧ P by q, p",
+        ] {
             let loc = stmt_from_standard(en, std);
             assert_ne!(loc, std, "{std} に英語の読みがない");
             assert_eq!(to_standard(&loc).as_deref(), Some(std), "{std} → {loc} → 戻らない");

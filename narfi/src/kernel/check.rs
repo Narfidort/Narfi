@@ -2,9 +2,9 @@
 
 use crate::kernel::arith;
 use crate::kernel::env::{Deps, KCtx, KError, KResult, ORDER_RELS, Schema, kerr, num_rank};
-use crate::types::Ty;
 use crate::kernel::proof::Proof;
 use crate::syntax::{Formula, Term, not};
+use crate::types::Ty;
 
 pub struct Checker<'a, 'c> {
     pub ctx: &'c mut KCtx<'a>,
@@ -15,9 +15,7 @@ pub struct Checker<'a, 'c> {
 
 fn rel_parts(f: &Formula) -> Option<(&str, &Term, &Term)> {
     match f {
-        Formula::Atom(r, ts) if ts.len() == 2 && (r == "=" || ORDER_RELS.contains(&r.as_str())) => {
-            Some((r.as_str(), &ts[0], &ts[1]))
-        }
+        Formula::Atom(r, ts) if ts.len() == 2 && (r == "=" || ORDER_RELS.contains(&r.as_str())) => Some((r.as_str(), &ts[0], &ts[1])),
         _ => None,
     }
 }
@@ -301,10 +299,10 @@ impl<'a, 'c> Checker<'a, 'c> {
             Proof::Ring { lhs, rhs } => {
                 let f = Formula::Atom("=".into(), vec![lhs.clone(), rhs.clone()]);
                 let s = self.ctx.rel_sort("=", lhs, rhs)?;
-                if let Some(s) = &s {
-                    if num_rank(&s.show()).is_none() {
-                        return kerr(format!("ring は数の型にしか使えない（{}）", s.show()));
-                    }
+                if let Some(s) = &s
+                    && num_rank(&s.show()).is_none()
+                {
+                    return kerr(format!("ring は数の型にしか使えない（{}）", s.show()));
                 }
                 let (l, r) = (self.ctx.arith_form(lhs), self.ctx.arith_form(rhs));
                 if !arith::ring_eq(&l, &r) {
@@ -366,10 +364,10 @@ impl<'a, 'c> Checker<'a, 'c> {
             }
             fs.push((r.to_string(), self.ctx.arith_form(l), self.ctx.arith_form(rr)));
         }
-        if let Some(s) = &sort {
-            if !matches!(s, Ty::Base(b) if num_rank(b).is_some()) {
-                return kerr(format!("linarith は数の型にしか使えない（{}）", s.show()));
-            }
+        if let Some(s) = &sort
+            && !matches!(s, Ty::Base(b) if num_rank(b).is_some())
+        {
+            return kerr(format!("linarith は数の型にしか使えない（{}）", s.show()));
         }
         let (gl, grr) = (self.ctx.arith_form(gl), self.ctx.arith_form(grr));
         let mut forms = Vec::new();

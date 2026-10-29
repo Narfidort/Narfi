@@ -36,6 +36,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: 整形がそろっていること（cargo fmt。設定は narfi/rustfmt.toml）
+        run: |
+          rustup component add rustfmt
+          cargo fmt --check
+
       - name: テスト（kernel 単体・正しい証明／通ってはいけない証明・エディタの往復）
         run: cargo test
 

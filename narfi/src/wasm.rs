@@ -77,7 +77,9 @@ fn handle(req: &str) -> String {
             let src = get("src");
             let path = get("path");
             let key = if path.is_empty() { "untitled.narfi".to_string() } else { path };
-            check_json_in(&src, json_get_usize(req, "cursor_line"), &json_get_str(req, "locale").unwrap_or_default(), &|s| load_and_check(s, Some(Path::new(&key))))
+            check_json_in(&src, json_get_usize(req, "cursor_line"), &json_get_str(req, "locale").unwrap_or_default(), &|s| {
+                load_and_check(s, Some(Path::new(&key)))
+            })
         }
         "convert" => {
             use_memory_files(FILES.with(|f| f.borrow().clone()));

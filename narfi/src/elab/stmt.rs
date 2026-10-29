@@ -201,11 +201,11 @@ impl<'a> Checker<'a> {
                 for (x, ty) in vars {
                     match self.whnf(&cur) {
                         Formula::Forall(y, t, b) => {
-                            if let Some(ty) = ty {
-                                if !self.unify_sort(ty, &t) {
-                                    let t = self.zonk_sort(&t);
-                                    return self.err(format!("型が違う：goal の変数は {t} だが、{ty} と書かれている"));
-                                }
+                            if let Some(ty) = ty
+                                && !self.unify_sort(ty, &t)
+                            {
+                                let t = self.zonk_sort(&t);
+                                return self.err(format!("型が違う：goal の変数は {t} だが、{ty} と書かれている"));
                             }
                             self.fresh_name(&c2, x)?;
                             let sort = self.zonk_sort(&t);
@@ -301,9 +301,7 @@ impl<'a> Checker<'a> {
                             (y, *b, false)
                         }
                         other => {
-                            return self.err(format!(
-                                "induction できない：`{var}` は文脈になく、goal「{other}」も ∀ ではない"
-                            ));
+                            return self.err(format!("induction できない：`{var}` は文脈になく、goal「{other}」も ∀ ではない"));
                         }
                     }
                 };
@@ -339,15 +337,15 @@ impl<'a> Checker<'a> {
                         Term::App(n, args) => Some(Formula::Atom(n.clone(), args.clone())),
                         _ => None,
                     };
-                    if let Some(f) = as_formula {
-                        if let Ok(f) = self.infer_written(&ctx, &f) {
-                            if rest.is_empty() && !self.unify(&ctx, &f, &g) {
-                                let gz = self.zonk_f(&g);
-                                return self.err(format!("最後の行で示した「{f}」が goal「{gz}」と一致しない"));
-                            }
-                            let target = if rest.is_empty() { g.clone() } else { f };
-                            return self.missing_just(&ctx, &target);
+                    if let Some(f) = as_formula
+                        && let Ok(f) = self.infer_written(&ctx, &f)
+                    {
+                        if rest.is_empty() && !self.unify(&ctx, &f, &g) {
+                            let gz = self.zonk_f(&g);
+                            return self.err(format!("最後の行で示した「{f}」が goal「{gz}」と一致しない"));
                         }
+                        let target = if rest.is_empty() { g.clone() } else { f };
+                        return self.missing_just(&ctx, &target);
                     }
                 }
                 let p = self.check_just(&ctx, j, &g)?;
@@ -477,10 +475,10 @@ impl<'a> Checker<'a> {
                         self.check_term_scope(&ctx, t)?;
                         let t = &self.annotate_term(&ctx, t, Some(&s))?;
                         witness = Some(t.clone());
-                        if let Some(ts) = self.term_sort(&ctx, t) {
-                            if !self.unify_sort(&s, &ts) {
-                                return self.err(format!("型が違う：`{t}` は {ts} だが、{s} の項を選ぶ必要がある"));
-                            }
+                        if let Some(ts) = self.term_sort(&ctx, t)
+                            && !self.unify_sort(&s, &ts)
+                        {
+                            return self.err(format!("型が違う：`{t}` は {ts} だが、{s} の項を選ぶ必要がある"));
                         }
                         (b.subst(&y, t), None)
                     }

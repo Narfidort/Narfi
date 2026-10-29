@@ -1,0 +1,64 @@
+-- コース 2：三角不等式を分解する
+--
+-- 残った公理 triangle（|x + y| ≤ |x| + |y|）を、絶対値のもっと基本的な 3 つの性質から証明する：
+--   abs.ge：|x| ≥ x　　abs.ge_neg：|x| ≥ -x　　abs.cases：|x| = x か |x| = -x
+--
+-- 練習：triangle を証明する。
+-- ヒント：abs.cases(x + y) で場合分けし、それぞれ abs.ge・abs.ge_neg を「p : |x| ≥ x by abs.ge(x)」のように並べて linarith。
+
+axiom abs.ge     : ∀x:ℝ. |x| ≥ x
+axiom abs.ge_neg : ∀x:ℝ. |x| ≥ -x
+axiom abs.cases  : ∀x:ℝ. |x| = x ∨ |x| = -x
+
+thm triangle :
+  ⊢ ∀x:ℝ. ∀y:ℝ. |x + y| ≤ |x| + |y|
+
+Fix x, y
+  c : |x + y| = x + y ∨ |x + y| = -(x + y) by abs.cases(x + y)
+  cases c
+    Case left h
+      p : |x| ≥ x by abs.ge(x)
+      q : |y| ≥ y by abs.ge(y)
+      linarith
+    Case right h
+      p : |x| ≥ -x by abs.ge_neg(x)
+      q : |y| ≥ -y by abs.ge_neg(y)
+      linarith
+
+def is_lim(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε:ℝ>0. ∃N:ℕ. ∀n:ℕ≥N. |a_n - α| < ε
+
+thm pos_half :
+  x : ℝ, h : x > 0
+  ⊢ x/2 > 0
+
+linarith
+
+thm ge.add.left :
+  a : ℕ, b : ℕ, n : ℕ, h : n ≥ a + b
+  ⊢ n ≥ a
+
+k : b ≥ 0 by nat.nonneg(b)
+linarith
+
+thm ge.add.right :
+  a : ℕ, b : ℕ, n : ℕ, h : n ≥ a + b
+  ⊢ n ≥ b
+
+k : a ≥ 0 by nat.nonneg(a)
+linarith
+
+thm lim.add :
+  a : ℕ → ℝ, b : ℕ → ℝ, α : ℝ, β : ℝ,
+  ha : is_lim(a, α), hb : is_lim(b, β)
+  ⊢ is_lim((n : ℕ ↦ a_n + b_n), α + β)
+
+Fix ε | hε : ε > 0
+  Obtain N_1 | h_1 by ha(ε/2, pos_half(hε))
+  Obtain N_2 | h_2 by hb(ε/2, pos_half(hε))
+  choose N_1 + N_2
+  Fix n | hn : n ≥ N_1 + N_2
+    |(a_n + b_n) - (α + β)|
+      = |(a_n - α) + (b_n - β)|   by ring
+      ≤ |a_n - α| + |b_n - β|     by triangle(a_n - α, b_n - β)
+      < ε/2 + ε/2                 by h_1(n, ge.add.left(hn)), h_2(n, ge.add.right(hn))
+      = ε                         by ring

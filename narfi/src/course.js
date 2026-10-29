@@ -1,6 +1,6 @@
 // Narfi のコース「公理へ向かって」（Learn タブの後半）。章ごとに、定理が頼る公理を減らしていく。
 // 各章：本文（チュートリアルと同じ部品）・file（自分のファイルに作る：course/番号-名前.narfi。番号は章の番号）・task・hints・exercise・answer。
-// 答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。
+// 答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。このファイルは scripts/learn/course.py で作る（直接直さない）。
 
 window.NARFI_COURSE = [
   {

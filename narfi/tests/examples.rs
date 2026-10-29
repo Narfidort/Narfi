@@ -102,7 +102,19 @@ fn omitted_hypothesis_is_an_error() {
 #[test]
 fn sequence_subscripts() {
     let out = run(&["tests/subscript.narfi"]);
-    for n in ["sub.basic", "sub.chain", "sub.name", "show.and_swap", "show.then", "mul.implicit", "mul.by", "sub.two", "sub.fn", "sub.greek", "sup.norm"] {
+    for n in [
+        "sub.basic",
+        "sub.chain",
+        "sub.name",
+        "show.and_swap",
+        "show.then",
+        "mul.implicit",
+        "mul.by",
+        "sub.two",
+        "sub.fn",
+        "sub.greek",
+        "sup.norm",
+    ] {
         assert!(out.contains(&format!("✓ {n}")), "{out}");
     }
 }
@@ -217,7 +229,6 @@ fn quoted_notation_is_an_error() {
     assert!(out.contains("構文エラー") && out.contains("引用符"), "{out}");
 }
 
-
 /// ベンチマーク（lib/bench、docs/bench.md）：構文エラーがないこと、通っている定理が通り続けること
 #[test]
 fn benchmarks() {
@@ -240,12 +251,27 @@ fn benchmarks() {
         ("linear_algebra", "ker.add"),
         ("measure", "measure.mono"),
     ];
-    for f in ["calculus", "complex", "functional_analysis", "graph", "linear_algebra", "logic", "measure", "number_theory", "numerical", "probability", "sets"] {
+    for f in [
+        "calculus",
+        "complex",
+        "functional_analysis",
+        "graph",
+        "linear_algebra",
+        "logic",
+        "measure",
+        "number_theory",
+        "numerical",
+        "probability",
+        "sets",
+    ] {
         let out = run(&[&format!("lib/bench/{f}.narfi")]);
         assert!(!out.contains("構文エラー"), "lib/bench/{f}.narfi に構文エラー\n{out}");
         for (g, name) in passing {
             if g == f {
-                assert!(out.lines().any(|l| l.trim_start().starts_with(&format!("✓ {name}"))), "lib/bench/{f}.narfi の {name} が通らなくなった\n{out}");
+                assert!(
+                    out.lines().any(|l| l.trim_start().starts_with(&format!("✓ {name}"))),
+                    "lib/bench/{f}.narfi の {name} が通らなくなった\n{out}"
+                );
             }
         }
     }
@@ -302,7 +328,8 @@ fn import_cache_body() {
         }
     }
     files.sort();
-    let check = |src: &str, f: &str| narfi::api::check_json_in(src, Some(3), "ja", &|s| narfi::module::load_and_check(s, Some(Path::new(f))));
+    let check =
+        |src: &str, f: &str| narfi::api::check_json_in(src, Some(3), "ja", &|s| narfi::module::load_and_check(s, Some(Path::new(f))));
     for f in &files {
         let src = std::fs::read_to_string(f).unwrap();
         narfi::module::set_cache_enabled(false);
@@ -325,26 +352,31 @@ fn import_cache_body() {
 /// 読み込みの使い回し：import したファイルを書き換えたら、使い回さずに読み直す
 #[test]
 fn import_cache_notices_changed_library() {
-    std::thread::Builder::new().stack_size(256 << 20).spawn(|| {
-        use std::path::Path;
-        let dir = std::env::temp_dir().join(format!("narfi-cache-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let lib = dir.join("mylib.narfi");
-        let main = dir.join("main.narfi");
-        std::fs::write(&lib, "thm one_pos :\n  |- 1 > 0\n\ndecide\n").unwrap();
-        let src = "import mylib\n\nthm use_it :\n  |- 1 > 0\n\none_pos\n";
-        std::fs::write(&main, src).unwrap();
-        let check = || narfi::api::check_json_in(src, Some(1), "ja", &|s| narfi::module::load_and_check(s, Some(Path::new(&main))));
-        narfi::module::set_cache_enabled(true);
-        let a = check();
-        assert!(a.contains("\"status\":\"ok\""), "{a}");
-        // ライブラリの定理の名前を変える：main の one_pos は見つからなくなるはず
-        std::fs::write(&lib, "thm one_pos2 :\n  |- 1 > 0\n\ndecide\n").unwrap();
-        let b = check();
-        assert!(b.contains("\"status\":\"error\""), "ライブラリの変更が反映されない:\n{b}");
-        // 元に戻せば、また通る
-        std::fs::write(&lib, "thm one_pos :\n  |- 1 > 0\n\ndecide\n").unwrap();
-        let c = check();
-        assert_eq!(a, c);
-    }).unwrap().join().unwrap();
+    std::thread::Builder::new()
+        .stack_size(256 << 20)
+        .spawn(|| {
+            use std::path::Path;
+            let dir = std::env::temp_dir().join(format!("narfi-cache-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let lib = dir.join("mylib.narfi");
+            let main = dir.join("main.narfi");
+            std::fs::write(&lib, "thm one_pos :\n  |- 1 > 0\n\ndecide\n").unwrap();
+            let src = "import mylib\n\nthm use_it :\n  |- 1 > 0\n\none_pos\n";
+            std::fs::write(&main, src).unwrap();
+            let check = || narfi::api::check_json_in(src, Some(1), "ja", &|s| narfi::module::load_and_check(s, Some(Path::new(&main))));
+            narfi::module::set_cache_enabled(true);
+            let a = check();
+            assert!(a.contains("\"status\":\"ok\""), "{a}");
+            // ライブラリの定理の名前を変える：main の one_pos は見つからなくなるはず
+            std::fs::write(&lib, "thm one_pos2 :\n  |- 1 > 0\n\ndecide\n").unwrap();
+            let b = check();
+            assert!(b.contains("\"status\":\"error\""), "ライブラリの変更が反映されない:\n{b}");
+            // 元に戻せば、また通る
+            std::fs::write(&lib, "thm one_pos :\n  |- 1 > 0\n\ndecide\n").unwrap();
+            let c = check();
+            assert_eq!(a, c);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

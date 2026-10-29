@@ -1,0 +1,46 @@
+-- コース 1：ブラックボックスを開ける（pos_half と max）
+--
+-- 第 0 章の lim.add は 4 つの公理に頼っていた。そのうち 3 つは証明できる：
+--   pos_half：x > 0 なら x/2 > 0 は、一次不等式（linarith）で出る
+--   ge.max.left / right：N として max{N₁, N₂} の代わりに N₁ + N₂ をとれば、
+--     自然数が 0 以上であること（nat.nonneg）と一次不等式で出る
+--
+-- 練習：3 つの sorry を埋める。lim.add の頼る公理が triangle だけになる。
+
+axiom triangle : ∀x:ℝ. ∀y:ℝ. |x + y| ≤ |x| + |y|
+
+def is_lim(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε:ℝ>0. ∃N:ℕ. ∀n:ℕ≥N. |a_n - α| < ε
+
+thm pos_half :
+  x : ℝ, h : x > 0
+  ⊢ x/2 > 0
+
+sorry
+
+thm ge.add.left :
+  a : ℕ, b : ℕ, n : ℕ, h : n ≥ a + b
+  ⊢ n ≥ a
+
+sorry
+
+thm ge.add.right :
+  a : ℕ, b : ℕ, n : ℕ, h : n ≥ a + b
+  ⊢ n ≥ b
+
+sorry
+
+thm lim.add :
+  a : ℕ → ℝ, b : ℕ → ℝ, α : ℝ, β : ℝ,
+  ha : is_lim(a, α), hb : is_lim(b, β)
+  ⊢ is_lim((n : ℕ ↦ a_n + b_n), α + β)
+
+Fix ε | hε : ε > 0
+  Obtain N_1 | h_1 by ha(ε/2, pos_half(hε))
+  Obtain N_2 | h_2 by hb(ε/2, pos_half(hε))
+  choose N_1 + N_2
+  Fix n | hn : n ≥ N_1 + N_2
+    |(a_n + b_n) - (α + β)|
+      = |(a_n - α) + (b_n - β)|   by ring
+      ≤ |a_n - α| + |b_n - β|     by triangle(a_n - α, b_n - β)
+      < ε/2 + ε/2                 by h_1(n, ge.add.left(hn)), h_2(n, ge.add.right(hn))
+      = ε                         by ring

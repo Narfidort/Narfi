@@ -23,6 +23,8 @@ fn ck(x: Option<i128>) -> i128 {
     x.expect("kernel の算術で桁あふれ（数が大きすぎる）")
 }
 
+// 演算子の trait（std::ops）は使わず、名前の付いた関数で書く（kernel の計算を、呼び出しの所で読めるように）
+#[allow(clippy::should_implement_trait)]
 impl Q {
     pub fn new(n: i128, d: i128) -> Q {
         assert!(d != 0, "分母が 0");
@@ -147,16 +149,14 @@ impl Normalizer {
         Poly::atom(i)
     }
     fn canon(&self, p: &Poly) -> String {
-        let mut ms: Vec<String> = p
-            .0
-            .iter()
-            .map(|(m, c)| {
-                let mut fs: Vec<String> =
-                    m.iter().map(|(i, e)| format!("{}^{}", self.atoms[*i], e)).collect();
-                fs.sort();
-                format!("{}/{}*{}", c.n, c.d, fs.join("*"))
-            })
-            .collect();
+        let mut ms: Vec<String> =
+            p.0.iter()
+                .map(|(m, c)| {
+                    let mut fs: Vec<String> = m.iter().map(|(i, e)| format!("{}^{}", self.atoms[*i], e)).collect();
+                    fs.sort();
+                    format!("{}/{}*{}", c.n, c.d, fs.join("*"))
+                })
+                .collect();
         ms.sort();
         ms.join("+")
     }
@@ -240,10 +240,10 @@ pub fn fact_form<'t>(rel: &str, l: &'t Term, r: &'t Term) -> Option<(&'t Term, &
 /// 目標 l R r の否定を「e ⋈ 0」に直す
 pub fn negated_goal_form<'t>(rel: &str, l: &'t Term, r: &'t Term) -> Option<(&'t Term, &'t Term, Cmp)> {
     Some(match rel {
-        "<" => (l, r, Cmp::Ge),  // ¬(l < r) は l ≥ r
-        "≤" => (l, r, Cmp::Gt),  // ¬(l ≤ r) は l > r
-        ">" => (r, l, Cmp::Ge),  // ¬(l > r) は r ≥ l
-        "≥" => (r, l, Cmp::Gt),  // ¬(l ≥ r) は r > l
+        "<" => (l, r, Cmp::Ge), // ¬(l < r) は l ≥ r
+        "≤" => (l, r, Cmp::Gt), // ¬(l ≤ r) は l > r
+        ">" => (r, l, Cmp::Ge), // ¬(l > r) は r ≥ l
+        "≥" => (r, l, Cmp::Gt), // ¬(l ≥ r) は r > l
         _ => return None,
     })
 }

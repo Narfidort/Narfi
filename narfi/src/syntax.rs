@@ -34,15 +34,12 @@ pub enum Formula {
     Bot,
 }
 
-pub const RELS: [&str; 18] = [
-    "=", "≠", "<", "≤", ">", "≥", "∈", "∉", "⊂", "⊆", "⊊", "⊃", "⊇", "≡", "≈", "∼", "≅", "∣",
-];
+pub const RELS: [&str; 18] = ["=", "≠", "<", "≤", ">", "≥", "∈", "∉", "⊂", "⊆", "⊊", "⊃", "⊇", "≡", "≈", "∼", "≅", "∣"];
 pub const ORDER_RELS: [&str; 9] = ["<", "≤", ">", "≥", "∈", "⊂", "⊆", "⊃", "⊇"];
 
 pub fn not(f: Formula) -> Formula {
     Formula::Imp(Box::new(f), Box::new(Formula::Bot))
 }
-
 
 // ---------------------------------------------------------------- 記法・定義の表
 //
@@ -188,7 +185,13 @@ impl Notation {
 
     /// 型紙で書いた文字列（表示）。show は入る所の式の書き方
     /// show は入る所の式の書き方（2 つ目の引数は、括弧が要るほど強く結びつく位置か）
-    fn render(&self, ts: &[Term], show: &dyn Fn(&Term, u8) -> String, lit: &dyn Fn(&str) -> String, ident: &dyn Fn(&str) -> String) -> Option<String> {
+    fn render(
+        &self,
+        ts: &[Term],
+        show: &dyn Fn(&Term, u8) -> String,
+        lit: &dyn Fn(&str) -> String,
+        ident: &dyn Fn(&str) -> String,
+    ) -> Option<String> {
         let (slots, binders) = self.split(ts)?;
         let mut out = String::new();
         // 下に添字の付く演算子（lim_( … )）は lim_{ … } と書く。closers は、その「(」に対応する括弧の深さ
@@ -242,8 +245,17 @@ impl Notation {
             };
             // 括弧・添字と、くっつけて書く記号（‖x‖・|x|・x²）の内側には空白を入れない
             let tight = |c: char| matches!(c, '‖' | '|' | '²' | '³' | '^');
-            let glue = out.ends_with('(') || out.ends_with('[') || out.ends_with('_') || out.ends_with('{') || piece.starts_with(')') || piece.starts_with(']') || piece == "}" || piece == "_" || out.is_empty()
-                || out.chars().last().is_some_and(tight) || piece.chars().next().is_some_and(tight)
+            let glue = out.ends_with('(')
+                || out.ends_with('[')
+                || out.ends_with('_')
+                || out.ends_with('{')
+                || piece.starts_with(')')
+                || piece.starts_with(']')
+                || piece == "}"
+                || piece == "_"
+                || out.is_empty()
+                || out.chars().last().is_some_and(tight)
+                || piece.chars().next().is_some_and(tight)
                 || piece.starts_with("\\Vert");
             if !glue {
                 out.push(' ');
@@ -257,7 +269,11 @@ impl Notation {
 /// (x : σ ↦ t)。ただし t が「関数 f を x に適用しただけ」（f(x)・f_x）なら f に縮める（η。kernel は η を知らないため）
 pub fn lam_eta(x: &str, sort: &str, t: &Term) -> Term {
     match t {
-        Term::App(f, args) if args.len() == 1 && args[0] == Term::Var(x.to_string()) && f != x && f != "@" && !BUILTIN_FNS.contains(&f.as_str()) => Term::Var(f.clone()),
+        Term::App(f, args)
+            if args.len() == 1 && args[0] == Term::Var(x.to_string()) && f != x && f != "@" && !BUILTIN_FNS.contains(&f.as_str()) =>
+        {
+            Term::Var(f.clone())
+        }
         Term::Var(v) if v.strip_suffix(x).and_then(|f| f.strip_suffix('_')).is_some_and(|f| !f.is_empty() && !f.contains('_')) => {
             Term::Var(v[..v.len() - x.len() - 1].to_string())
         }
@@ -295,10 +311,7 @@ pub fn display_name(name: &str, loc: &str) -> Option<String> {
 /// 宣言の前に書く訳名の注釈（ソースの変換で書き戻す）
 pub fn display_name_lines(name: &str) -> String {
     with_syntax(|t| {
-        t.display_names
-            .get(name)
-            .map(|v| v.iter().map(|(l, n)| format!("@name {l} {n:?}\n")).collect::<String>())
-            .unwrap_or_default()
+        t.display_names.get(name).map(|v| v.iter().map(|(l, n)| format!("@name {l} {n:?}\n")).collect::<String>()).unwrap_or_default()
     })
 }
 
@@ -530,9 +543,12 @@ pub fn holds(t: &Term, args: &[Term]) -> Formula {
     }
 }
 
+/// 名前の付け替え（旧名 → 新しい項）
+type Renaming = Vec<(String, Term)>;
+
 /// 束縛変数 ps のもとで x := t を代入するとき、t の自由変数を捕まえないよう ps の名前を付け替える。
 /// 付け替えた名前の組と、本体に施す付け替え（旧名 → 新名）を返す。
-fn avoid_capture(ps: &[(String, String)], t: &Term, body_fv: &BTreeSet<String>) -> (Vec<(String, String)>, Vec<(String, Term)>) {
+fn avoid_capture(ps: &[(String, String)], t: &Term, body_fv: &BTreeSet<String>) -> (Vec<(String, String)>, Renaming) {
     let mut tv = BTreeSet::new();
     t.vars(&mut tv);
     let mut new_ps = Vec::new();
@@ -669,7 +685,8 @@ impl Term {
     /// `named` が偽のときは、F が式（`@(F, x)`）の場合だけ縮約する（名前 f の適用 f(x) は、組み込みの関数と区別できないので縮約しない）
     pub fn eta_top(&self, named: bool) -> Term {
         if let Term::Lam(ps, b) = self {
-            let is_params = |args: &[Term]| args.len() == ps.len() && args.iter().zip(ps).all(|(a, (p, _))| matches!(a, Term::Var(v) if v == p));
+            let is_params =
+                |args: &[Term]| args.len() == ps.len() && args.iter().zip(ps).all(|(a, (p, _))| matches!(a, Term::Var(v) if v == p));
             match &**b {
                 // @(F, a1, …, x1, …, xn) で、末尾の n 個が束縛変数そのもの：(x1, …, xn ↦ …) を縮めて @(F, a1, …) （a1… がなければ F）にする
                 Term::App(f, args) if f == "@" && args.len() > ps.len() && is_params(&args[args.len() - ps.len()..]) => {
@@ -795,11 +812,7 @@ impl Formula {
             Formula::Forall(y, ty, b) | Formula::Exists(y, ty, b) => {
                 let is_all = matches!(self, Formula::Forall(..));
                 let mk = |v: String, body: Formula| {
-                    if is_all {
-                        Formula::Forall(v, ty.clone(), Box::new(body))
-                    } else {
-                        Formula::Exists(v, ty.clone(), Box::new(body))
-                    }
+                    if is_all { Formula::Forall(v, ty.clone(), Box::new(body)) } else { Formula::Exists(v, ty.clone(), Box::new(body)) }
                 };
                 if y == x {
                     return self.clone();
@@ -862,11 +875,7 @@ impl Formula {
                 let v = format!("#c{k}");
                 *k += 1;
                 let body = Box::new(b.subst(x, &Term::Var(v.clone())).canon_in(k));
-                if matches!(self, Formula::Forall(..)) {
-                    Formula::Forall(v, t.clone(), body)
-                } else {
-                    Formula::Exists(v, t.clone(), body)
-                }
+                if matches!(self, Formula::Forall(..)) { Formula::Forall(v, t.clone(), body) } else { Formula::Exists(v, t.clone(), body) }
             }
         }
     }
@@ -890,11 +899,7 @@ impl Formula {
 // ---------------------------------------------------------------- 表示
 
 fn binder_names(ps: &[(String, String)]) -> String {
-    if ps.len() == 1 {
-        ps[0].0.clone()
-    } else {
-        format!("({})", ps.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>().join(", "))
-    }
+    if ps.len() == 1 { ps[0].0.clone() } else { format!("({})", ps.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>().join(", ")) }
 }
 
 /// `x : ℕ` / `(x, y) : ℕ × ℕ`（型が表示しないものなら名前だけ）
@@ -913,10 +918,8 @@ pub fn show_term(t: &Term, prec: u8) -> String {
         Term::Meta(m) => format!("?{m}"),
         Term::Lam(ps, b) => match matrix_of_lam(ps, b) {
             Some((_, cols, xs)) => {
-                let rows: Vec<String> = xs
-                    .chunks(cols)
-                    .map(|r| format!("[{}]", r.iter().map(|x| show_term(x, 0)).collect::<Vec<_>>().join(", ")))
-                    .collect();
+                let rows: Vec<String> =
+                    xs.chunks(cols).map(|r| format!("[{}]", r.iter().map(|x| show_term(x, 0)).collect::<Vec<_>>().join(", "))).collect();
                 format!("[{}]", rows.join(", "))
             }
             None => bind_seqs(ps, || format!("({} ↦ {})", binder_typed(ps), show_term(b, 0))),
@@ -939,9 +942,7 @@ pub fn show_term(t: &Term, prec: u8) -> String {
         }
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
-                ("+" | "-", [a, b]) => {
-                    (format!("{} {} {}", show_term(a, 1), f, show_term(b, 2)), 1)
-                }
+                ("+" | "-", [a, b]) => (format!("{} {} {}", show_term(a, 1), f, show_term(b, 2)), 1),
                 ("·", [a, b]) => (format!("{}·{}", show_term(a, 2), show_term(b, 3)), 2),
                 ("/", [a, b]) => (format!("{}/{}", show_term(a, 2), show_term(b, 3)), 2),
                 ("neg", [a]) => (format!("-{}", show_term(a, 3)), 3),
@@ -950,10 +951,8 @@ pub fn show_term(t: &Term, prec: u8) -> String {
                 // 行列 [[a, b], [c, d]]
                 (m @ ("mat2" | "mat3"), xs) if xs.len() == if m == "mat2" { 4 } else { 9 } => {
                     let n = if m == "mat2" { 2 } else { 3 };
-                    let rows: Vec<String> = xs
-                        .chunks(n)
-                        .map(|r| format!("[{}]", r.iter().map(|x| show_term(x, 0)).collect::<Vec<_>>().join(", ")))
-                        .collect();
+                    let rows: Vec<String> =
+                        xs.chunks(n).map(|r| format!("[{}]", r.iter().map(|x| show_term(x, 0)).collect::<Vec<_>>().join(", "))).collect();
                     (format!("[{}]", rows.join(", ")), 9)
                 }
                 ("max" | "min", [a, b]) => (format!("{f}{{{}, {}}}", show_term(a, 0), show_term(b, 0)), 5),
@@ -996,14 +995,13 @@ impl fmt::Display for Term {
 
 /// 範囲付き量化子の形 ∀x>t. φ / ∃x>t. φ を取り出す
 pub fn bounded(x: &str, guard: &Formula) -> Option<(String, Term)> {
-    if let Formula::Atom(r, ts) = guard {
-        if ORDER_RELS.contains(&r.as_str())
-            && ts.len() == 2
-            && ts[0] == Term::Var(x.to_string())
-            && !ts[1].mentions(x)
-        {
-            return Some((r.clone(), ts[1].clone()));
-        }
+    if let Formula::Atom(r, ts) = guard
+        && ORDER_RELS.contains(&r.as_str())
+        && ts.len() == 2
+        && ts[0] == Term::Var(x.to_string())
+        && !ts[1].mentions(x)
+    {
+        return Some((r.clone(), ts[1].clone()));
     }
     None
 }
@@ -1019,11 +1017,7 @@ fn typed_name(x: &str, ty: &str) -> String {
 }
 
 fn binder(q: &str, x: &str, ty: &str) -> String {
-    if hidden_sort(ty) {
-        format!("{q}{x}")
-    } else {
-        format!("{q}{x}:{ty}")
-    }
+    if hidden_sort(ty) { format!("{q}{x}") } else { format!("{q}{x}:{ty}") }
 }
 
 /// (a ⇒ b) ∧ (b ⇒ a) を a ⇔ b として表示するための (a, b)
@@ -1070,10 +1064,9 @@ pub fn show_formula(f: &Formula, prec: u8) -> String {
 fn show_formula_inner(f: &Formula, prec: u8) -> String {
     let (s, p) = match f {
         Formula::Bot => ("⊥".to_string(), 5),
-        Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (
-            format!("{} {} {}", show_term(&ts[0], 0), r, show_term(&ts[1], 0)),
-            5,
-        ),
+        Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => {
+            (format!("{} {} {}", show_term(&ts[0], 0), r, show_term(&ts[1], 0)), 5)
+        }
         Formula::Atom(p, ts) if ts.is_empty() => (p.clone(), 5),
         // 式で表した集合への所属は x ∈ S（定義の所属 S(x) と同じ。紙の書き方）
         Formula::Atom(p, ts) if p == "@" && ts.len() == 2 && !matches!(ts[0], Term::Var(_)) => {
@@ -1094,45 +1087,33 @@ fn show_formula_inner(f: &Formula, prec: u8) -> String {
             (format!("{}({})", p, a.join(", ")), 5)
         }
         Formula::Imp(a, b) if **b == Formula::Bot => match &**a {
-            Formula::Atom(r, ts) if r == "=" && ts.len() == 2 => (
-                format!("{} ≠ {}", show_term(&ts[0], 0), show_term(&ts[1], 0)),
-                5,
-            ),
+            Formula::Atom(r, ts) if r == "=" && ts.len() == 2 => (format!("{} ≠ {}", show_term(&ts[0], 0), show_term(&ts[1], 0)), 5),
             // 関係は括弧に入れる（¬k < n は (¬k) < n と読める）
             Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (format!("¬({})", show_formula(a, 0)), 4),
             _ => (format!("¬{}", show_formula(a, 4)), 4),
         },
-        Formula::Imp(a, b) => (
-            format!("{} ⇒ {}", show_formula(a, 2), show_formula(b, 1)),
-            1,
-        ),
-        Formula::Or(a, b) => (
-            format!("{} ∨ {}", show_formula(a, 2), show_formula(b, 3)),
-            2,
-        ),
+        Formula::Imp(a, b) => (format!("{} ⇒ {}", show_formula(a, 2), show_formula(b, 1)), 1),
+        Formula::Or(a, b) => (format!("{} ∨ {}", show_formula(a, 2), show_formula(b, 3)), 2),
         Formula::And(..) if iff_parts(f).is_some() => {
             let (a, b) = iff_parts(f).unwrap();
             (format!("{} ⇔ {}", show_formula(a, 1), show_formula(b, 1)), 0)
         }
-        Formula::And(a, b) => (
-            format!("{} ∧ {}", show_formula(a, 3), show_formula(b, 4)),
-            3,
-        ),
+        Formula::And(a, b) => (format!("{} ∧ {}", show_formula(a, 3), show_formula(b, 4)), 3),
         Formula::Forall(x, ty, b) => {
-            if let Formula::Imp(g, body) = &**b {
-                if let Some((r, t)) = bounded(x, g) {
-                    let s = format!("∀{}{}{}. {}", typed_name(x, ty), r, show_term(&t, 0), show_formula(body, 0));
-                    return if prec > 0 { format!("({s})") } else { s };
-                }
+            if let Formula::Imp(g, body) = &**b
+                && let Some((r, t)) = bounded(x, g)
+            {
+                let s = format!("∀{}{}{}. {}", typed_name(x, ty), r, show_term(&t, 0), show_formula(body, 0));
+                return if prec > 0 { format!("({s})") } else { s };
             }
             (format!("{}. {}", binder("∀", x, ty), show_formula(b, 0)), 0)
         }
         Formula::Exists(x, ty, b) => {
-            if let Formula::And(g, body) = &**b {
-                if let Some((r, t)) = bounded(x, g) {
-                    let s = format!("∃{}{}{}. {}", typed_name(x, ty), r, show_term(&t, 0), show_formula(body, 0));
-                    return if prec > 0 { format!("({s})") } else { s };
-                }
+            if let Formula::And(g, body) = &**b
+                && let Some((r, t)) = bounded(x, g)
+            {
+                let s = format!("∃{}{}{}. {}", typed_name(x, ty), r, show_term(&t, 0), show_formula(body, 0));
+                return if prec > 0 { format!("({s})") } else { s };
             }
             (format!("{}. {}", binder("∃", x, ty), show_formula(b, 0)), 0)
         }
@@ -1258,10 +1239,12 @@ pub fn ident_to_latex(s: &str) -> String {
                 return format!("h_{{N_{}}}", d as char);
             }
             // h.left・h.right（∧ の取り出し）：h は変数として、.left は立体で
-            if let Some((head, field)) = s.rsplit_once('.') {
-                if (field == "left" || field == "right") && !head.contains('.') && !head.is_empty() {
-                    return format!("{}.\\mathrm{{{field}}}", ident_to_latex(head));
-                }
+            if let Some((head, field)) = s.rsplit_once('.')
+                && (field == "left" || field == "right")
+                && !head.contains('.')
+                && !head.is_empty()
+            {
+                return format!("{}.\\mathrm{{{field}}}", ident_to_latex(head));
             }
             // ドットを含む識別子 (例: ge.max.left)
             if s.contains('.') {
@@ -1363,8 +1346,14 @@ pub fn type_latex(t: &str) -> String {
             "→" => "\\to".to_string(),
             "×" => "\\times".to_string(),
             _ => {
-                let (open, rest) = match w.strip_prefix('(') { Some(r) => ("(", r), None => ("", w) };
-                let (core, close) = match rest.strip_suffix(')') { Some(r) => (r, ")"), None => (rest, "") };
+                let (open, rest) = match w.strip_prefix('(') {
+                    Some(r) => ("(", r),
+                    None => ("", w),
+                };
+                let (core, close) = match rest.strip_suffix(')') {
+                    Some(r) => (r, ")"),
+                    None => (rest, ""),
+                };
                 format!("{open}{}{close}", ident_to_latex(core))
             }
         })
@@ -1379,10 +1368,8 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
         Term::Meta(m) => format!("?{m}"),
         Term::Lam(ps, b) => match matrix_of_lam(ps, b) {
             Some((_, cols, xs)) => {
-                let rows: Vec<String> = xs
-                    .chunks(cols)
-                    .map(|r| r.iter().map(|x| show_term_latex(x, 0)).collect::<Vec<_>>().join(" & "))
-                    .collect();
+                let rows: Vec<String> =
+                    xs.chunks(cols).map(|r| r.iter().map(|x| show_term_latex(x, 0)).collect::<Vec<_>>().join(" & ")).collect();
                 format!("\\begin{{pmatrix}} {} \\end{{pmatrix}}", rows.join(" \\\\ "))
             }
             None => bind_seqs(ps, || format!("\\left({} \\mapsto {}\\right)", binder_latex_list(ps, false), show_term_latex(b, 0))),
@@ -1391,7 +1378,9 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
             let n = notation_for_fn(f).unwrap();
             let seqs = applied_names(&n.split(args).unwrap().0);
             let before = SUB_SEQS.with(|s| std::mem::replace(&mut *s.borrow_mut(), seqs));
-            let s = n.render(args, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            let s = n
+                .render(args, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex)
+                .unwrap();
             let s = sup_parens(&s);
             SUB_SEQS.with(|s| *s.borrow_mut() = before);
             if prec > 4 { format!("\\left({s}\\right)") } else { s }
@@ -1409,11 +1398,7 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
             }
             format!("{}({})", show_term_latex(&args[0], 5), a.join(", "))
         }
-        Term::Set(ps, phi) => format!(
-            "\\left\\{{ {} \\mid {} \\right\\}}",
-            binder_latex_list(ps, true),
-            show_formula_latex(phi, 0)
-        ),
+        Term::Set(ps, phi) => format!("\\left\\{{ {} \\mid {} \\right\\}}", binder_latex_list(ps, true), show_formula_latex(phi, 0)),
         Term::App(f, args) => {
             let (s, p) = match (f.as_str(), args.as_slice()) {
                 // 略記の表示の中の数列：a(n) を a_{n} と書く
@@ -1422,42 +1407,25 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     let a: Vec<String> = rest.iter().map(|a| show_term_latex(a, 0)).collect();
                     (format!("{}_{{{}}}\\left({}\\right)", ident_to_latex(f), show_term_latex(i, 0), a.join(", ")), 5)
                 }
-                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) || with_syntax(|t| t.seq_globals.contains(f)) => (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5),
+                (_, [a]) if SUB_SEQS.with(|s| s.borrow().contains(f)) || with_syntax(|t| t.seq_globals.contains(f)) => {
+                    (format!("{}_{{{}}}", ident_to_latex(f), show_term_latex(a, 0)), 5)
+                }
                 ("max" | "min", [a, b]) => (format!("\\{f}\\{{{}, {}\\}}", show_term_latex(a, 0), show_term_latex(b, 0)), 5),
-                ("+" | "-", [a, b]) => (
-                    format!("{} {} {}", show_term_latex(a, 1), f, show_term_latex(b, 2)),
-                    1,
-                ),
+                ("+" | "-", [a, b]) => (format!("{} {} {}", show_term_latex(a, 1), f, show_term_latex(b, 2)), 1),
                 // 積は記号なしで並べる（2x・ab・b_n β）。右が数で始まるとき（2·3・a·2）だけ · を書く
                 ("·", [a, b]) => {
                     let (l, r) = (show_term_latex(a, 2), show_term_latex(b, 3));
                     let dot = r.starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '.');
                     (if dot { format!("{l} \\cdot {r}") } else { format!("{l} {r}") }, 2)
                 }
-                ("/", [a, b]) => (
-                    format!(
-                        "\\frac{{{}}}{{{}}}",
-                        show_term_latex(a, 0),
-                        show_term_latex(b, 0)
-                    ),
-                    4,
-                ),
+                ("/", [a, b]) => (format!("\\frac{{{}}}{{{}}}", show_term_latex(a, 0), show_term_latex(b, 0)), 4),
                 ("neg", [a]) => (format!("-{}", show_term_latex(a, 3)), 3),
-                ("^", [a, b]) => (
-                    format!(
-                        "{{{}}}^{{{}}}",
-                        show_term_latex(a, 5),
-                        show_term_latex(b, 0)
-                    ),
-                    4,
-                ),
+                ("^", [a, b]) => (format!("{{{}}}^{{{}}}", show_term_latex(a, 5), show_term_latex(b, 0)), 4),
                 ("abs", [a]) => (format!("\\left| {} \\right|", show_term_latex(a, 0)), 5),
                 (m @ ("mat2" | "mat3"), xs) if xs.len() == if m == "mat2" { 4 } else { 9 } => {
                     let n = if m == "mat2" { 2 } else { 3 };
-                    let rows: Vec<String> = xs
-                        .chunks(n)
-                        .map(|r| r.iter().map(|x| show_term_latex(x, 0)).collect::<Vec<_>>().join(" & "))
-                        .collect();
+                    let rows: Vec<String> =
+                        xs.chunks(n).map(|r| r.iter().map(|x| show_term_latex(x, 0)).collect::<Vec<_>>().join(" & ")).collect();
                     (format!("\\begin{{pmatrix}} {} \\end{{pmatrix}}", rows.join(" \\\\ ")), 9)
                 }
                 // 行列の演算（lib/algebra/matrix）
@@ -1477,88 +1445,33 @@ pub fn show_term_latex(t: &Term, prec: u8) -> String {
                     (format!("\\sum_{{{} < {}}} {}", ident_to_latex(&k), show_term_latex(n, 0), body), 2)
                 }
                 ("norm", [a]) => (format!("\\left\\| {} \\right\\|", show_term_latex(a, 0)), 5),
-                ("floor", [a]) => (
-                    format!("\\left\\lfloor {} \\right\\rfloor", show_term_latex(a, 0)),
-                    5,
-                ),
-                ("ceil", [a]) => (
-                    format!("\\left\\lceil {} \\right\\rceil", show_term_latex(a, 0)),
-                    5,
-                ),
-                ("set", [a]) => (
-                    format!("\\left\\{{ {} \\right\\}}", show_term_latex(a, 0)),
-                    5,
-                ),
-                ("inner", [a]) => (
-                    format!("\\left\\langle {} \\right\\rangle", show_term_latex(a, 0)),
-                    5,
-                ),
+                ("floor", [a]) => (format!("\\left\\lfloor {} \\right\\rfloor", show_term_latex(a, 0)), 5),
+                ("ceil", [a]) => (format!("\\left\\lceil {} \\right\\rceil", show_term_latex(a, 0)), 5),
+                ("set", [a]) => (format!("\\left\\{{ {} \\right\\}}", show_term_latex(a, 0)), 5),
+                ("inner", [a]) => (format!("\\left\\langle {} \\right\\rangle", show_term_latex(a, 0)), 5),
                 ("sqrt", [a]) => (format!("\\sqrt{{{}}}", show_term_latex(a, 0)), 5),
-                ("root", [n, a]) => (
-                    format!(
-                        "\\sqrt[{}]{{{}}}",
-                        show_term_latex(n, 0),
-                        show_term_latex(a, 0)
-                    ),
-                    5,
-                ),
-                ("binom", [n, k]) => (
-                    format!(
-                        "\\binom{{{}}}{{{}}}",
-                        show_term_latex(n, 0),
-                        show_term_latex(k, 0)
-                    ),
-                    5,
-                ),
+                ("root", [n, a]) => (format!("\\sqrt[{}]{{{}}}", show_term_latex(n, 0), show_term_latex(a, 0)), 5),
+                ("binom", [n, k]) => (format!("\\binom{{{}}}{{{}}}", show_term_latex(n, 0), show_term_latex(k, 0)), 5),
                 ("vec", [a]) => (format!("\\vec{{{}}}", show_term_latex(a, 0)), 5),
                 ("hat", [a]) => (format!("\\hat{{{}}}", show_term_latex(a, 0)), 5),
                 ("bar", [a]) => (format!("\\overline{{{}}}", show_term_latex(a, 0)), 5),
                 ("tilde", [a]) => (format!("\\tilde{{{}}}", show_term_latex(a, 0)), 5),
-                ("sum", [sub, sup, body]) => (
-                    format!(
-                        "\\sum_{{{}}}^{{{}}} {}",
-                        show_term_latex(sub, 0),
-                        show_term_latex(sup, 0),
-                        show_term_latex(body, 3)
-                    ),
-                    3,
-                ),
-                ("prod", [sub, sup, body]) => (
-                    format!(
-                        "\\prod_{{{}}}^{{{}}} {}",
-                        show_term_latex(sub, 0),
-                        show_term_latex(sup, 0),
-                        show_term_latex(body, 3)
-                    ),
-                    3,
-                ),
-                ("int", [sub, sup, body]) => (
-                    format!(
-                        "\\int_{{{}}}^{{{}}} {}",
-                        show_term_latex(sub, 0),
-                        show_term_latex(sup, 0),
-                        show_term_latex(body, 3)
-                    ),
-                    3,
-                ),
-                ("lim", [sub, body]) => (
-                    format!(
-                        "\\lim_{{{}}} {}",
-                        show_term_latex(sub, 0),
-                        show_term_latex(body, 3)
-                    ),
-                    3,
-                ),
+                ("sum", [sub, sup, body]) => {
+                    (format!("\\sum_{{{}}}^{{{}}} {}", show_term_latex(sub, 0), show_term_latex(sup, 0), show_term_latex(body, 3)), 3)
+                }
+                ("prod", [sub, sup, body]) => {
+                    (format!("\\prod_{{{}}}^{{{}}} {}", show_term_latex(sub, 0), show_term_latex(sup, 0), show_term_latex(body, 3)), 3)
+                }
+                ("int", [sub, sup, body]) => {
+                    (format!("\\int_{{{}}}^{{{}}} {}", show_term_latex(sub, 0), show_term_latex(sup, 0), show_term_latex(body, 3)), 3)
+                }
+                ("lim", [sub, body]) => (format!("\\lim_{{{}}} {}", show_term_latex(sub, 0), show_term_latex(body, 3)), 3),
                 _ => {
                     let a: Vec<String> = args.iter().map(|a| show_term_latex(a, 0)).collect();
                     (format!("{}({})", ident_to_latex(f), a.join(", ")), 5)
                 }
             };
-            if p < prec {
-                format!("\\left({s}\\right)")
-            } else {
-                s
-            }
+            if p < prec { format!("\\left({s}\\right)") } else { s }
         }
     }
 }
@@ -1576,7 +1489,9 @@ fn binder_latex(q: &str, x: &str, ty: &str) -> String {
 
 pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
     match f {
-        Formula::Forall(x, ty, _) | Formula::Exists(x, ty, _) => bind_seqs(&[(x.clone(), ty.clone())], || show_formula_latex_inner(f, prec)),
+        Formula::Forall(x, ty, _) | Formula::Exists(x, ty, _) => {
+            bind_seqs(&[(x.clone(), ty.clone())], || show_formula_latex_inner(f, prec))
+        }
         _ => show_formula_latex_inner(f, prec),
     }
 }
@@ -1584,15 +1499,9 @@ pub fn show_formula_latex(f: &Formula, prec: u8) -> String {
 fn show_formula_latex_inner(f: &Formula, prec: u8) -> String {
     let (s, p) = match f {
         Formula::Bot => ("\\bot".to_string(), 5),
-        Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (
-            format!(
-                "{} {} {}",
-                show_term_latex(&ts[0], 0),
-                rel_to_latex(r),
-                show_term_latex(&ts[1], 0)
-            ),
-            5,
-        ),
+        Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => {
+            (format!("{} {} {}", show_term_latex(&ts[0], 0), rel_to_latex(r), show_term_latex(&ts[1], 0)), 5)
+        }
         Formula::Atom(p, ts) if ts.is_empty() => (ident_to_latex(p), 5),
         Formula::Atom(p, ts) if p == "@" && ts.len() == 2 && !matches!(ts[0], Term::Var(_)) => {
             (format!("{} \\in {}", show_term_latex(&ts[1], 0), show_term_latex(&ts[0], 0)), 5)
@@ -1606,7 +1515,9 @@ fn show_formula_latex_inner(f: &Formula, prec: u8) -> String {
             let seqs = applied_names(&n.split(ts).unwrap().0);
             SUB_SEQS.with(|s| *s.borrow_mut() = seqs);
             // 型紙の中の「(」の前は少し空ける（a_n → α (n → ∞)）
-            let shown = n.render(ts, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex).unwrap();
+            let shown = n
+                .render(ts, &|t, p| show_term_latex(t, p), &|l| if l == "(" { "\\;(".into() } else { lit_latex(l) }, &ident_to_latex)
+                .unwrap();
             let shown = sup_parens(&shown);
             SUB_SEQS.with(|s| s.borrow_mut().clear());
             (shown, 5)
@@ -1616,90 +1527,48 @@ fn show_formula_latex_inner(f: &Formula, prec: u8) -> String {
             (format!("{}({})", ident_to_latex(p), a.join(", ")), 5)
         }
         Formula::Imp(a, b) if **b == Formula::Bot => match &**a {
-            Formula::Atom(r, ts) if r == "=" && ts.len() == 2 => (
-                format!(
-                    "{} \\ne {}",
-                    show_term_latex(&ts[0], 0),
-                    show_term_latex(&ts[1], 0)
-                ),
-                5,
-            ),
-            Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => {
-                (format!("\\lnot ({})", show_formula_latex(a, 0)), 4)
+            Formula::Atom(r, ts) if r == "=" && ts.len() == 2 => {
+                (format!("{} \\ne {}", show_term_latex(&ts[0], 0), show_term_latex(&ts[1], 0)), 5)
             }
+            Formula::Atom(r, ts) if RELS.contains(&r.as_str()) && ts.len() == 2 => (format!("\\lnot ({})", show_formula_latex(a, 0)), 4),
             _ => (format!("\\lnot {}", show_formula_latex(a, 4)), 4),
         },
-        Formula::Imp(a, b) => (
-            format!(
-                "{} \\Rightarrow {}",
-                show_formula_latex(a, 2),
-                show_formula_latex(b, 1)
-            ),
-            1,
-        ),
-        Formula::Or(a, b) => (
-            format!(
-                "{} \\lor {}",
-                show_formula_latex(a, 2),
-                show_formula_latex(b, 3)
-            ),
-            2,
-        ),
+        Formula::Imp(a, b) => (format!("{} \\Rightarrow {}", show_formula_latex(a, 2), show_formula_latex(b, 1)), 1),
+        Formula::Or(a, b) => (format!("{} \\lor {}", show_formula_latex(a, 2), show_formula_latex(b, 3)), 2),
         Formula::And(..) if iff_parts(f).is_some() => {
             let (a, b) = iff_parts(f).unwrap();
             (format!("{} \\Leftrightarrow {}", show_formula_latex(a, 1), show_formula_latex(b, 1)), 0)
         }
-        Formula::And(a, b) => (
-            format!(
-                "{} \\land {}",
-                show_formula_latex(a, 3),
-                show_formula_latex(b, 4)
-            ),
-            3,
-        ),
+        Formula::And(a, b) => (format!("{} \\land {}", show_formula_latex(a, 3), show_formula_latex(b, 4)), 3),
         Formula::Forall(x, ty, b) => {
-            if let Formula::Imp(g, body) = &**b {
-                if let Some((r, t)) = bounded(x, g) {
-                    let s = format!(
-                        "\\forall {} {} {},\\ {}",
-                        ident_to_latex(x),
-                        rel_to_latex(&r),
-                        show_term_latex(&t, 0),
-                        show_formula_latex(body, 0)
-                    );
-                    return if prec > 0 { format!("({s})") } else { s };
-                }
+            if let Formula::Imp(g, body) = &**b
+                && let Some((r, t)) = bounded(x, g)
+            {
+                let s = format!(
+                    "\\forall {} {} {},\\ {}",
+                    ident_to_latex(x),
+                    rel_to_latex(&r),
+                    show_term_latex(&t, 0),
+                    show_formula_latex(body, 0)
+                );
+                return if prec > 0 { format!("({s})") } else { s };
             }
-            (
-                format!(
-                    "{},\\ {}",
-                    binder_latex("\\forall", x, ty),
-                    show_formula_latex(b, 0)
-                ),
-                0,
-            )
+            (format!("{},\\ {}", binder_latex("\\forall", x, ty), show_formula_latex(b, 0)), 0)
         }
         Formula::Exists(x, ty, b) => {
-            if let Formula::And(g, body) = &**b {
-                if let Some((r, t)) = bounded(x, g) {
-                    let s = format!(
-                        "\\exists {} {} {},\\ {}",
-                        ident_to_latex(x),
-                        rel_to_latex(&r),
-                        show_term_latex(&t, 0),
-                        show_formula_latex(body, 0)
-                    );
-                    return if prec > 0 { format!("({s})") } else { s };
-                }
+            if let Formula::And(g, body) = &**b
+                && let Some((r, t)) = bounded(x, g)
+            {
+                let s = format!(
+                    "\\exists {} {} {},\\ {}",
+                    ident_to_latex(x),
+                    rel_to_latex(&r),
+                    show_term_latex(&t, 0),
+                    show_formula_latex(body, 0)
+                );
+                return if prec > 0 { format!("({s})") } else { s };
             }
-            (
-                format!(
-                    "{},\\ {}",
-                    binder_latex("\\exists", x, ty),
-                    show_formula_latex(b, 0)
-                ),
-                0,
-            )
+            (format!("{},\\ {}", binder_latex("\\exists", x, ty), show_formula_latex(b, 0)), 0)
         }
     };
     if p < prec { format!("({s})") } else { s }
@@ -1730,10 +1599,8 @@ pub fn matrix_term(rows: Vec<Vec<Term>>) -> Term {
     for (r, row) in rows.into_iter().enumerate() {
         for (c, x) in row.into_iter().enumerate() {
             // matent(x, i, j, r, c) = x·δ(i, r)·δ(j, c)（lib/algebra/matrix）
-            let t = Term::App(
-                "matent".into(),
-                vec![x, Term::Var(i.clone()), Term::Var(j.clone()), Term::Num(r as i64), Term::Num(c as i64)],
-            );
+            let t =
+                Term::App("matent".into(), vec![x, Term::Var(i.clone()), Term::Var(j.clone()), Term::Num(r as i64), Term::Num(c as i64)]);
             body = Some(match body {
                 None => t,
                 Some(b) => Term::App("+".into(), vec![b, t]),

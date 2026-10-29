@@ -60,11 +60,7 @@ fn statuses(file: &Path) -> Vec<String> {
 }
 
 fn roundtrip(file: &Path) -> String {
-    let out = Command::new("node")
-        .args(["tests/ui_roundtrip.js", "src/web_ui.html"])
-        .arg(file)
-        .output()
-        .unwrap();
+    let out = Command::new("node").args(["tests/ui_roundtrip.js", "src/web_ui.html"]).arg(file).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).unwrap()
 }
@@ -97,12 +93,7 @@ fn editor_operations() {
         return;
     }
     let out = Command::new("node").args(["tests/ui_edit.js", "src/web_ui.html"]).output().unwrap();
-    assert!(
-        out.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 
 /// ソースの変換（日本語シュガー・標準 ASCII）で検査結果が変わらないこと。
@@ -144,11 +135,7 @@ fn editor_roundtrip_keeps_comments() {
         return;
     }
     let comment_lines = |s: &str| -> Vec<String> {
-        s.lines()
-            .map(str::trim)
-            .filter(|l| l.starts_with("--") || l.starts_with("//") || l.starts_with('#'))
-            .map(String::from)
-            .collect()
+        s.lines().map(str::trim).filter(|l| l.starts_with("--") || l.starts_with("//") || l.starts_with('#')).map(String::from).collect()
     };
     for f in FILES {
         let src = std::fs::read_to_string(f).unwrap();
@@ -205,7 +192,11 @@ fn tutorial_answers_check() {
     };
     // レッスンの中のコードの例（thm を含むもの）も、すべて通ること
     let all = Command::new("node")
-        .args(["-e", "global.window = {}; require(process.argv[1]); process.stdout.write(JSON.stringify(window.NARFI_TUTORIAL))", "./src/tutorial.js"])
+        .args([
+            "-e",
+            "global.window = {}; require(process.argv[1]); process.stdout.write(JSON.stringify(window.NARFI_TUTORIAL))",
+            "./src/tutorial.js",
+        ])
         .output()
         .unwrap();
     let all_json = String::from_utf8(all.stdout).unwrap();
@@ -241,7 +232,10 @@ fn tutorial_answers_check() {
         let fa = dir.join(format!("ans{k}.narfi"));
         std::fs::write(&fa, ans).unwrap();
         let st = statuses(&fa);
-        assert!(st.iter().any(|s| s.starts_with('✓')) && st.iter().all(|s| s.starts_with('✓') || s.starts_with("公理")), "答え {k} が通らない: {st:?}\n{ans}");
+        assert!(
+            st.iter().any(|s| s.starts_with('✓')) && st.iter().all(|s| s.starts_with('✓') || s.starts_with("公理")),
+            "答え {k} が通らない: {st:?}\n{ans}"
+        );
         let fe = dir.join(format!("ex{k}.narfi"));
         std::fs::write(&fe, ex).unwrap();
         let st = statuses(&fe);

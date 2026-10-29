@@ -1,7 +1,7 @@
 // Narfi のチュートリアル（エディタ右側の Learn タブ）。対象：理系の高校生でもわかるように。
 // 各レッスン：本文（p・paper：紙の証明・code：エディタと同じ見た目で描く・steps：1 行ずつ・type：打ち方・check・pitfalls・keys・h）、
 // 練習（file：自分のファイルに作る練習のファイル・task・hints・exercise・answer）。番号とファイル名の番号はそろえる。
-// 例と答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。生成：Python（/tmp で作って貼る）ではなく、このファイルを直接直してよい。
+// 例と答えが通ることは tests/ui.rs（tutorial_answers_check）で確かめる。このファイルは scripts/learn/tutorial.py で作る（直接直さない）。
 
 window.NARFI_TUTORIAL = [
   {

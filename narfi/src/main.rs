@@ -71,11 +71,11 @@ fn main() -> ExitCode {
             };
             let out = narfi::format::format_source(&src);
             if write {
-                if out != src {
-                    if let Err(e) = std::fs::write(path, &out) {
-                        eprintln!("{path}: 書けない: {e}");
-                        return ExitCode::from(2);
-                    }
+                if out != src
+                    && let Err(e) = std::fs::write(path, &out)
+                {
+                    eprintln!("{path}: 書けない: {e}");
+                    return ExitCode::from(2);
                 }
             } else {
                 print!("{out}");
@@ -162,11 +162,7 @@ fn main() -> ExitCode {
 
             if mode == "prose" {
                 for (d, r) in decls.iter().zip(reports.iter()) {
-                    println!(
-                        "### {} `{}`\n",
-                        if d.is_axiom { "公理" } else { "定理" },
-                        d.name
-                    );
+                    println!("### {} `{}`\n", if d.is_axiom { "公理" } else { "定理" }, d.name);
                     for b in prose::decl_to_japanese_prose(d, &r.steps) {
                         println!("{}- {}", "  ".repeat(b.depth), b.text);
                     }
@@ -264,20 +260,14 @@ fn main() -> ExitCode {
         }
     }
     if diag {
-        return if failed == 0 {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        };
+        return if failed == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE };
     }
     println!();
     if failed == 0 && unfinished == 0 {
         println!("{total} 個の定理をすべて検証しました。");
         ExitCode::SUCCESS
     } else if failed == 0 {
-        println!(
-            "{total} 個中 {unfinished} 個が未完成（sorry を含む）です。それ以外は検証しました。"
-        );
+        println!("{total} 個中 {unfinished} 個が未完成（sorry を含む）です。それ以外は検証しました。");
         ExitCode::SUCCESS
     } else {
         println!("{total} 個中 {failed} 個が通りませんでした。");
@@ -294,25 +284,13 @@ fn print_report(path: &str, r: &Report) {
         None => {
             let mut notes = Vec::new();
             if !r.axioms.is_empty() {
-                notes.push(format!(
-                    "公理: {}",
-                    r.axioms.iter().cloned().collect::<Vec<_>>().join(", ")
-                ));
+                notes.push(format!("公理: {}", r.axioms.iter().cloned().collect::<Vec<_>>().join(", ")));
             }
-            let oracles: Vec<String> = r
-                .oracles
-                .iter()
-                .filter(|o| *o != "sorry")
-                .cloned()
-                .collect();
+            let oracles: Vec<String> = r.oracles.iter().filter(|o| *o != "sorry").cloned().collect();
             if !oracles.is_empty() {
                 notes.push(format!("算術: {}", oracles.join(", ")));
             }
-            let notes = if notes.is_empty() {
-                String::new()
-            } else {
-                format!("   〔{}〕", notes.join(" ／ "))
-            };
+            let notes = if notes.is_empty() { String::new() } else { format!("   〔{}〕", notes.join(" ／ ")) };
             if r.oracles.contains("sorry") {
                 println!("  △ {}   未完成{}", r.name, notes);
                 for (line, ctx, g) in &r.sorries {
@@ -361,10 +339,6 @@ fn print_diag(r: &Report) {
         println!("ERROR\t{}\t{}", e.line, esc(&msg));
     }
     for (line, ctx, g) in &r.sorries {
-        println!(
-            "SORRY\t{}\t{}",
-            line,
-            esc(&format!("残っている goal:\n{}", state(ctx, &g.0)))
-        );
+        println!("SORRY\t{}\t{}", line, esc(&format!("残っている goal:\n{}", state(ctx, &g.0))));
     }
 }

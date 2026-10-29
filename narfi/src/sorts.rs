@@ -207,16 +207,16 @@ impl<'a> Infer<'a> {
     /// 関数 fty を、型 args の引数に適用した値の型を res にする。
     /// 数の引数は、引数の型以上の順位なら埋め込まれる（ℕ の項を ℝ の引数に渡してよい。逆はだめ）
     fn apply(&mut self, fty: &IT, args: Vec<IT>, res: &IT) -> SResult<()> {
-        if let IT::Fun(ps, r) = self.resolve(fty) {
-            if ps.len() == args.len() {
-                for (p, a) in ps.iter().zip(&args) {
-                    match (self.num_base(a), self.num_base(p)) {
-                        (Some(ka), Some(kp)) if ka <= kp => {}
-                        _ => self.unify(p, a)?,
-                    }
+        if let IT::Fun(ps, r) = self.resolve(fty)
+            && ps.len() == args.len()
+        {
+            for (p, a) in ps.iter().zip(&args) {
+                match (self.num_base(a), self.num_base(p)) {
+                    (Some(ka), Some(kp)) if ka <= kp => {}
+                    _ => self.unify(p, a)?,
                 }
-                return self.unify(&r, res);
             }
+            return self.unify(&r, res);
         }
         self.unify(fty, &IT::Fun(args, Box::new(res.clone())))
     }
@@ -287,13 +287,12 @@ impl<'a> Infer<'a> {
                 Ok(h)
             }
             Term::Var(x) => {
-                if let Some(d) = self.kenv.defs.get(x) {
-                    if let DefBody::Term(s, _) = &d.body {
-                        if d.params.is_empty() {
-                            let s = s.clone();
-                            return self.parse(&s);
-                        }
-                    }
+                if let Some(d) = self.kenv.defs.get(x)
+                    && let DefBody::Term(s, _) = &d.body
+                    && d.params.is_empty()
+                {
+                    let s = s.clone();
+                    return self.parse(&s);
                 }
                 self.lookup_var(x)
             }
@@ -362,8 +361,7 @@ impl<'a> Infer<'a> {
                     ("some", [p]) => {
                         let np = self.term(p)?;
                         let a = self.hole(false, None);
-                        self.unify(&np, &IT::Fun(vec![a.clone()], Box::new(IT::Prop)))
-                            .map_err(|e| format!("some の引数：{e}"))?;
+                        self.unify(&np, &IT::Fun(vec![a.clone()], Box::new(IT::Prop))).map_err(|e| format!("some の引数：{e}"))?;
                         Ok(a)
                     }
                     _ => {
@@ -389,7 +387,11 @@ impl<'a> Infer<'a> {
                         let res = self.hole(false, Some(format!("{f}(…)")));
                         let curried = ns.len() > 1 && matches!(&fty, IT::Fun(ps, r) if ps.len() == 1 && matches!(**r, IT::Fun(..)));
                         self.apply(&fty, ns, &res).map_err(|e| {
-                            let hint = if curried { "。複数の引数をまとめて渡す関数の型は A × B → C と書く（A → B → C は 1 つずつ渡す形で、f(a)(b) と書く）" } else { "" };
+                            let hint = if curried {
+                                "。複数の引数をまとめて渡す関数の型は A × B → C と書く（A → B → C は 1 つずつ渡す形で、f(a)(b) と書く）"
+                            } else {
+                                ""
+                            };
                             format!("`{f}` の適用：{e}{hint}")
                         })?;
                         Ok(res)
@@ -487,9 +489,7 @@ impl<'a> Infer<'a> {
             IT::Base(s) => Ty::Base(s),
             IT::Param(p) => Ty::Param(p),
             IT::Prop => Ty::Prop,
-            IT::Fun(a, r) => {
-                Ty::Fun(a.iter().map(|x| self.final_ty(x, decided)).collect(), Box::new(self.final_ty(&r, decided)))
-            }
+            IT::Fun(a, r) => Ty::Fun(a.iter().map(|x| self.final_ty(x, decided)).collect(), Box::new(self.final_ty(&r, decided))),
         }
     }
 
@@ -501,6 +501,7 @@ impl<'a> Infer<'a> {
     }
 
     /// 型を決める
+    #[allow(clippy::needless_range_loop)] // holes と decided を同じ番号で見る
     pub fn finish(self) -> SResult<Inferred> {
         let n = self.holes.len();
         let mut decided: Vec<Option<Ty>> = vec![None; n];
@@ -560,11 +561,7 @@ impl Inferred {
                 let s = self.binders[*k].clone();
                 *k += 1;
                 let b = Box::new(self.annotate(b, k));
-                if matches!(f, Formula::Forall(..)) {
-                    Formula::Forall(x.clone(), s, b)
-                } else {
-                    Formula::Exists(x.clone(), s, b)
-                }
+                if matches!(f, Formula::Forall(..)) { Formula::Forall(x.clone(), s, b) } else { Formula::Exists(x.clone(), s, b) }
             }
         }
     }

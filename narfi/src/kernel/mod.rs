@@ -117,7 +117,8 @@ impl KEnv {
             check::check_theorem_proof(&mut ctx, proof, &nonempty)?
         };
         let ty = crate::types::Ty::Base(name.to_string());
-        let car = crate::types::Ty::parse(carrier).ok_or_else(|| env::KError { line: None, msg: format!("型 `{carrier}` が読めない") })?;
+        let car =
+            crate::types::Ty::parse(carrier).ok_or_else(|| env::KError { line: None, msg: format!("型 `{carrier}` が読めない") })?;
         self.types.insert(name.to_string());
         self.consts.insert(abs.clone(), crate::types::Ty::fun(vec![car.clone()], ty.clone()).show());
         self.consts.insert(rep.clone(), crate::types::Ty::fun(vec![ty], car).show());
@@ -145,10 +146,7 @@ impl KEnv {
             ),
         ];
         for (n, f) in axioms {
-            self.thms.insert(
-                n,
-                Schema { type_params: vec![], params: vec![], formula: f, is_axiom: true, core: true, deps: deps.clone() },
-            );
+            self.thms.insert(n, Schema { type_params: vec![], params: vec![], formula: f, is_axiom: true, core: true, deps: deps.clone() });
         }
         Ok(deps)
     }

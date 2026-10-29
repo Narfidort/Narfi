@@ -116,11 +116,11 @@ fn candidates(line: &str, msg: &str) -> Vec<String> {
         }
         out.push(s);
     }
-    if msg.contains("述語の定義は :⇔") {
-        if let Some(i) = line.find(":=") {
-            let rep = if line.is_ascii() { ":<=>" } else { ":⇔" };
-            out.push(format!("{}{}{}", &line[..i], rep, &line[i + 2..]));
-        }
+    if msg.contains("述語の定義は :⇔")
+        && let Some(i) = line.find(":=")
+    {
+        let rep = if line.is_ascii() { ":<=>" } else { ":⇔" };
+        out.push(format!("{}{}{}", &line[..i], rep, &line[i + 2..]));
     }
     if msg.contains("値の定義は := で書く") {
         for (pat, len) in [(":⇔", ":⇔".len()), (":<=>", 4)] {
@@ -145,31 +145,36 @@ fn candidates(line: &str, msg: &str) -> Vec<String> {
     if msg.contains("`contradiction` は使わない") {
         // contradiction h k → k(h)
         let indent = &line[..line.len() - line.trim_start().len()];
-        let args: Vec<&str> = line.trim_start().trim_start_matches("contradiction").split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()).collect();
+        let args: Vec<&str> = line
+            .trim_start()
+            .trim_start_matches("contradiction")
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|s| !s.is_empty())
+            .collect();
         if args.len() == 2 {
             out.push(format!("{indent}{}({})", args[1], args[0]));
             out.push(format!("{indent}{}({})", args[0], args[1]));
         }
     }
-    if msg.contains("記号を宣言するなら `const") {
-        if let Some(rest) = line.trim_start().strip_prefix("axiom") {
-            out.push(format!("const{rest}"));
-        }
+    if msg.contains("記号を宣言するなら `const")
+        && let Some(rest) = line.trim_start().strip_prefix("axiom")
+    {
+        out.push(format!("const{rest}"));
     }
     if msg.contains("Obtain は `Obtain x | h by 根拠`") {
         // Obtain x, h1, h2 : e → Obtain x | h1, h2 by e。Obtain x : e → Obtain x by e
         let indent = &line[..line.len() - line.trim_start().len()];
-        if let Some(rest) = line.trim_start().strip_prefix("Obtain") {
-            if let Some(colon) = top_level(rest, ':') {
-                let (head, just) = (&rest[..colon], rest[colon + 1..].trim());
-                let mut names = split_top(head);
-                if !names.is_empty() {
-                    let v = names.remove(0);
-                    if names.is_empty() {
-                        out.push(format!("{indent}Obtain {v} by {just}"));
-                    } else {
-                        out.push(format!("{indent}Obtain {v} | {} by {just}", names.join(", ")));
-                    }
+        if let Some(rest) = line.trim_start().strip_prefix("Obtain")
+            && let Some(colon) = top_level(rest, ':')
+        {
+            let (head, just) = (&rest[..colon], rest[colon + 1..].trim());
+            let mut names = split_top(head);
+            if !names.is_empty() {
+                let v = names.remove(0);
+                if names.is_empty() {
+                    out.push(format!("{indent}Obtain {v} by {just}"));
+                } else {
+                    out.push(format!("{indent}Obtain {v} | {} by {just}", names.join(", ")));
                 }
             }
         }

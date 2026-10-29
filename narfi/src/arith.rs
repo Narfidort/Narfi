@@ -130,10 +130,7 @@ mod tests {
     fn linarith_certificates() {
         assert!(proves(&[("<", "x", "3"), ("≤", "y", "x")], ("<", "y", "3")));
         assert!(!proves(&[("<", "x", "3"), ("≤", "y", "x")], ("<", "y", "2")));
-        assert!(proves(
-            &[("<", "|a - c|", "e/2"), ("<", "|b - d|", "e/2")],
-            ("<", "|a - c| + |b - d|", "e")
-        ));
+        assert!(proves(&[("<", "|a - c|", "e/2"), ("<", "|b - d|", "e/2")], ("<", "|a - c| + |b - d|", "e")));
         assert!(proves(&[("=", "x", "y + 1")], (">", "x", "y")));
         assert!(proves(&[(">", "e", "0")], (">", "e/2", "0")));
     }

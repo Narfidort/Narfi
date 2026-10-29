@@ -26,11 +26,7 @@ fn extract_notes(src: &str) -> Vec<NoteBlock> {
         let trimmed = raw.trim();
         if trimmed.starts_with("```") {
             if in_fence {
-                notes.push(NoteBlock {
-                    line: fence_start,
-                    kind: "markdown",
-                    text: fence_buf.trim_end().to_string(),
-                });
+                notes.push(NoteBlock { line: fence_start, kind: "markdown", text: fence_buf.trim_end().to_string() });
                 fence_buf.clear();
                 in_fence = false;
             } else {
@@ -45,25 +41,14 @@ fn extract_notes(src: &str) -> Vec<NoteBlock> {
             continue;
         }
         if trimmed.starts_with('#') {
-            notes.push(NoteBlock {
-                line: lno,
-                kind: "heading",
-                text: trimmed.to_string(),
-            });
+            notes.push(NoteBlock { line: lno, kind: "heading", text: trimmed.to_string() });
             continue;
         }
         // 行全体がコメント（`//` または `--`）の場合
-        if let Some(c) = trimmed
-            .strip_prefix("//")
-            .or_else(|| trimmed.strip_prefix("--"))
-        {
+        if let Some(c) = trimmed.strip_prefix("//").or_else(|| trimmed.strip_prefix("--")) {
             let c = c.trim();
             if !c.is_empty() && !c.starts_with("====") {
-                notes.push(NoteBlock {
-                    line: lno,
-                    kind: "comment",
-                    text: c.to_string(),
-                });
+                notes.push(NoteBlock { line: lno, kind: "comment", text: c.to_string() });
             }
         }
     }
@@ -93,10 +78,8 @@ pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: 
             let mut lines = vec![];
             lines.extend(cursor_line);
             lines.push(e.line);
-            let recovered = lines
-                .into_iter()
-                .filter_map(|l| load(&patch_line_with_sorry(src, l)).ok())
-                .find(|(_, m, _)| m.decls().next().is_some());
+            let recovered =
+                lines.into_iter().filter_map(|l| load(&patch_line_with_sorry(src, l)).ok()).find(|(_, m, _)| m.decls().next().is_some());
             match recovered {
                 Some((_, m, r)) => (m.decls_for(&r), r, Some(e)),
                 None => (vec![], vec![], Some(e)),
@@ -109,25 +92,13 @@ pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: 
         decls_json.push(format_decl_report_json(d, r));
     }
 
-    let notes_json: Vec<String> = notes
-        .iter()
-        .map(|n| {
-            format!(
-                "{{\"line\":{},\"kind\":{},\"text\":{}}}",
-                n.line,
-                json_str(n.kind),
-                json_str(&n.text)
-            )
-        })
-        .collect();
+    let notes_json: Vec<String> =
+        notes.iter().map(|n| format!("{{\"line\":{},\"kind\":{},\"text\":{}}}", n.line, json_str(n.kind), json_str(&n.text))).collect();
 
     let perr_json = match parse_err {
-        Some(e) => format!(
-            "{{\"line\":{},\"msg\":{},\"msg_latex\":{}}}",
-            e.line,
-            json_str(&e.msg),
-            json_str(&crate::parser::msg_latex(&e.msg))
-        ),
+        Some(e) => {
+            format!("{{\"line\":{},\"msg\":{},\"msg_latex\":{}}}", e.line, json_str(&e.msg), json_str(&crate::parser::msg_latex(&e.msg)))
+        }
         None => "null".to_string(),
     };
 
@@ -150,10 +121,8 @@ pub fn check_json_in(src: &str, cursor_line: Option<usize>, locale: &str, load: 
             .collect()
     });
     // ファイル全体への警告（古い書き方の notation など）。書き換え先は行ごと
-    let warnings_json: Vec<String> = mod_warnings
-        .iter()
-        .map(|(l, m, rep)| format!("{{\"line\":{l},\"msg\":{},\"replace\":{}}}", json_str(m), json_str(rep)))
-        .collect();
+    let warnings_json: Vec<String> =
+        mod_warnings.iter().map(|(l, m, rep)| format!("{{\"line\":{l},\"msg\":{},\"replace\":{}}}", json_str(m), json_str(rep))).collect();
 
     // 関数の名前（定義・定数。import したものも）：エディタで立体にする
     let fns: Vec<String> = crate::syntax::with_syntax(|t| t.fns.iter().chain(t.consts.iter()).cloned().collect());
@@ -248,13 +217,7 @@ fn format_decl_report_json_in(d: &Decl, r: &Report) -> String {
         .sorries
         .iter()
         .map(|(line, ctx, g)| {
-            format!(
-                "{{\"line\":{},\"ctx\":{},\"goal\":{},\"goal_latex\":{}}}",
-                line,
-                json_str_array(ctx),
-                json_str(&g.0),
-                json_str(&g.1)
-            )
+            format!("{{\"line\":{},\"ctx\":{},\"goal\":{},\"goal_latex\":{}}}", line, json_str_array(ctx), json_str(&g.0), json_str(&g.1))
         })
         .collect();
 
@@ -280,18 +243,11 @@ fn format_decl_report_json_in(d: &Decl, r: &Report) -> String {
         })
         .collect();
 
-    let prose_json: Vec<String> = prose_blocks
-        .iter()
-        .map(|b| format!("{{\"depth\":{},\"text\":{}}}", b.depth, json_str(&b.text)))
-        .collect();
+    let prose_json: Vec<String> =
+        prose_blocks.iter().map(|b| format!("{{\"depth\":{},\"text\":{}}}", b.depth, json_str(&b.text))).collect();
 
     let axioms_vec: Vec<String> = r.axioms.iter().cloned().collect();
-    let oracles_vec: Vec<String> = r
-        .oracles
-        .iter()
-        .filter(|o| *o != "sorry")
-        .cloned()
-        .collect();
+    let oracles_vec: Vec<String> = r.oracles.iter().filter(|o| *o != "sorry").cloned().collect();
 
     format!(
         "{{\"name\":{},\"line\":{},\"is_axiom\":{},\"status\":{},\"header_latex\":{},\"concl_latex\":{},\"axioms\":{},\"oracles\":{},\"error\":{},\"sorries\":[{}],\"steps\":[{}],\"prose\":[{}],\"latex_env\":{},\"tree\":{},\"warnings\":[{}],\"display_name\":{}}}",
@@ -390,10 +346,10 @@ pub fn parse_json_string_body(s: &str) -> String {
                     't' => out.push('\t'),
                     'u' => {
                         let hex: String = chars.by_ref().take(4).collect();
-                        if let Ok(code) = u32::from_str_radix(&hex, 16) {
-                            if let Some(ch) = char::from_u32(code) {
-                                out.push(ch);
-                            }
+                        if let Ok(code) = u32::from_str_radix(&hex, 16)
+                            && let Some(ch) = char::from_u32(code)
+                        {
+                            out.push(ch);
                         }
                     }
                     other => out.push(other),
@@ -405,7 +361,6 @@ pub fn parse_json_string_body(s: &str) -> String {
     }
     out
 }
-
 
 #[cfg(test)]
 mod tests {
