@@ -4504,10 +4504,62 @@ editorSurface.addEventListener("keydown", (e) => {
 
   if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
+    if (wrapSelection(e.key)) return;
     deleteSelection();
     insertCharAtCursor(e.key);
   }
 });
+
+// 範囲を選んだまま打ったとき、置き換えずに選んだものを使う（1 行の中の選択だけ）
+//   囲む：( [ { " で両側を囲む。< は ⟨ ⟩、| は絶対値
+//   入れる：/ は選んだものを分子にした分数（カーソルは分母へ）
+//   添字：^ _ は選んだものの右に上付き・下付き（2 つ以上の項なら括弧で囲んでから）
+const WRAP_PAIRS = { "(": ")", "[": "]", "{": "}", "\"": "\"" };
+function wrapSelection(ch) {
+  const s = normalizeSel();
+  if (!s || s.mode !== "seq" || s.to <= s.from) return false;
+  const seq = s.seq;
+  const comment = isCommentLine(seq);
+  if (comment && !WRAP_PAIRS[ch]) return false;
+  if (!WRAP_PAIRS[ch] && !"<|/^_".includes(ch)) return false;
+  histTime = 0; // 囲む操作は、直前の入力とまとめず 1 回の取り消しで戻せるように
+  const picked = seq.items.slice(s.from, s.to);
+  const after = (k) => { selAnchor = null; cursor.seqId = seq.id; cursor.offset = k; };
+  if (WRAP_PAIRS[ch]) {
+    seq.items.splice(s.to, 0, makeChar(WRAP_PAIRS[ch]));
+    seq.items.splice(s.from, 0, makeChar(ch));
+    for (const it of seq.items) it.parentSeq = seq;
+    after(s.to + 2);
+  } else if (ch === "<" || ch === "|") {
+    const node = ch === "<" ? makeDelim("inner", "⟨", "⟩", picked, seq) : makeAbs(picked, seq);
+    seq.items.splice(s.from, s.to - s.from, node);
+    after(s.from + 1);
+  } else if (ch === "/") {
+    const node = makeFrac(picked, [], seq);
+    seq.items.splice(s.from, s.to - s.from, node);
+    selAnchor = null;
+    cursor.seqId = node.den.id;
+    cursor.offset = 0;
+  } else {
+    // ^ _：選んだものを底にする。1 つの項（文字 1 つ・ノード）でなければ括弧で囲む
+    let end = s.to;
+    const single = picked.length === 1 || picked.every((it) => it.kind === "char" && /[A-Za-z0-9]/.test(it.ch));
+    if (!single) {
+      seq.items.splice(s.to, 0, makeChar(")"));
+      seq.items.splice(s.from, 0, makeChar("("));
+      end = s.to + 2;
+    }
+    const node = ch === "^" ? makeSup([], seq) : makeSub([], seq);
+    seq.items.splice(end, 0, node);
+    for (const it of seq.items) it.parentSeq = seq;
+    selAnchor = null;
+    cursor.seqId = node.body.id;
+    cursor.offset = 0;
+  }
+  cursor.lineIdx = docLines.findIndex((l) => l.rootSeq === getRootSeq(seq));
+  onDocMutated();
+  return true;
+}
 
 // コピー・切り取り・貼り付け：選択範囲を ASCII のコードとして出し入れする
 function editorFocused() { return document.activeElement === editorSurface; }

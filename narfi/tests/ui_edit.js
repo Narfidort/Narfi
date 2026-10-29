@@ -282,4 +282,32 @@ test("=> は ⇒（ならば）、<=> は ⇔（同値）。-> は →（関数�
   assert.strictEqual(ui.text(), "P => Q <=> R : Nat -> Real");
 });
 
+test("範囲を選んで ( [ { \" を打つと囲む。| は絶対値、/ は選んだものが分子の分数、^ は選んだものが底", () => {
+  const sel = (ui, k) => { goto(ui, 0, 0); for (let i = 0; i < 5; i++) ui.key("ArrowRight", { shiftKey: true }); ui.type(k); };
+  for (const [k, want] of [["(", "(x + y) = z"], ["[", "[x + y] = z"], ["{", "{x + y} = z"], ["\"", "\"x + y\" = z"], ["|", "abs(x + y) = z"]]) {
+    const ui = fresh("x + y = z");
+    sel(ui, k);
+    assert.strictEqual(ui.text(), want, k);
+  }
+  // / ：選んだものが分子になり、カーソルは分母。そのまま打てる
+  let ui = fresh("x + y = z");
+  sel(ui, "/");
+  ui.type("2");
+  assert.strictEqual(ui.text(), "(x + y)/2 = z");
+  // ^ ：2 つ以上の項は括弧で囲んでから上付き
+  ui = fresh("x + y = z");
+  sel(ui, "^");
+  ui.type("2");
+  assert.strictEqual(ui.text(), "(x + y)^2 = z");
+  // 1 回の取り消しで元に戻る
+  ui = fresh("x + y = z");
+  sel(ui, "(");
+  ui.key("z", mod);
+  assert.strictEqual(ui.text(), "x + y = z");
+  // ふつうの文字は置き換え
+  ui = fresh("x + y = z");
+  sel(ui, "a");
+  assert.strictEqual(ui.text(), "a = z");
+});
+
 console.log(`${n} 件通過`);
