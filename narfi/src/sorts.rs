@@ -188,6 +188,39 @@ impl<'a> Infer<'a> {
         }
     }
 
+    /// 数字だけからなる項の型（まだ決まっていない穴）
+    fn is_lit_hole(&self, t: &IT) -> bool {
+        match self.resolve(t) {
+            IT::V(i) => self.holes[i].lit && self.holes[i].numeric,
+            _ => false,
+        }
+    }
+
+    /// 型が数の型（ℕ・ℤ・ℚ・ℝ）に決まっていれば、その順位
+    fn num_base(&self, t: &IT) -> Option<u8> {
+        match self.resolve(t) {
+            IT::Base(s) => num_rank(&s),
+            _ => None,
+        }
+    }
+
+    /// 関数 fty を、型 args の引数に適用した値の型を res にする。
+    /// 数の引数は、引数の型以上の順位なら埋め込まれる（ℕ の項を ℝ の引数に渡してよい。逆はだめ）
+    fn apply(&mut self, fty: &IT, args: Vec<IT>, res: &IT) -> SResult<()> {
+        if let IT::Fun(ps, r) = self.resolve(fty) {
+            if ps.len() == args.len() {
+                for (p, a) in ps.iter().zip(&args) {
+                    match (self.num_base(a), self.num_base(p)) {
+                        (Some(ka), Some(kp)) if ka <= kp => {}
+                        _ => self.unify(p, a)?,
+                    }
+                }
+                return self.unify(&r, res);
+            }
+        }
+        self.unify(fty, &IT::Fun(args, Box::new(res.clone())))
+    }
+
     fn constrain_num(&mut self, t: &IT, rank: u8, what: &str) -> SResult<()> {
         match self.resolve(t) {
             IT::V(i) => {
@@ -266,13 +299,40 @@ impl<'a> Infer<'a> {
             }
             Term::App(f, args) => {
                 if let Some(min) = op_min_rank(f, args.len()) {
+                    // 型の分かった数の引数は、結果の型に埋め込む（ℕ ⊂ ℤ ⊂ ℚ ⊂ ℝ）：結果はそれ以上の順位の数
+                    // 引数の型がすべて分かっていて、その最大の型で演算が使えるなら、結果はその型。
+                    // それ以外（型の分からない引数がある・ℕ の n で 1/(n+1) のように順位を上げる）は、順位の下限つきの穴
                     let r = self.hole(true, None);
+                    let mut known: Option<u8> = None;
+                    let mut unknown = false;
+                    let mut nums = Vec::new();
                     for a in args {
                         let n = self.term(a)?;
-                        self.unify(&r, &n).map_err(|e| format!("{}の両辺：{e}", op_label(f)))?;
+                        match self.num_base(&n) {
+                            Some(k) => known = Some(known.map_or(k, |q| q.max(k))),
+                            // 数字だけの項はどの型にも合わせられるので、結果の型に合わせる（型の分からない引数とは数えない）
+                            None if self.is_lit_hole(&n) => nums.push(n),
+                            None => {
+                                unknown = true;
+                                self.unify(&r, &n).map_err(|e| format!("{}の両辺：{e}", op_label(f)))?
+                            }
+                        }
                     }
-                    self.constrain_num(&r, min, op_label(f))?;
-                    return Ok(r);
+                    let out = match known {
+                        Some(k) if !unknown && k >= min => {
+                            let b = IT::Base(NUM_SORTS[k as usize].into());
+                            self.unify(&r, &b)?;
+                            b
+                        }
+                        _ => {
+                            self.constrain_num(&r, known.unwrap_or(0).max(min), op_label(f))?;
+                            r
+                        }
+                    };
+                    for n in nums {
+                        self.unify(&out, &n).map_err(|e| format!("{}の両辺：{e}", op_label(f)))?;
+                    }
+                    return Ok(out);
                 }
                 let nat = IT::Base("ℕ".into());
                 match (f.as_str(), args.as_slice()) {
@@ -296,8 +356,7 @@ impl<'a> Infer<'a> {
                             ns.push(self.term(a)?);
                         }
                         let res = self.hole(false, None);
-                        self.unify(&fty, &IT::Fun(ns, Box::new(res.clone())))
-                            .map_err(|e| format!("`{t}` の適用：{e}"))?;
+                        self.apply(&fty, ns, &res).map_err(|e| format!("`{t}` の適用：{e}"))?;
                         Ok(res)
                     }
                     ("some", [p]) => {
@@ -329,7 +388,7 @@ impl<'a> Infer<'a> {
                         }
                         let res = self.hole(false, Some(format!("{f}(…)")));
                         let curried = ns.len() > 1 && matches!(&fty, IT::Fun(ps, r) if ps.len() == 1 && matches!(**r, IT::Fun(..)));
-                        self.unify(&fty, &IT::Fun(ns, Box::new(res.clone()))).map_err(|e| {
+                        self.apply(&fty, ns, &res).map_err(|e| {
                             let hint = if curried { "。複数の引数をまとめて渡す関数の型は A × B → C と書く（A → B → C は 1 つずつ渡す形で、f(a)(b) と書く）" } else { "" };
                             format!("`{f}` の適用：{e}{hint}")
                         })?;
@@ -378,7 +437,9 @@ impl<'a> Infer<'a> {
                     return Err(format!("`{r}` の引数は2つ"));
                 };
                 let (na, nb) = (self.term(a)?, self.term(b)?);
-                self.unify(&na, &nb).map_err(|e| format!("`{a} {r} {b}`：{e}"))?;
+                if self.num_base(&na).is_none() || self.num_base(&nb).is_none() {
+                    self.unify(&na, &nb).map_err(|e| format!("`{a} {r} {b}`：{e}"))?;
+                }
                 if r != "=" {
                     self.constrain_num(&na, 0, &format!("`{r}`"))?;
                 }
@@ -449,7 +510,8 @@ impl<'a> Infer<'a> {
             if h.bind.is_some() {
                 continue;
             }
-            decided[i] = Some(if h.lit && h.numeric {
+            // 数字だけの穴、または ℝ と決まるしかない穴（ℝ の項との演算の結果）は、その順位の型にする
+            decided[i] = Some(if h.numeric && (h.lit || h.rank as usize == NUM_SORTS.len() - 1) {
                 Ty::Base(NUM_SORTS[h.rank as usize].to_string())
             } else if h.numeric {
                 let cand = NUM_SORTS[h.rank as usize..].join("・");
@@ -557,8 +619,10 @@ pub fn infer_term(kenv: &KEnv, ctx: &[(String, String)], t: &Term, expected: Opt
 pub fn term_sort(kenv: &KEnv, ctx: &[(String, String)], t: &Term) -> Option<String> {
     let mut inf = Infer::new(kenv, ctx.to_vec(), false);
     let n = inf.term(t).ok()?;
-    if matches!(inf.resolve(&n), IT::V(_)) {
-        return None;
+    if let IT::V(i) = inf.resolve(&n) {
+        // ℝ の項との演算の結果（順位の下限が ℝ）は ℝ
+        let h = &inf.holes[i];
+        return (h.numeric && !h.lit && h.rank as usize == NUM_SORTS.len() - 1).then(|| "ℝ".to_string());
     }
     let s = inf.show(&n);
     (!s.contains('?')).then_some(s)

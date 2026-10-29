@@ -1,0 +1,44 @@
+-- 数の埋め込み ℕ ⊂ ℤ ⊂ ℚ ⊂ ℝ：自然数は実数の式に書ける。逆は書けない
+
+import analysis.limits
+
+-- ℕ の値を ℝ の関数に渡す
+thm co.arg :
+  f : ℝ → ℝ, n : ℕ
+  ⊢ f(n + 1) = f(1 + n)
+
+ring
+
+-- 自然数と実数の混ざった不等式（n ≥ 0 は自動）
+thm co.lin :
+  x : ℝ, n : ℕ, h : x > 2
+  ⊢ x + n > 1
+
+linarith
+
+-- 式で与えた数列（値は ℝ）
+thm co.seq :
+  ⊢ 1/(n + 1) → 0 (n → ∞)
+
+lim.inv
+
+-- 自然数の引き算は ℤ の数（n - n = 0 は正しい）
+thm co.int :
+  n : ℕ
+  ⊢ n - n = 0
+
+ring
+
+-- 拒否：実数を自然数の所に
+thm co.bad.real_index :
+  a : ℕ → ℝ, x : ℝ
+  ⊢ a(x) = a(x)
+
+refl
+
+-- 拒否：n - 1 は ℤ の数なので、数列の添字にならない
+thm co.bad.sub_index :
+  a : ℕ → ℝ, n : ℕ
+  ⊢ a(n - 1) = a(n - 1)
+
+refl

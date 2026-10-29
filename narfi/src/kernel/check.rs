@@ -222,9 +222,11 @@ impl<'a, 'c> Checker<'a, 'c> {
                 // 数字だけの等式（0 + 0 = 0）は、どの数の型でも同じ真偽（埋め込みで保たれる。§3.2）。
                 // 書き換え先の式に合う型を、両辺がその型で読めるものから選ぶ
                 // 片方の型が分かればそれを使う（(n ↦ 0) のように片方だけでは決まらない項がある）
-                let known = match self.ctx.sort_of(&s) {
-                    Ok(Some(k)) => Some(k),
-                    _ => self.ctx.sort_of(&t).ok().flatten(),
+                // 両辺の型が違う数の型なら、高いほう（ℕ の n = ℝ の x なら、x を入れる所は ℝ として確かめる）
+                let known = match (self.ctx.sort_of(&s).ok().flatten(), self.ctx.sort_of(&t).ok().flatten()) {
+                    (Some(a), Some(b)) => Some(if num_rank(&b.show()) > num_rank(&a.show()) { b } else { a }),
+                    (Some(a), None) => Some(a),
+                    (None, b) => b,
                 };
                 let sort = match known {
                     Some(k) => k.show(),
@@ -349,10 +351,16 @@ impl<'a, 'c> Checker<'a, 'c> {
             let Some((r, l, rr)) = rel_parts(&f) else {
                 return kerr(format!("linarith：事実「{f}」は等式・不等式ではない"));
             };
+            // 数の型が混ざってよい（低い順位の事実は、高い順位に埋め込んでも成り立つ。証明書の検査は有理数の計算）
             match (self.ctx.rel_sort(r, l, rr)?, &sort) {
-                (Some(s), Some(t)) if s != *t => {
-                    return kerr(format!("linarith：型が混ざっている（{} と {}）", s.show(), t.show()));
-                }
+                (Some(s), Some(t)) if s != *t => match (num_rank(&s.show()), num_rank(&t.show())) {
+                    (Some(a), Some(b)) => {
+                        if a > b {
+                            sort = Some(s);
+                        }
+                    }
+                    _ => return kerr(format!("linarith：型が混ざっている（{} と {}）", s.show(), t.show())),
+                },
                 (Some(s), None) => sort = Some(s),
                 _ => {}
             }

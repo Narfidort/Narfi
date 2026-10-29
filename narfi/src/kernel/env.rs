@@ -289,9 +289,15 @@ impl<'a> KCtx<'a> {
         for a in args {
             match self.infer_t(a)? {
                 TSort::Known(s) => match &known {
-                    Some(k) if *k != s => {
-                        return kerr(format!("`{f}` の両辺の型が違う（{} と {}）", k.show(), s.show()));
-                    }
+                    // 数の型どうしは、高いほうに埋め込む（ℕ ⊂ ℤ ⊂ ℚ ⊂ ℝ。演算は埋め込みで保たれる。仕様 §7）
+                    Some(k) if *k != s => match (ty_rank(k), ty_rank(&s)) {
+                        (Some(a), Some(b)) => {
+                            if b > a {
+                                known = Some(s);
+                            }
+                        }
+                        _ => return kerr(format!("`{f}` の両辺の型が違う（{} と {}）", k.show(), s.show())),
+                    },
                     _ => known = Some(s),
                 },
                 TSort::Lit(r) => lit = lit.max(r),
@@ -301,6 +307,8 @@ impl<'a> KCtx<'a> {
             None => Ok(TSort::Lit(lit)),
             Some(s) => match ty_rank(&s) {
                 Some(r) if r >= lit => Ok(TSort::Known(s)),
+                // 演算に必要な順位まで埋め込む（ℕ の n で 1/(n+1) は ℚ）
+                Some(_) if lit <= 3 => Ok(TSort::Known(Ty::Base(NUM_SORTS[lit as usize].into()))),
                 _ => kerr(format!("演算 `{f}` は {} では使えない", s.show())),
             },
         }
@@ -319,6 +327,8 @@ impl<'a> KCtx<'a> {
         }
         match self.infer_t(t)? {
             TSort::Known(k) if k == *s => Ok(()),
+            // 埋め込み：ℕ の項は ℤ・ℚ・ℝ の項として読める（逆はだめ）
+            TSort::Known(k) if matches!((ty_rank(&k), ty_rank(s)), (Some(a), Some(b)) if a <= b) => Ok(()),
             TSort::Known(k) => kerr(format!("項 `{t}` の型は {} だが、{} が必要", k.show(), s.show())),
             TSort::Lit(r) => match ty_rank(s) {
                 Some(q) if q >= r => Ok(()),
@@ -345,6 +355,14 @@ impl<'a> KCtx<'a> {
         // 片方の型が分かれば、もう片方はその型で確かめる（λ (n ↦ 0) の値の型は、相手から決まる）
         let ia = self.infer_t(a);
         let s = match ia {
+            // 両辺が数の型なら、高いほうで比べる（埋め込みで大小・等しさは保たれる）
+            Ok(TSort::Known(x)) if ty_rank(&x).is_some() => match self.infer_t(b) {
+                Ok(TSort::Known(y)) if ty_rank(&y).is_some() => Some(if ty_rank(&y) > ty_rank(&x) { y } else { x }),
+                _ => {
+                    self.check_t(b, &x)?;
+                    Some(x)
+                }
+            },
             Ok(TSort::Known(x)) => {
                 self.check_t(b, &x)?;
                 Some(x)

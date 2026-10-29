@@ -6,3 +6,21 @@ import analysis.real
 
 def is_lim(a : ℕ → ℝ, α : ℝ) :⇔ ∀ε>0. ∃N:ℕ. ∀n≥N. |a(n) - α| < ε
   notation a_n → α (n → ∞)
+
+-- 1/(n + 1) → 0：アルキメデス性で、1/ε より大きい番号 N をとる
+thm lim.inv :
+  ⊢ 1/(n + 1) → 0 (n → ∞)
+
+Fix ε | hε : ε > 0
+  hA : ∃N:ℕ. N > 1/ε by archimedes
+  Obtain N | hN by hA
+  choose N
+  Fix n | hn : n ≥ N
+    p : n + 1 > 0 by linarith
+    q : n + 1 > 1/ε by linarith
+    r : 1/(n + 1) < ε by inv.lt(p, hε, q)
+    s : 1/(n + 1) > 0 by inv.pos(p)
+    |1/(n + 1) - 0|
+      = |1/(n + 1)|   by ring
+      = 1/(n + 1)     by abs.of_pos(s)
+      < ε             by r

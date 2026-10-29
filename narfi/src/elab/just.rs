@@ -410,17 +410,19 @@ impl<'a> Checker<'a> {
                     let f = self.norm(ctx, f);
                     self.facts_of(&f, Proof::Hyp(h.clone()), &mut facts);
                 }
-                Entry::Var(x, s, _) if self.zonk_sort(s) == "ℕ" && goal_sort.as_deref() == Some("ℕ") => {
+                // ℕ の変数は 0 以上（目標が ℝ などでも、ℕ の変数が埋め込まれて出てくる）
+                Entry::Var(x, s, _) if self.zonk_sort(s) == "ℕ" && goal_sort.as_deref().is_some_and(|g| crate::kernel::env::num_rank(g).is_some()) => {
                     let v = Term::Var(x.clone());
                     facts.push(("≥".into(), v.clone(), Term::Num(0), Proof::NatNonneg(v)));
                 }
                 _ => {}
             }
         }
-        // 目標と同じソートの事実だけを使う（kernel は型の混ざった証明書を受け付けない）
+        // 目標以下の順位の事実だけを使う（ℕ の事実は ℝ の目標に使える。逆は使えない）
+        let rank = |s: &Option<String>| s.as_deref().and_then(crate::kernel::env::num_rank);
         facts.retain(|(_, a, b, _)| {
             let s = self.term_sort(ctx, a).or_else(|| self.term_sort(ctx, b));
-            s.is_none() || goal_sort.is_none() || s == goal_sort
+            s.is_none() || goal_sort.is_none() || s == goal_sort || matches!((rank(&s), rank(&goal_sort)), (Some(x), Some(y)) if x <= y)
         });
         let fs: Vec<(String, Term, Term)> =
             facts.iter().map(|(r, a, b, _)| (r.clone(), self.unfold_terms(a), self.unfold_terms(b))).collect();

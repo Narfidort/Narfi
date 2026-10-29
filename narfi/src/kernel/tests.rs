@@ -120,9 +120,12 @@ fn quantifier_swap() {
 fn rejects_wrong_sort_instantiation() {
     let p = Proof::AllE(b(hyp("h")), t("x"));
     rejected(thm(&[("x", "ℝ")], &[("h", "∀n:ℕ. P(n)")], "P(x)", p), "型は ℝ だが、ℕ が必要");
-    // ℕ に引き算はない
+    // ℕ に引き算はない：n - 1 は ℤ の数で、ℕ の引数（数列の添字）には渡せない
+    let p = Proof::Refl(t("a(n - 1)"));
+    rejected(thm(&[("a", "ℕ → ℝ"), ("n", "ℕ")], &[], "a(n - 1) = a(n - 1)", p), "ℕ が必要");
+    // ℕ の n どうしの n - n は ℤ の引き算（埋め込み ℕ ⊂ ℤ）なので、n - n = 0 は正しい
     let p = Proof::Ring { lhs: t("n - n"), rhs: t("0") };
-    rejected(thm(&[("n", "ℕ")], &[], "n - n = 0", p), "ℕ では使えない");
+    assert_eq!(thm(&[("n", "ℕ")], &[], "n - n = 0", p), Ok(()));
     // NatNonneg は ℕ の項にだけ使える
     let p = Proof::NatNonneg(t("x"));
     rejected(thm(&[("x", "ℝ")], &[], "x ≥ 0", p), "ℕ が必要");
@@ -154,9 +157,12 @@ fn linarith_certificate() {
     // 係数は正しい形でも、x < 3 から x < 2 は出ない（和が 1 > 0 で矛盾にならない）
     let bad = Proof::LinArith { goal: f("x < 2"), facts: vec![hyp("h1")], coeffs: vec![Q::int(1), Q::int(1)] };
     rejected(thm(&[("x", "ℝ"), ("y", "ℝ")], &hyps, "x < 2", bad), "矛盾にならない");
-    // ℕ の事実と ℝ の目標を混ぜる
+    // ℕ の事実と ℝ の目標を混ぜてよい（ℕ ⊂ ℝ の埋め込みで、大小は保たれる）
+    let ok = Proof::LinArith { goal: f("x < 3"), facts: vec![hyp("h"), hyp("k")], coeffs: vec![Q::int(1), Q::int(1), Q::int(1)] };
+    assert_eq!(thm(&[("x", "ℝ"), ("n", "ℕ")], &[("h", "n < 3"), ("k", "x ≤ n")], "x < 3", ok), Ok(()));
+    // 混ぜても、足りない証明書は通らない
     let bad = Proof::LinArith { goal: f("x < 3"), facts: vec![hyp("h")], coeffs: vec![Q::int(1), Q::int(1)] };
-    rejected(thm(&[("x", "ℝ"), ("n", "ℕ")], &[("h", "n < 3")], "x < 3", bad), "型が混ざっている");
+    rejected(thm(&[("x", "ℝ"), ("n", "ℕ")], &[("h", "n < 3")], "x < 3", bad), "定数にならない");
 }
 
 #[test]
@@ -389,9 +395,9 @@ fn subst_numeral_equation_respects_rank() {
     let p = Proof::Subst {
         eq: b(hyp("e")),
         z: "z".into(),
-        motive: f("n + z = n + 0"),
-        p: b(Proof::Refl(t("n + 0"))),
+        motive: f("S(z) = S(0)"),
+        p: b(Proof::Refl(t("S(0)"))),
     };
-    let r = thm(&[("n", "ℕ")], &[("e", "0 = 1 - 1")], "n + (1 - 1) = n + 0", p);
+    let r = thm(&[("n", "ℕ")], &[("e", "0 = 1 - 1")], "S(1 - 1) = S(0)", p);
     assert!(r.is_err(), "ℕ の中で 1 - 1 を使えてしまった");
 }

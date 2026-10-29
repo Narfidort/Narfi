@@ -158,6 +158,18 @@ fn funext_and_eta() {
     assert!(!out.contains("✗"), "{out}");
 }
 
+/// 数の埋め込み（ℕ ⊂ ℝ）：自然数は実数の式に書け、逆は書けない
+#[test]
+fn numeric_embedding() {
+    let out = run(&["tests/coerce.narfi"]);
+    for n in ["co.arg", "co.lin", "co.seq", "co.int"] {
+        assert!(out.contains(&format!("✓ {n}")), "{out}");
+    }
+    for n in ["co.bad.real_index", "co.bad.sub_index"] {
+        assert!(out.contains(&format!("✗ {n}")), "{out}");
+    }
+}
+
 /// 行列（関数を値にする定義・β・Σ）：2×2 のケイリー・ハミルトンなどがすべて通る
 #[test]
 fn matrices() {
