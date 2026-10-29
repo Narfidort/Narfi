@@ -3961,13 +3961,25 @@ function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
     for (const it of ins) it.parentSeq = seq;
     seq.items.splice(replaceStart, replaceEnd - replaceStart, ...ins);
     cursor.seqId = seq.id; cursor.offset = replaceStart + ins.length;
-    // 中身が空の λ（sum((k : ℕ ↦ ), n)）なら、↦ のあとにカーソルを置く
+    // 中身が空の λ（sum((k : ℕ ↦ ), n)）なら、↦ のあとにカーソルを置く。範囲を選んで \ を打っていたら、選んだものをそこに入れる
     const hole = entry.text.indexOf("↦ )");
     if (hole >= 0) {
       for (let q = replaceStart; q < replaceStart + ins.length; q++) {
-        if (seq.items[q].kind === "sym" && seq.items[q].ascii === "|->") { cursor.offset = q + 2; break; }
+        if (seq.items[q].kind === "sym" && seq.items[q].ascii === "|->") {
+          cursor.offset = q + 2;
+          const ps = pendingScope, end = replaceStart + ins.length;
+          if (ps && ps.seqId === seq.id && ps.items.length && ps.items.every((it, k) => seq.items[end + k] === it)) {
+            seq.items.splice(end, ps.items.length);
+            seq.items.splice(q + 2, 0, ...ps.items);
+            cursor.offset = end + ps.items.length;
+          }
+          break;
+        }
       }
     }
+    // 候補が Σ などの記号 1 つになったとき（sum((k : ℕ ↦ ), n) は Σ_{k<n} になる）は、ほかの記号と同じく中身に移す
+    if (ins.length === 1) consumeScope(seq, replaceStart);
+    pendingScope = null;
     acPopup.style.display = "none";
     acMatches = [];
     onDocMutated();
@@ -4049,6 +4061,7 @@ function applyCommandEntry(seq, replaceStart, replaceEnd, entry) {
     seq.items.splice(replaceStart, replaceEnd - replaceStart, ...chars);
     cursor.seqId = seq.id; cursor.offset = replaceStart + chars.length;
   }
+  consumeScope(seq, replaceStart);
   acPopup.style.display = "none";
   acMatches = [];
   onDocMutated();
@@ -4515,12 +4528,46 @@ editorSurface.addEventListener("keydown", (e) => {
 //   入れる：/ は選んだものを分子にした分数（カーソルは分母へ）
 //   添字：^ _ は選んだものの右に上付き・下付き（2 つ以上の項なら括弧で囲んでから）
 const WRAP_PAIRS = { "(": ")", "[": "]", "{": "}", "\"": "\"" };
+// 範囲を選んで \ を打ったときの、選んでいた項目（補完で記号が入ったら、その中身に移す）
+let pendingScope = null;
+
+// 補完で入った記号（seq の idx 番目）の直後に、選んでいた項目が続いていれば、記号の中身に移す
+function consumeScope(seq, idx) {
+  const ps = pendingScope;
+  pendingScope = null;
+  const node = seq.items[idx];
+  if (!ps || ps.seqId !== seq.id || !node || !ps.items.length) return;
+  if (!ps.items.every((it, k) => seq.items[idx + 1 + k] === it)) return;
+  // 移す先：積分・和・積は中身、分数・二項係数は上、√・絶対値・括弧・アクセントは中身。\lim などは後ろが作用域なのでそのまま
+  const slot = node.kind === "bigop" ? node.body
+    : node.kind === "frac" || node.kind === "binom" ? node.num
+    : ["sqrt", "abs", "delim", "accent"].includes(node.kind) ? node.body : null;
+  if (!slot) return;
+  seq.items.splice(idx + 1, ps.items.length);
+  for (const it of ps.items) it.parentSeq = slot;
+  slot.items.push(...ps.items);
+  // カーソル：分数・二項係数は下へ、積分・積は下限へ、和はそのまま（添字の範囲は入っている）、ほかは記号の後ろ
+  if (node.kind === "frac" || node.kind === "binom") { cursor.seqId = node.den.id; cursor.offset = 0; }
+  else if (node.kind === "bigop") { cursor.seqId = node.sub.id; cursor.offset = node.sub.items.length; }
+  else { cursor.seqId = seq.id; cursor.offset = idx + 1; }
+}
 function wrapSelection(ch) {
   const s = normalizeSel();
   if (!s || s.mode !== "seq" || s.to <= s.from) return false;
   const seq = s.seq;
   const comment = isCommentLine(seq);
   if (comment && !WRAP_PAIRS[ch]) return false;
+  // \：選んだものは消さず、その手前に \ の下書きを置く。補完で \int・\sum・\sqrt などが入ったら、選んだものがその中身になる
+  if (ch === "\\" && !comment) {
+    pendingScope = { seqId: seq.id, items: seq.items.slice(s.from, s.to) };
+    seq.items.splice(s.from, 0, makeChar("\\"));
+    selAnchor = null;
+    cursor.seqId = seq.id;
+    cursor.offset = s.from + 1;
+    cursor.lineIdx = docLines.findIndex((l) => l.rootSeq === getRootSeq(seq));
+    onDocMutated();
+    return true;
+  }
   if (!WRAP_PAIRS[ch] && !"<|/^_".includes(ch)) return false;
   histTime = 0; // 囲む操作は、直前の入力とまとめず 1 回の取り消しで戻せるように
   const picked = seq.items.slice(s.from, s.to);

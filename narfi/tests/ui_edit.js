@@ -310,4 +310,35 @@ test("範囲を選んで ( [ { \" を打つと囲む。| は絶対値、/ は選
   assert.strictEqual(ui.text(), "a = z");
 });
 
+test("範囲を選んで \\ からの記号（\\int・\\sqrt・\\frac・\\lim）を入れると、選んだものが作用域（中身）になる", () => {
+  const run = (cmd) => {
+    const ui = fresh("x + y = z");
+    goto(ui, 0, 0);
+    for (let i = 0; i < 5; i++) ui.key("ArrowRight", { shiftKey: true });
+    ui.type("\\" + cmd);
+    ui.key("Tab");
+    return ui;
+  };
+  assert.strictEqual(run("sqrt").text(), "sqrt(x + y) = z");
+  let ui = run("frac");
+  ui.type("2");
+  assert.strictEqual(ui.text(), "(x + y)/2 = z");
+  // \int：選んだものが被積分関数。カーソルは下限
+  ui = run("int");
+  ui.type("0");
+  assert.strictEqual(ui.api.docLines[0].rootSeq.items[0].kind, "bigop");
+  assert.ok(/^int\(0, .*, x \+ y\) = z$/.test(ui.text()), ui.text());
+  // \lim は後ろが作用域：選んだものは後ろに残り、カーソルは下の添字
+  ui = run("lim");
+  ui.type("n");
+  assert.strictEqual(ui.text(), "\\lim_{n}x + y = z");
+  // \ を打ってやめても、選んだものは消えない
+  ui = fresh("x + y = z");
+  goto(ui, 0, 0);
+  for (let i = 0; i < 5; i++) ui.key("ArrowRight", { shiftKey: true });
+  ui.type("\\");
+  ui.key("Backspace");
+  assert.strictEqual(ui.text(), "x + y = z");
+});
+
 console.log(`${n} 件通過`);
